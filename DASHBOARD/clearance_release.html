@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clearance Release · MEP Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-hover:#1a2030;--border:#1e2531;--border-strong:#2a3340;--text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--accent:#4f8cff;--accent-soft:rgba(79,140,255,0.13);--accent-text:#93b6ff;--approved:#6ee2a3;--approved-bg:rgba(110,226,163,0.12);--approved-bd:rgba(110,226,163,0.25);--rejected:#ff8a99;--rejected-bg:rgba(255,138,153,0.12);--rejected-bd:rgba(255,138,153,0.25);--progress:#f4c95a;--progress-bg:rgba(244,201,90,0.12);--progress-bd:rgba(244,201,90,0.25);--review:#a3b3ff;--review-bg:rgba(163,179,255,0.12);--review-bd:rgba(163,179,255,0.25);--font:"Inter",-apple-system,sans-serif;--mono:"JetBrains Mono",monospace;--r:10px;--rl:14px;}
+[data-theme="light"]{--bg:#f1f4f9;--bg-elev:#fff;--bg-panel:#f8fafc;--bg-hover:#f0f3f7;--border:#e2e8f0;--border-strong:#cbd5e1;--text:#1e293b;--text-muted:#64748b;--text-dim:#94a3b8;--accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;--approved:#16a34a;--approved-bg:rgba(22,163,74,0.08);--approved-bd:rgba(22,163,74,0.2);--rejected:#dc2626;--rejected-bg:rgba(220,38,38,0.08);--rejected-bd:rgba(220,38,38,0.2);--progress:#d97706;--progress-bg:rgba(217,119,6,0.08);--progress-bd:rgba(217,119,6,0.2);--review:#4f46e5;--review-bg:rgba(79,70,229,0.08);--review-bd:rgba(79,70,229,0.2);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased;overflow:hidden;display:flex;flex-direction:column}
+button{font:inherit;cursor:pointer}
+body.in-shell .topbar{display:none!important}
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-crumb{font-size:11px;color:var(--text-dim);font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+.tb-sep{color:var(--border-strong)}
+.tb-title{font-size:14px;font-weight:600}
+.tb-spacer{flex:1}
+.tb-live{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;background:var(--approved-bg);border:1px solid var(--approved-bd);color:var(--approved);font-size:11px;font-weight:600}
+.tb-dot{width:6px;height:6px;border-radius:50%;background:var(--approved);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.tb-clock{font-family:var(--mono);font-size:12px;color:var(--text-muted)}
+.tab-bar{display:flex;border-bottom:1px solid var(--border);background:var(--bg-elev);flex-shrink:0;padding:0 20px;gap:2px}
+.tab-btn{padding:12px 16px;border:none;background:none;color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;display:flex;align-items:center;gap:6px}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent-text);border-bottom-color:var(--accent)}
+.tab-badge{font-size:10px;font-weight:700;font-family:var(--mono);padding:1px 6px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text)}
+.tab-badge.warn{background:var(--progress-bg);color:var(--progress)}
+.tab-badge.ok{background:var(--approved-bg);color:var(--approved)}
+.page-area{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.tab-content{display:none;flex:1;overflow-y:auto;overflow-x:hidden}
+.tab-content.active{display:flex;flex-direction:column}
+.tab-content::-webkit-scrollbar{width:5px}
+.tab-content::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.inner{max-width:1400px;margin:0 auto;padding:18px 18px 32px;width:100%}
+.load-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
+.load-overlay.gone{display:none}
+.spinner{width:30px;height:30px;border:2.5px solid var(--border-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-msg{font-size:13px;color:var(--text-muted)}
+.kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.kpi{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--r);padding:13px 15px;position:relative;overflow:hidden}
+.kpi-v{font-size:24px;font-weight:700;font-family:var(--mono);letter-spacing:-.02em;line-height:1}
+.kpi-l{font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted);margin-top:4px}
+.kpi-bar{position:absolute;bottom:0;left:0;right:0;height:2px}
+.kpi.dc .kpi-v{color:var(--accent-text)}.kpi.dc .kpi-bar{background:var(--accent)}
+.kpi.ok .kpi-v{color:var(--approved)}.kpi.ok .kpi-bar{background:var(--approved)}
+.kpi.warn .kpi-v{color:var(--progress)}.kpi.warn .kpi-bar{background:var(--progress)}
+.kpi.err .kpi-v{color:var(--rejected)}.kpi.err .kpi-bar{background:var(--rejected)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.fsel,.finp{background:var(--bg-elev);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:7px;font-size:12px;font-family:var(--font);outline:none;transition:border-color .15s}
+.fsel:focus,.finp:focus{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:7px;border:none;font-size:12px;font-weight:600;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{filter:brightness(1.1)}
+.btn-ghost{background:var(--bg-elev);color:var(--text-muted);border:1px solid var(--border)}.btn-ghost:hover{color:var(--text);border-color:var(--border-strong)}
+.btn-ok{background:var(--approved-bg);color:var(--approved);border:1px solid var(--approved-bd)}.btn-ok:hover{filter:brightness(1.15)}
+.btn-warn{background:var(--progress-bg);color:var(--progress);border:1px solid var(--progress-bd)}.btn-warn:hover{filter:brightness(1.15)}
+.btn-err{background:var(--rejected-bg);color:var(--rejected);border:1px solid var(--rejected-bd)}.btn-err:hover{filter:brightness(1.15)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px}
+.toolbar-r{margin-left:auto;font-size:11px;color:var(--text-dim)}
+.sec{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sec::after{content:'';flex:1;height:1px;background:var(--border)}
+.card-list{display:flex;flex-direction:column;gap:8px}
+.clr-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;transition:border-color .15s}
+.clr-card.status-pending_site_engineer{border-left:3px solid var(--review)}
+.clr-card.status-pending_dc{border-left:3px solid var(--progress)}
+.clr-card.status-dc_released{border-left:3px solid var(--approved)}
+.clr-card.status-dc_rejected{border-left:3px solid var(--rejected)}
+.clr-card.status-csv_confirmed{border-left:3px solid var(--approved)}
+.clr-card.status-csv_failed{border-left:3px solid var(--rejected)}
+.clr-card.status-sent_to_dc{border-left:3px solid var(--accent)}
+.card-top{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap}
+.villa-badge{font-family:var(--mono);font-size:12px;font-weight:700;padding:4px 10px;border-radius:6px;background:var(--accent-soft);color:var(--accent-text);white-space:nowrap;flex-shrink:0}
+.clr-name{flex:1;font-size:13px;font-weight:600;min-width:120px}
+.clr-code{font-family:var(--mono);font-size:10px;color:var(--text-dim);background:var(--bg-panel);padding:2px 6px;border-radius:4px;flex-shrink:0}
+.status-pill{padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0}
+.sp-pending_site_engineer{background:var(--review-bg);color:var(--review)}
+.sp-pending_dc{background:var(--progress-bg);color:var(--progress)}
+.sp-dc_released{background:var(--approved-bg);color:var(--approved)}
+.sp-dc_rejected{background:var(--rejected-bg);color:var(--rejected)}
+.sp-csv_confirmed{background:var(--approved-bg);color:var(--approved)}
+.sp-csv_failed{background:var(--rejected-bg);color:var(--rejected)}
+.sp-sent_to_dc{background:var(--accent-soft);color:var(--accent-text)}
+.sp-auto{background:var(--accent-soft);color:var(--accent-text);font-size:9px}
+.card-meta{display:flex;gap:16px;padding:0 14px 8px;font-size:11px;color:var(--text-dim);flex-wrap:wrap}
+.card-prereqs{display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--border);background:var(--bg-panel)}
+.prereq-chip{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px}
+.pc-approved{background:var(--approved-bg);color:var(--approved)}
+.pc-rejected{background:var(--rejected-bg);color:var(--rejected)}
+.pc-under_review{background:var(--review-bg);color:var(--review)}
+.pc-not_submitted{background:var(--bg-hover);color:var(--text-dim)}
+.card-actions{display:flex;gap:6px;padding:8px 14px;border-top:1px solid var(--border);flex-wrap:wrap}
+.note-box{padding:8px 14px;border-top:1px solid var(--border);font-size:11px}
+.note-box.rejected{background:var(--rejected-bg);color:var(--rejected)}
+.note-box.failed{background:var(--progress-bg);color:var(--progress)}
+.empty{text-align:center;padding:60px 20px;color:var(--text-dim)}
+.empty-icon{font-size:40px;margin-bottom:10px}
+.empty p{font-size:13px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:var(--rl);width:100%;max-width:460px;box-shadow:0 20px 60px rgba(0,0,0,.5);max-height:88vh;overflow-y:auto}
+.modal-hdr{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-hdr h3{font-size:14px;font-weight:700}
+.modal-x{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:20px;line-height:1;padding:2px 6px;border-radius:4px}
+.modal-x:hover{color:var(--text);background:var(--bg-hover)}
+.modal-body{padding:18px 20px}
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);letter-spacing:.03em;margin-bottom:5px}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:8px;font-size:13px;font-family:var(--font);outline:none;transition:border-color .15s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent)}
+.form-textarea{resize:vertical;min-height:72px}
+.info-box{background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px}
+.ib-row{display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border)}
+.ib-row:last-child{border:none}
+.ib-lbl{color:var(--text-dim);min-width:90px}
+.ib-val{color:var(--text);font-weight:500}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.modal-msg{font-size:12px;margin-top:10px;padding:8px 11px;border-radius:6px;display:none}
+.modal-msg.ok{background:var(--approved-bg);color:var(--approved);border:1px solid var(--approved-bd);display:block}
+.modal-msg.err{background:var(--rejected-bg);color:var(--rejected);border:1px solid var(--rejected-bd);display:block}
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:6px}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 15px;background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);font-size:13px;animation:toastIn .2s ease;min-width:220px}
+.toast.ok{border-left:3px solid var(--approved)}.toast.err{border-left:3px solid var(--rejected)}.toast.info{border-left:3px solid var(--accent)}
+@keyframes toastIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+<div class="load-overlay" id="lov"><div class="spinner"></div><div class="load-msg" id="lmsg">Loading…</div></div>
+<div class="topbar">
+  <span class="tb-crumb">MEP</span><span class="tb-sep">/</span>
+  <span class="tb-title">Clearance Release</span>
+  <div class="tb-spacer"></div>
+  <div class="tb-live"><span class="tb-dot"></span>Live</div>
+  <button class="btn btn-warn" style="font-size:11px;padding:5px 12px" onclick="runCsvConfirmationCheck()">↺ Run CSV Check</button>
+  <span class="tb-clock" id="clock">--:--:--</span>
+</div>
+<div class="tab-bar">
+  <button class="tab-btn active" id="tbtn-ready" onclick="switchTab('ready')">Ready to Release <span class="tab-badge warn" id="badge-ready">0</span></button>
+  <button class="tab-btn" id="tbtn-sereview" onclick="switchTab('sereview')">Pending SE Review <span class="tab-badge" style="background:var(--review-bg);color:var(--review)" id="badge-sereview">0</span></button>
+  <button class="tab-btn" id="tbtn-pending" onclick="switchTab('pending')">Pending DC Action <span class="tab-badge" id="badge-pending">0</span></button>
+  <button class="tab-btn" id="tbtn-actioned" onclick="switchTab('actioned')">DC Actioned <span class="tab-badge ok" id="badge-actioned">0</span></button>
+  <button class="tab-btn" id="tbtn-blocked" onclick="switchTab('blocked')">Blocked Clearances <span class="tab-badge warn" id="badge-blocked">0</span></button>
+</div>
+<div class="page-area">
+  <div class="tab-content active" id="tab-ready"><div class="inner">
+    <div class="kpi-strip" id="kpi-ready"></div>
+    <div class="toolbar">
+      <select class="fsel" id="rf-cl" onchange="renderReady()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
+      <select class="fsel" id="rf-clr" onchange="renderReady()"><option value="">All Clearances</option></select>
+      <input class="finp" id="rf-q" placeholder="Villa no or code…" oninput="renderReady()">
+      <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+      <button class="btn btn-primary" id="btn-submit-all" onclick="submitAllReady()" style="margin-left:auto">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+        Release All
+      </button>
+      <span class="toolbar-r" id="ready-count"></span>
+    </div>
+    <div class="sec">All WIRs Approved — Awaiting Site Engineer Release</div>
+    <div class="card-list" id="ready-list"></div>
+  </div></div>
+
+  <div class="tab-content" id="tab-sereview"><div class="inner">
+    <div class="kpi-strip" id="kpi-sereview"></div>
+    <div class="toolbar">
+      <select class="fsel" id="sef-cl" onchange="renderSEReview()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
+      <select class="fsel" id="sef-clr" onchange="renderSEReview()"><option value="">All Clearances</option></select>
+      <input class="finp" id="sef-q" placeholder="Villa no or code…" oninput="renderSEReview()">
+      <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+      <button class="btn btn-primary" id="btn-submit-all-dc" onclick="submitAllToDC()" style="margin-left:auto">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+        Submit All to DC
+      </button>
+      <span class="toolbar-r" id="sereview-count"></span>
+    </div>
+    <div class="sec">Site Engineer Released — Pending Submission to DC</div>
+    <div class="card-list" id="sereview-list"></div>
+  </div></div>
+
+  <div class="tab-content" id="tab-pending"><div class="inner">
+    <div class="kpi-strip" id="kpi-pending"></div>
+    <div class="toolbar">
+      <select class="fsel" id="pf-cl" onchange="renderPending()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
+      <select class="fsel" id="pf-clr" onchange="renderPending()"><option value="">All Clearances</option></select>
+      <input class="finp" id="pf-q" placeholder="Villa no or code…" oninput="renderPending()">
+      <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+      <span class="toolbar-r" id="pending-count"></span>
+    </div>
+    <div class="sec">Awaiting DC Decision — Auto-submitted when all WIRs approved</div>
+    <div class="card-list" id="pending-list"></div>
+  </div></div>
+  <div class="tab-content" id="tab-actioned"><div class="inner">
+    <div class="kpi-strip" id="kpi-actioned"></div>
+    <div class="toolbar">
+      <select class="fsel" id="af-status" onchange="renderActioned()"><option value="">All</option><option value="dc_released">DC Released</option><option value="dc_rejected">DC Rejected</option><option value="csv_confirmed">CSV Confirmed ✓</option><option value="csv_failed">CSV Failed</option></select>
+      <select class="fsel" id="af-cl" onchange="renderActioned()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
+      <input class="finp" id="af-q" placeholder="Villa no or code…" oninput="renderActioned()">
+      <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+      <span class="toolbar-r" id="actioned-count"></span>
+    </div>
+    <div class="sec">DC Has Actioned These</div>
+    <div class="card-list" id="actioned-list"></div>
+  </div></div>
+
+  <div class="tab-content" id="tab-blocked">
+    <div class="inner">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+        <select class="fsel" id="bf-disc" onchange="renderBlocked()">
+          <option value="">All Disciplines</option>
+          <option value="mechanical">Mechanical</option>
+          <option value="electrical">Electrical</option>
+          <option value="civil">Civil</option>
+        </select>
+        <select class="fsel" id="bf-cl" onchange="renderBlocked()">
+          <option value="">All Clusters</option>
+          <option>C1</option><option>C2</option><option>C3</option><option>C4</option>
+          <option>C5</option><option>C6</option><option>C7</option>
+        </select>
+        <input class="finp" id="bf-q" placeholder="WIR code or clearance…" oninput="renderBlocked()" style="min-width:200px">
+        <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-dim)" id="blocked-count"></span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px">
+        <strong style="color:var(--accent-text)">How to read this:</strong>
+        Each row shows a WIR that is still pending/not submitted — and how many clearances are blocked waiting for it.
+        Share this with the responsible discipline so they know which WIR approvals will unlock the most clearances.
+      </div>
+      <div id="blocked-list"></div>
+    </div>
+  </div>
+
+</div>
+<div class="modal-overlay" id="dc-modal" onclick="if(event.target===this)closeDcModal()">
+  <div class="modal">
+    <div class="modal-hdr"><h3 id="dc-modal-title">DC Action</h3><button class="modal-x" onclick="closeDcModal()">×</button></div>
+    <div class="modal-body" id="dc-modal-body"></div>
+  </div>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+<script>
+const SB='https://tactslhsxglzcbsteokf.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+function hasPerm(p){
+  if(window.__MEP_PERMS__&&window.__MEP_PERMS__.length) return window.__MEP_PERMS__.includes(p);
+  try{
+    const s=localStorage.getItem('mep_session');
+    if(s){const j=JSON.parse(s);
+      // permissions live in profile.permissions
+      const perms=j.profile?.permissions||j.permissions||[];
+      return perms.includes(p);
+    }
+  }catch(e){}
+  return false;
+}
+function isAdmin(){return hasPerm('manage_users')&&hasPerm('manage_system');}
+function getUserDiscipline(){
+  const VALID_DISCS=['mechanical','electrical','civil'];
+  const norm=d=>{if(!d)return'mechanical';const l=d.toLowerCase().trim();return VALID_DISCS.includes(l)?l:'mechanical';};
+  if(window.__MEP_USER__?.discipline) return norm(window.__MEP_USER__.discipline);
+  try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);return norm(j.profile?.discipline);}}catch(e){}
+  return 'mechanical';
+}
+
+function getH(x){let t=window.__MEP_TOKEN__;if(!t){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(t||KEY),'Content-Type':'application/json'},x||{});}
+let requests=[],clrActivities={},wirActivities={},villaMap={},wirStatusMap={},CLR_PREREQS={},readyItems=[];
+let CLR_ALIASES={};  // canonical_code → [alias_codes]
+const fa=async p=>{const r=await fetch(`${SB}/rest/v1/${p}`,{headers:getH()});if(!r.ok)throw new Error(await r.text());return r.json();};
+const faAll=async(p,max=50000)=>{let a=[],o=0;while(a.length<max){const r=await fetch(`${SB}/rest/v1/${p}${p.includes('?')?'&':'?'}limit=1000&offset=${o}`,{headers:{...getH(),'Prefer':'count=none'}});if(!r.ok)throw new Error(await r.text());const d=await r.json();if(!Array.isArray(d)||!d.length)break;a=a.concat(d);if(d.length<1000)break;o+=1000;}return a;};
+const fp=async(p,body,method='POST')=>{const r=await fetch(`${SB}/rest/v1/${p}`,{method,headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});if(!r.ok)throw new Error(await r.text());return r.json();};
+const patch=async(p,body)=>{const r=await fetch(`${SB}/rest/v1/${p}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify(body)});if(!r.ok)throw new Error(await r.text());};
+const fmtDT=d=>d?new Date(d).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
+(function tick(){document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8);setTimeout(tick,1000);})();
+function toast(msg,type){const c=document.getElementById('toasts');const el=document.createElement('div');el.className='toast '+(type||'info');const icons={ok:'✓',err:'✕',info:'ℹ'};el.innerHTML=`<span style="font-size:15px">${icons[type]||'ℹ'}</span><span>${msg}</span>`;c.appendChild(el);setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),200);},3500);}
+function msg(m){const el=document.getElementById('lmsg');if(el)el.textContent=m;}
+function hideLoad(){document.getElementById('lov').classList.add('gone');}
+function switchTab(t){['ready','sereview','pending','actioned','blocked'].forEach(x=>{document.getElementById('tbtn-'+x)?.classList.toggle('active',x===t);document.getElementById('tab-'+x)?.classList.toggle('active',x===t);});if(t==='blocked')renderBlocked();if(t==='ready')renderReady();if(t==='sereview')renderSEReview();}
+
+async function init(){
+  try{
+    msg('Loading clearance activities…');
+    const clrs=await fa('clearance_activities?select=id,clearance_code,clearance_name,discipline&is_active=eq.true');
+    clrs.forEach(c=>{clrActivities[c.clearance_code]={id:c.id,name:c.clearance_name,discipline:c.discipline};});
+    const clrOpts=clrs.sort((a,b)=>a.clearance_code.localeCompare(b.clearance_code)).map(c=>`<option value="${c.clearance_code}">${c.clearance_code} — ${c.clearance_name}</option>`).join('');
+    document.getElementById('pf-clr').innerHTML='<option value="">All Clearances</option>'+clrOpts;
+    document.getElementById('sef-clr').innerHTML='<option value="">All Clearances</option>'+clrOpts;
+    msg('Loading WIR activities…');
+    const wirs=await fa('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true');
+    wirs.forEach(a=>{wirActivities[a.activity_code]={id:a.id,name:a.activity_name,discipline:a.discipline};});
+    msg('Loading prerequisite mappings…');
+    await loadPrereqs();
+    msg('Loading clearance aliases…');
+    await loadAliases();
+    msg('Loading villas…');
+    const villas=await faAll('villas?select=id,villa_no,villa_type,clusters(code)&is_active=eq.true');
+    villas.forEach(v=>{villaMap[v.id]={villa_no:v.villa_no,cluster:v.clusters?.code||'',villa_type:v.villa_type||''};});
+    msg('Loading WIR statuses…');
+    const codes=[...new Set(Object.values(CLR_PREREQS).flat().map(e=>e.wir_code||e))];
+    if(codes.length){const rows=await faAll(`v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status&match_status=eq.matched&raw_activity_code=in.(${codes.join(',')})`);rows.forEach(r=>{if(!wirStatusMap[r.villa_id])wirStatusMap[r.villa_id]={};wirStatusMap[r.villa_id][r.raw_activity_code]=r.normalised_status;});}
+    await loadAll();
+    hideLoad();
+  }catch(e){msg('Error: '+e.message);console.error(e);}
+}
+
+async function loadPrereqs(){
+  CLR_PREREQS={};
+  const ci={},wi={};
+  Object.entries(clrActivities).forEach(([code,c])=>ci[c.id]=code);
+  Object.entries(wirActivities).forEach(([code,w])=>wi[w.id]=code);
+  const rows=await fa('activity_dependencies?select=clearance_activity_id,required_wir_activity_id,villa_type&dependent_type=eq.clearance&is_active=eq.true');
+  rows.forEach(r=>{
+    const cc=ci[r.clearance_activity_id],wc=wi[r.required_wir_activity_id];
+    if(!cc||!wc)return;
+    if(!CLR_PREREQS[cc])CLR_PREREQS[cc]=[];
+    // Store as {wir_code, villa_type} — villa_type null means all types
+    const entry={wir_code:wc, villa_type:r.villa_type||null};
+    if(!CLR_PREREQS[cc].some(e=>e.wir_code===wc&&e.villa_type===entry.villa_type))
+      CLR_PREREQS[cc].push(entry);
+  });
+}
+
+// Get prereq WIR codes that apply to a specific villa type
+function getPrereqsForType(clrCode, villaType){
+  const all = CLR_PREREQS[clrCode] || [];
+  return all
+    .filter(e => e.villa_type === null || e.villa_type === villaType)
+    .map(e => e.wir_code);
+}
+
+async function loadAliases(){
+  CLR_ALIASES={};
+  try{
+    const rows=await fa('clearance_aliases?select=canonical_code,alias_code&is_active=eq.true');
+    rows.forEach(r=>{
+      if(!CLR_ALIASES[r.canonical_code])CLR_ALIASES[r.canonical_code]=[];
+      if(!CLR_ALIASES[r.canonical_code].includes(r.alias_code))CLR_ALIASES[r.canonical_code].push(r.alias_code);
+    });
+  }catch(e){console.warn('Could not load clearance aliases:',e.message);}
+}
+
+async function loadAll(){
+  requests=await faAll('clearance_release_requests?select=*&order=created_at.desc');
+  await loadAliases();
+  await autoSubmitReady();
+  renderAll();
+}
+
+async function autoSubmitReady(){
+  readyItems=[];
+  const mappedCodes=Object.keys(CLR_PREREQS);
+  if(!mappedCodes.length)return;
+  const c2id={};
+  Object.entries(villaMap).forEach(([id,v])=>{c2id[v.cluster+':'+String(v.villa_no)]=parseInt(id,10);});
+  // Also fetch all alias codes so we can check if old codes are fully_approved
+  const aliasCodes=[...new Set(Object.values(CLR_ALIASES).flat())];
+  const allCodesToFetch=[...new Set([...mappedCodes,...aliasCodes])];
+  let clrRows=[];
+  try{
+    const enc=allCodesToFetch.map(c=>encodeURIComponent(c)).join(',');
+    clrRows=await faAll(`v_clearance_status?select=cluster,villa_no,clearance_code,clearance_name,discipline,clearance_status&clearance_code=in.(${enc})`,50000);
+  }catch(e){console.warn('clearance status fetch:',e.message);return;}
+  buildBlockedItems(clrRows);
+  const toSubmit=[];
+  clrRows.forEach(r=>{
+    if(!r.clearance_code||!r.cluster||r.villa_no==null)return;
+    if(r.clearance_status==='fully_approved')return;
+    // Also skip if an alias of this clearance is already fully_approved for this villa
+    const aliases=CLR_ALIASES[r.clearance_code]||[];
+    if(aliases.length){
+      const aliasApproved=clrRows.some(cr=>
+        cr.villa_no===r.villa_no&&cr.cluster===r.cluster&&
+        aliases.includes(cr.clearance_code)&&cr.clearance_status==='fully_approved'
+      );
+      if(aliasApproved)return;
+    }
+    const vInfo=villaMap[c2id[r.cluster+':'+String(r.villa_no)]];
+    const vType=vInfo?.villa_type||null;
+    const prereqs=getPrereqsForType(r.clearance_code,vType);
+    if(!prereqs||!prereqs.length)return; // no mapping = unknown prereqs, skip
+    const vid=c2id[r.cluster+':'+String(r.villa_no)];
+    if(!vid)return;
+    const results=prereqs.map(code=>({code,status:(wirStatusMap[vid]||{})[code]||'not_submitted',discipline:wirActivities[code]?.discipline||'mechanical'}));
+    if(prereqs.length>0&&!results.every(p=>p.status==='approved'))return;
+    const disciplines=new Set(results.map(p=>p.discipline));
+    const requiresSEReview=disciplines.size>1; // mixed disciplines = needs cross-discipline sign-off
+    readyItems.push({...r,villa_id:vid,prereq_results:results,requiresSEReview});
+    const hasActive=requests.some(req=>req.villa_id===vid&&clrActivities[r.clearance_code]?.id===req.clearance_activity_id&&(req.status==='pending_site_engineer'||req.status==='pending_dc'));
+    if(!hasActive){
+      const clrId=clrActivities[r.clearance_code]?.id;
+      if(clrId)toSubmit.push({villa_id:vid,clearance_activity_id:clrId,status:'pending_dc',auto_submitted:true,auto_submitted_at:new Date().toISOString(),prereq_wir_codes:prereqs,prereq_status_snapshot:Object.fromEntries(results.map(p=>[p.code,p.status])),raised_by_name:'Auto (System)',raised_by_discipline:'mechanical',reraised_count:0});
+    }
+  });
+  console.log(`[autoSubmit] clrRows=${clrRows.length} readyItems=${readyItems.length} toSubmit=${toSubmit.length}`);
+  // Do NOT auto-submit — site engineer manually submits from Ready to Release tab
+  // toSubmit is populated but not sent; readyItems is used for the Ready tab
+}
+
+function getClrCode(id){return Object.entries(clrActivities).find(([c,a])=>a.id===id)?.[0]||'?';}
+function getVilla(vid){return villaMap[vid]||{};}
+
+function buildCard(r,showActions){
+  const v=getVilla(r.villa_id);
+  const clrCode=getClrCode(r.clearance_activity_id);
+  const clrName=clrActivities[clrCode]?.name||clrCode;
+  const vForCard=getVilla(r.villa_id);
+  const prereqs=getPrereqsForType(clrCode,vForCard?.villa_type||null);
+  const prereqHtml=prereqs.map(code=>{
+    const st=(wirStatusMap[r.villa_id]||{})[code]||'not_submitted';
+    const disc=wirActivities[code]?.discipline||'mechanical';
+    const discColor=disc==='electrical'?'var(--progress)':'var(--accent-text)';
+    return`<span class="prereq-chip pc-${st}">${code} <span style="font-size:8px;opacity:.75;color:${discColor}">[${disc[0].toUpperCase()}]</span>: ${st.replace(/_/g,' ')}</span>`;
+  }).join('');
+  const statusLabel={pending_site_engineer:'SE Review',pending_dc:'Pending DC',dc_released:'DC Released',dc_rejected:'DC Rejected',csv_confirmed:'CSV Confirmed ✓',csv_failed:'CSV Failed — Reraise',sent_to_dc:'Sent to DC (legacy)'}[r.status]||r.status;
+  let actions='';
+  if(showActions&&r.status==='pending_dc'){
+    if(isAdmin()||hasPerm('confirm_release')){
+      actions=`<div class="card-actions"><button class="btn btn-ok btn-sm" onclick="openDcAction(${r.id},'released')">✓ Mark DC Released</button><button class="btn btn-err btn-sm" onclick="openDcAction(${r.id},'rejected')">✕ DC Rejected</button></div>`;
+    } else {
+      actions=`<div class="card-actions"><span style="font-size:11px;color:var(--text-dim);padding:4px 0">⚠ You need <strong>Confirm Release</strong> permission to action this.</span></div>`;
+    }
+  }
+  if(r.status==='csv_failed')actions+=`<div class="card-actions"><button class="btn btn-warn btn-sm" data-reraise="${r.id}" onclick="reraiseRequest(${r.id})">↺ Re-raise to DC</button></div>`;
+  const dcNote=r.dc_action==='rejected'&&r.dc_rejection_note?`<div class="note-box rejected">DC Rejection Note: ${r.dc_rejection_note}</div>`:'';
+  const csvFail=r.status==='csv_failed'?`<div class="note-box failed">⚠ CSV import did not confirm release — clearance still not fully approved in DC. Re-raise to DC queue.</div>`:'';
+  const autoTag=r.auto_submitted?`<span class="status-pill sp-auto">AUTO</span>`:'';
+  return`<div class="clr-card status-${r.status}">
+    <div class="card-top">
+      <span class="villa-badge">${v.cluster||'?'} · Villa ${v.villa_no||'?'}</span>
+      <span class="clr-name">${clrName}</span>
+      <span class="clr-code">${clrCode}</span>
+      ${autoTag}
+      <span class="status-pill sp-${r.status}">${statusLabel}</span>
+    </div>
+    <div class="card-meta">
+      <span>Submitted: ${fmtDT(r.auto_submitted_at||r.created_at)}</span>
+      ${r.dc_actioned_at?`<span>DC actioned: ${fmtDT(r.dc_actioned_at)}</span>`:''}
+      ${r.reraised_count?`<span>Re-raised ${r.reraised_count}×</span>`:''}
+    </div>
+    ${prereqHtml?`<div class="card-prereqs">${prereqHtml}</div>`:''}
+    ${dcNote}${csvFail}${actions}
+  </div>`;
+}
+
+function renderAll(){renderReady();renderSEReview();renderPending();renderActioned();updateBadges();}
+function updateBadges(){
+  document.getElementById('badge-sereview').textContent=requests.filter(r=>r.status==='pending_site_engineer').length;
+  document.getElementById('badge-pending').textContent=requests.filter(r=>r.status==='pending_dc').length;
+  document.getElementById('badge-actioned').textContent=requests.filter(r=>['dc_released','dc_rejected','csv_confirmed','csv_failed'].includes(r.status)).length;
+}
+
+function applyFilter(list,{cl,q}){
+  const qq=(q||'').toLowerCase();
+  return list.filter(r=>{
+    const v=getVilla(r.villa_id);const cc=getClrCode(r.clearance_activity_id);
+    if(cl&&v.cluster!==cl)return false;
+    if(qq&&!String(v.villa_no).includes(qq)&&!cc.toLowerCase().includes(qq)&&!(clrActivities[cc]?.name||'').toLowerCase().includes(qq))return false;
+    return true;
+  });
+}
+
+function renderPending(){
+  let items=applyFilter(requests.filter(r=>r.status==='pending_dc'),{cl:document.getElementById('pf-cl')?.value,q:document.getElementById('pf-q')?.value});
+  const clr=document.getElementById('pf-clr')?.value;
+  if(clr)items=items.filter(r=>getClrCode(r.clearance_activity_id)===clr);
+  document.getElementById('pending-count').textContent=`${items.length} pending`;
+  const totalMapped=Object.keys(CLR_PREREQS).length;
+  document.getElementById('kpi-pending').innerHTML=`
+    <div class="kpi dc"><div class="kpi-v">${items.length}</div><div class="kpi-l">Pending DC Action</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Auto-submitted</div><div class="kpi-bar"></div></div>
+    <div class="kpi ok"><div class="kpi-v">${requests.filter(r=>r.status==='csv_confirmed').length}</div><div class="kpi-l">CSV Confirmed</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Fully released</div><div class="kpi-bar"></div></div>
+    <div class="kpi warn"><div class="kpi-v">${requests.filter(r=>r.status==='csv_failed').length}</div><div class="kpi-l">CSV Failed</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Needs re-raise</div><div class="kpi-bar"></div></div>
+    <div class="kpi err"><div class="kpi-v">${requests.filter(r=>r.status==='dc_rejected').length}</div><div class="kpi-l">DC Rejected</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Action needed</div><div class="kpi-bar"></div></div>`;
+  const el=document.getElementById('pending-list');
+  el.innerHTML=items.length?items.map(r=>buildCard(r,true)).join(''):'<div class="empty"><div class="empty-icon">🎉</div><p>No clearances pending DC action.</p></div>';
+}
+
+function renderActioned(){
+  const st=document.getElementById('af-status')?.value;
+  let items=requests.filter(r=>['dc_released','dc_rejected','csv_confirmed','csv_failed'].includes(r.status));
+  items=applyFilter(items,{cl:document.getElementById('af-cl')?.value,q:document.getElementById('af-q')?.value});
+  if(st)items=items.filter(r=>r.status===st);
+  const released=items.filter(r=>r.status==='dc_released'||r.status==='csv_confirmed').length;
+  const rejected=items.filter(r=>r.status==='dc_rejected').length;
+  const failed=items.filter(r=>r.status==='csv_failed').length;
+  document.getElementById('actioned-count').textContent=`${items.length} records`;
+  document.getElementById('kpi-actioned').innerHTML=`
+    <div class="kpi ok"><div class="kpi-v">${released}</div><div class="kpi-l">Released/Confirmed</div><div class="kpi-bar"></div></div>
+    <div class="kpi err"><div class="kpi-v">${rejected}</div><div class="kpi-l">DC Rejected</div><div class="kpi-bar"></div></div>
+    <div class="kpi warn"><div class="kpi-v">${failed}</div><div class="kpi-l">CSV Failed</div><div class="kpi-bar"></div></div>`;
+  const el=document.getElementById('actioned-list');
+  el.innerHTML=items.length?items.map(r=>buildCard(r,false)).join(''):'<div class="empty"><div class="empty-icon">📭</div><p>No actioned records yet.</p></div>';
+}
+
+
+
+let _dcReqId=null,_dcAction=null;
+function openDcAction(reqId,action){
+  _dcReqId=reqId;_dcAction=action;
+  const req=requests.find(r=>r.id===reqId);if(!req)return;
+  const v=getVilla(req.villa_id);
+  const clrCode=getClrCode(req.clearance_activity_id);
+  const clrName=clrActivities[clrCode]?.name||clrCode;
+  document.getElementById('dc-modal-title').textContent=action==='released'?'Mark as DC Released':'Mark as DC Rejected';
+  document.getElementById('dc-modal-body').innerHTML=`
+    <div class="info-box">
+      <div class="ib-row"><span class="ib-lbl">Villa</span><span class="ib-val">${v.cluster} · Villa ${v.villa_no}</span></div>
+      <div class="ib-row"><span class="ib-lbl">Clearance</span><span class="ib-val">${clrName}</span></div>
+      <div class="ib-row"><span class="ib-lbl">Code</span><span class="ib-val" style="font-family:var(--mono)">${clrCode}</span></div>
+    </div>
+    ${action==='rejected'?`<div class="form-group"><label class="form-label">Rejection Note (optional)</label><textarea class="form-textarea" id="dc-note" placeholder="Reason DC rejected…"></textarea></div>`:'<p style="font-size:12px;color:var(--text-muted);margin-bottom:16px">Confirm DC has released this clearance. The next CSV import will verify the status changed to fully approved.</p>'}
+    <div class="modal-msg" id="dc-msg"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeDcModal()">Cancel</button>
+      <button class="btn ${action==='released'?'btn-ok':'btn-err'}" onclick="confirmDcAction()">${action==='released'?'✓ Confirm Released':'✕ Confirm Rejected'}</button>
+    </div>`;
+  document.getElementById('dc-modal').classList.add('open');
+}
+function closeDcModal(){document.getElementById('dc-modal').classList.remove('open');_dcReqId=null;_dcAction=null;_dcSubmitting=false;}
+let _dcSubmitting=false;
+async function confirmDcAction(){
+  if(!_dcReqId||!_dcAction)return;
+  if(_dcSubmitting)return; // prevent spam
+  if(!isAdmin()&&!hasPerm('confirm_release')){toast('You do not have permission to confirm releases','err');closeDcModal();return;}
+  const note=document.getElementById('dc-note')?.value||null;
+  const msgEl=document.getElementById('dc-msg');
+  // Disable confirm button immediately
+  const confirmBtn=document.querySelector('#dc-modal .btn-ok, #dc-modal .btn-err');
+  if(confirmBtn){confirmBtn.disabled=true;confirmBtn.textContent='Saving…';}
+  _dcSubmitting=true;
+  const newStatus=_dcAction==='released'?'dc_released':'dc_rejected';
+  const reqId=_dcReqId;
+  try{
+    await patch(`clearance_release_requests?id=eq.${reqId}`,{
+      status:newStatus,dc_action:_dcAction,
+      dc_actioned_at:new Date().toISOString(),
+      dc_rejection_note:note||null,
+      updated_at:new Date().toISOString()
+    });
+    // Update local state instantly — no full reload needed
+    const idx=requests.findIndex(r=>r.id===reqId);
+    if(idx>-1){
+      requests[idx]={...requests[idx],status:newStatus,dc_action:_dcAction,
+        dc_actioned_at:new Date().toISOString(),dc_rejection_note:note||null};
+    }
+    toast(`DC ${_dcAction==='released'?'Released':'Rejected'} — clearance updated`,'ok');
+    closeDcModal();
+    renderAll();
+  }catch(e){
+    msgEl.className='modal-msg err';msgEl.textContent='Error: '+e.message;
+    if(confirmBtn){confirmBtn.disabled=false;confirmBtn.textContent=_dcAction==='released'?'✓ Confirm Released':'✕ Confirm Rejected';}
+  }finally{
+    _dcSubmitting=false;
+  }
+}
+
+let _reraising=new Set();
+async function reraiseRequest(reqId){
+  const req=requests.find(r=>r.id===reqId);if(!req)return;
+  if(_reraising.has(reqId)){toast('Already re-raising…','info');return;}
+  _reraising.add(reqId);
+  // Find and disable the reraise button for this request
+  const btn=document.querySelector(`[data-reraise="${reqId}"]`);
+  if(btn){btn.disabled=true;btn.textContent='Re-raising…';}
+  try{
+    await patch(`clearance_release_requests?id=eq.${reqId}`,{
+      status:'pending_dc',dc_action:null,dc_actioned_at:null,dc_rejection_note:null,
+      auto_submitted_at:new Date().toISOString(),
+      reraised_count:(req.reraised_count||0)+1,
+      updated_at:new Date().toISOString()
+    });
+    // Update local state
+    const idx=requests.findIndex(r=>r.id===reqId);
+    if(idx>-1){requests[idx]={...requests[idx],status:'pending_dc',dc_action:null,dc_actioned_at:null,reraised_count:(req.reraised_count||0)+1};}
+    toast('Re-raised to DC queue','info');
+    renderAll();
+  }catch(e){
+    toast('Error: '+e.message,'err');
+    if(btn){btn.disabled=false;btn.textContent='↺ Re-raise';}
+  }finally{
+    _reraising.delete(reqId);
+  }
+}
+
+async function runCsvConfirmationCheck(){
+  const dcReleased=requests.filter(r=>r.status==='dc_released');
+  if(!dcReleased.length){toast('No dc_released requests to check','info');return;}
+  toast('Running CSV confirmation check…','info');
+  let confirmed=0,failed=0;
+  for(const req of dcReleased){
+    const v=getVilla(req.villa_id);
+    const clrCode=getClrCode(req.clearance_activity_id);
+    if(!v.cluster||!v.villa_no||!clrCode)continue;
+    try{
+      // Check canonical code + any alias codes
+      const aliasesToCheck=[clrCode,...(CLR_ALIASES[clrCode]||[])];
+      let status='not_submitted';
+      for(const chkCode of aliasesToCheck){
+        const rows=await fa(`v_latest_clearance_status?select=normalised_status&villa_id=eq.${req.villa_id}&raw_clearance_code=eq.${encodeURIComponent(chkCode)}&limit=1`);
+        if(rows[0]?.normalised_status==='fully_approved'){status='fully_approved';break;}
+        if(rows[0]?.normalised_status&&status==='not_submitted')status=rows[0].normalised_status;
+      }
+      if(status==='fully_approved'){await patch(`clearance_release_requests?id=eq.${req.id}`,{status:'csv_confirmed',confirmed_by_csv:true,confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()});confirmed++;}
+      else if(status==='not_approved'||status==='pending'){await patch(`clearance_release_requests?id=eq.${req.id}`,{status:'csv_failed',updated_at:new Date().toISOString()});failed++;}
+    }catch(e){console.warn('CSV check err req',req.id,e.message);}
+  }
+  toast(`CSV check done: ${confirmed} confirmed ✓, ${failed} failed ✗`,failed?'warn':'ok');
+  await loadAll();
+}
+
+
+// ── BLOCKED CLEARANCES ──
+let blockedItems = []; // built inside autoSubmitReady
+
+function buildBlockedItems(clrRows) {
+  // For each clearance+villa where NOT all prereqs approved,
+  // collect which specific WIRs are blocking it
+  blockedItems = [];
+  const mappedCodes = Object.keys(CLR_PREREQS);
+  if (!mappedCodes.length) return;
+  const c2id = {};
+  Object.entries(villaMap).forEach(([id, v]) => { c2id[v.cluster + ':' + String(v.villa_no)] = parseInt(id, 10); });
+
+  clrRows.forEach(r => {
+    if (!r.clearance_code || !r.cluster || r.villa_no == null) return;
+    if (r.clearance_status === 'fully_approved') return;
+    // Skip aliases already approved
+    const aliases = CLR_ALIASES[r.clearance_code] || [];
+    if (aliases.length) {
+      const aliasApproved = clrRows.some(cr =>
+        cr.villa_no === r.villa_no && cr.cluster === r.cluster &&
+        aliases.includes(cr.clearance_code) && cr.clearance_status === 'fully_approved'
+      );
+      if (aliasApproved) return;
+    }
+    const vtBlocked=Object.values(villaMap).find(v=>v.cluster===r.cluster&&String(v.villa_no)===String(r.villa_no))?.villa_type||null;
+    const prereqs = getPrereqsForType(r.clearance_code, vtBlocked);
+    if (!prereqs || !prereqs.length) return;
+    const vid = c2id[r.cluster + ':' + String(r.villa_no)];
+    if (!vid) return;
+    const results = prereqs.map(code => ({
+      code,
+      status: (wirStatusMap[vid] || {})[code] || 'not_submitted',
+      discipline: wirActivities[code]?.discipline || '?'
+    }));
+    const allApproved = results.every(p => p.status === 'approved');
+    if (allApproved) return; // already in ready list
+
+    const approvedWirs  = results.filter(p => p.status === 'approved');
+    const blockingWirs  = results.filter(p => p.status !== 'approved');
+
+    // CROSS-DISCIPLINE ONLY: show only when ALL WIRs of at least one discipline are approved
+    // but another discipline still has pending WIRs.
+    // e.g. all mechanical ✓ but electrical still pending → show
+    // e.g. some mechanical pending, no electrical at all → skip
+    const allDiscs = [...new Set(results.map(p => p.discipline))];
+    if (allDiscs.length < 2) return; // single discipline clearance — skip entirely
+    const isCrossDiscipline = allDiscs.some(disc => {
+      const discWirs = results.filter(p => p.discipline === disc);
+      const allApprovedForDisc = discWirs.every(p => p.status === 'approved');
+      const otherDiscHasPending = results.some(p => p.discipline !== disc && p.status !== 'approved');
+      return allApprovedForDisc && otherDiscHasPending;
+    });
+    if (!isCrossDiscipline) return;
+
+    blockedItems.push({
+      cluster: r.cluster,
+      villa_no: r.villa_no,
+      clearance_code: r.clearance_code,
+      clearance_name: r.clearance_name,
+      discipline: r.discipline,
+      villa_id: vid,
+      prereq_results: results,
+      blocking_wirs: blockingWirs
+    });
+  });
+
+  document.getElementById('badge-blocked').textContent = blockedItems.length;
+}
+
+function renderBlocked() {
+  const disc = document.getElementById('bf-disc')?.value || '';
+  const cl   = document.getElementById('bf-cl')?.value || '';
+  const q    = (document.getElementById('bf-q')?.value || '').toLowerCase().trim();
+
+  let items = [...blockedItems];
+  if (cl)   items = items.filter(r => r.cluster === cl);
+  if (disc) items = items.filter(r => r.blocking_wirs.some(w => (wirActivities[w.code]?.discipline || '') === disc));
+  if (q)    items = items.filter(r =>
+    r.clearance_code.toLowerCase().includes(q) ||
+    r.clearance_name.toLowerCase().includes(q) ||
+    r.blocking_wirs.some(w => w.code.toLowerCase().includes(q))
+  );
+
+  document.getElementById('blocked-count').textContent = `${items.length} blocked clearances`;
+
+  const el = document.getElementById('blocked-list');
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--text-dim)"><div style="font-size:40px;margin-bottom:10px">🎉</div><p style="font-size:13px">No blocked clearances matching filters.</p></div>';
+    return;
+  }
+
+  // Group by blocking WIR code — so engineer sees "approve WIR X → unlocks N"
+  const byWir = {};
+  items.forEach(item => {
+    item.blocking_wirs.forEach(w => {
+      if (!byWir[w.code]) byWir[w.code] = { wir_code: w.code, wir_name: wirActivities[w.code]?.name || w.code, discipline: wirActivities[w.code]?.discipline || '?', items: [] };
+      // Avoid duplicate villa+clearance per WIR
+      const exists = byWir[w.code].items.some(i => i.villa_no === item.villa_no && i.clearance_code === item.clearance_code && i.cluster === item.cluster);
+      if (!exists) byWir[w.code].items.push(item);
+    });
+  });
+
+  const discFilter = disc;
+  let wirEntries = Object.values(byWir)
+    .filter(g => !discFilter || g.discipline === discFilter)
+    .sort((a, b) => b.items.length - a.items.length); // most impactful first
+
+  const discColor = { mechanical: 'var(--accent)', electrical: 'var(--progress)', civil: 'var(--review)' };
+  const discBg    = { mechanical: 'var(--accent-soft)', electrical: 'var(--progress-bg)', civil: 'var(--review-bg)' };
+
+  el.innerHTML = wirEntries.map(g => {
+    const col = discColor[g.discipline] || 'var(--text-muted)';
+    const bg  = discBg[g.discipline]  || 'var(--bg-hover)';
+    const statusIcon = { approved: '✓', under_review: '⟳', not_submitted: '—', rejected: '✕' };
+
+    const villasHtml = g.items.slice(0, 12).map(item => {
+      const prereqHtml = item.prereq_results.map(p => {
+        const col2 = p.status === 'approved' ? 'var(--approved)' : p.status === 'under_review' ? 'var(--review)' : 'var(--text-dim)';
+        return `<span style="font-size:10px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:var(--bg-hover);color:${col2}">${p.code} ${statusIcon[p.status] || p.status}</span>`;
+      }).join(' ');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;background:var(--accent-soft);color:var(--accent-text);padding:2px 7px;border-radius:5px;white-space:nowrap">${item.cluster} · ${item.villa_no}</span>
+        <span style="flex:1;color:var(--text)">${item.clearance_name} <span style="color:var(--text-dim);font-size:10px;font-family:var(--mono)">${item.clearance_code}</span></span>
+        <span style="display:flex;gap:4px;flex-wrap:wrap">${prereqHtml}</span>
+      </div>`;
+    }).join('');
+    const more = g.items.length > 12 ? `<div style="font-size:11px;color:var(--text-dim);padding:6px 0">+ ${g.items.length - 12} more villas…</div>` : '';
+
+    return `<div style="background:var(--bg-elev);border:1px solid var(--border);border-left:3px solid ${col};border-radius:var(--rl);margin-bottom:10px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-panel)">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+            <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${col}">${g.wir_code}</span>
+            <span style="font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:10px;background:${bg};color:${col}">${g.discipline}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text)">${g.wir_name}</div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${col};line-height:1">${g.items.length}</div>
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">clearances blocked</div>
+        </div>
+      </div>
+      <div style="padding:4px 16px 8px">${villasHtml}${more}</div>
+    </div>`;
+  }).join('');
+}
+
+
+// ── READY TO RELEASE TAB ──
+function renderReady(){
+  const cl  = document.getElementById('rf-cl')?.value||'';
+  const clr = document.getElementById('rf-clr')?.value||'';
+  const q   = (document.getElementById('rf-q')?.value||'').toLowerCase();
+
+  // Filter readyItems — exclude those already pending_site_engineer or pending_dc
+  const alreadyActive = new Set(
+    requests.filter(r=>r.status==='pending_site_engineer'||r.status==='pending_dc')
+      .map(r=>r.villa_id+'_'+r.clearance_activity_id)
+  );
+
+  let items = readyItems.filter(r=>{
+    const clrId = clrActivities[r.clearance_code]?.id;
+    if(alreadyActive.has(r.villa_id+'_'+clrId)) return false; // already released or submitted
+    if(cl  && r.cluster !== cl)  return false;
+    if(clr && r.clearance_code !== clr) return false;
+    if(q   && !String(r.villa_no).includes(q) && !r.clearance_code.toLowerCase().includes(q) && !(r.clearance_name||'').toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  document.getElementById('ready-count').textContent = items.length+' ready';
+  document.getElementById('badge-ready').textContent  = items.length;
+  document.getElementById('kpi-ready').innerHTML = `
+    <div class="kpi ok"><div class="kpi-v">${items.length}</div><div class="kpi-l">Ready to Release</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">All WIRs approved</div><div class="kpi-bar"></div></div>
+    <div class="kpi" style="--kpi-c:var(--review)"><div class="kpi-v" style="color:var(--review)">${requests.filter(r=>r.status==='pending_site_engineer').length}</div><div class="kpi-l">Pending SE Review</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Released, not yet sent</div><div class="kpi-bar" style="background:var(--review)"></div></div>
+    <div class="kpi dc"><div class="kpi-v">${requests.filter(r=>r.status==='pending_dc').length}</div><div class="kpi-l">Pending DC</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Awaiting DC action</div><div class="kpi-bar"></div></div>
+  `;
+
+  const submitBtn = document.getElementById('btn-submit-all');
+  if(submitBtn){
+    const canReq = isAdmin()||hasPerm('request_release');
+    submitBtn.style.display = canReq ? '' : 'none';
+  }
+
+  const el = document.getElementById('ready-list');
+  if(!items.length){
+    el.innerHTML='<div class="empty"><div class="empty-icon">🎉</div><p style="font-size:13px">No clearances ready to release right now.</p></div>';
+    return;
+  }
+
+  el.innerHTML = items.map(r=>{
+    const prereqHtml = (r.prereq_results||[]).map(p=>{
+      const disc=p.discipline||'mechanical';
+      const discColor=disc==='electrical'?'var(--progress)':'var(--accent-text)';
+      return`<span class="prereq-chip pc-${p.status}">${p.code} <span style="font-size:8px;opacity:.75;color:${discColor}">[${disc[0].toUpperCase()}]</span>: ${p.status.replace(/_/g,' ')}</span>`;
+    }).join('');
+    const canReq = isAdmin()||hasPerm('request_release');
+    const actBtn = canReq
+      ? `<div class="card-actions">
+          <button class="btn btn-ok btn-sm" onclick="releaseSingle('${r.cluster}','${r.villa_no}','${r.clearance_code}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg>
+            Release
+          </button>
+        </div>`
+      : `<div class="card-actions"><span style="font-size:11px;color:var(--text-dim)">⚠ You need Request Release permission to release.</span></div>`;
+    const routeBadge = r.requiresSEReview
+      ? `<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--review-bg);color:var(--review);border:1px solid var(--review-bd,rgba(163,179,255,.25))">⚡ SE Review</span>`
+      : `<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent-text)">→ DC</span>`;
+    return `<div class="clr-card" style="border-left:3px solid var(--approved)">
+      <div class="card-top">
+        <span class="villa-badge">${r.cluster} · Villa ${r.villa_no}</span>
+        <span class="clr-name">${r.clearance_name||r.clearance_code}</span>
+        <span class="clr-code">${r.clearance_code}</span>
+        ${routeBadge}
+        <span class="status-pill sp-dc_released">Ready ✓</span>
+      </div>
+      <div class="card-meta"><span style="color:var(--text-dim);font-size:11px">All prerequisite WIRs approved</span></div>
+      ${prereqHtml ? `<div class="card-prereqs">${prereqHtml}</div>` : ''}
+      ${actBtn}
+    </div>`;
+  }).join('');
+}
+
+// Step 1: Site engineer clicks "Release" — routes based on discipline
+async function releaseSingle(cluster, villa_no, clrCode){
+  if(!isAdmin()&&!hasPerm('request_release')){toast('You need Request Release permission','err');return;}
+  const item = readyItems.find(r=>r.cluster===cluster&&String(r.villa_no)===String(villa_no)&&r.clearance_code===clrCode);
+  if(!item){toast('Item not found — refresh and try again','err');return;}
+  const vid = item.villa_id;
+  const clrId = clrActivities[clrCode]?.id;
+  if(!vid||!clrId){toast('Villa or clearance ID missing','err');return;}
+  const already = requests.some(r=>r.villa_id===vid&&r.clearance_activity_id===clrId&&(r.status==='pending_site_engineer'||r.status==='pending_dc'));
+  if(already){toast('Already released or submitted','info');renderReady();return;}
+  // Route: electrical prereqs → pending_site_engineer; mechanical only → pending_dc
+  const targetStatus = item.requiresSEReview ? 'pending_site_engineer' : 'pending_dc';
+  const myDiscipline = getUserDiscipline();
+  try{
+    await fp('clearance_release_requests',{
+      villa_id:vid, clearance_activity_id:clrId,
+      status:targetStatus, auto_submitted:false,
+      auto_submitted_at:new Date().toISOString(),
+      prereq_wir_codes:(item.prereq_results||[]).map(p=>p.code),
+      prereq_status_snapshot:Object.fromEntries((item.prereq_results||[]).map(p=>[p.code,p.status])),
+      raised_by_name:window.__MEP_USER__?.full_name||'Site Engineer',
+      raised_by_discipline:myDiscipline, reraised_count:0
+    });
+    toast(`${cluster} Villa ${villa_no} — ${clrCode} released successfully`,'ok');
+    requests = await faAll('clearance_release_requests?select=*&order=created_at.desc');
+    renderAll();
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
+// Step 1 bulk: Release all ready items (routes each individually)
+async function submitAllReady(){
+  if(!isAdmin()&&!hasPerm('request_release')){toast('You need Request Release permission','err');return;}
+  const alreadyActive = new Set(requests.filter(r=>r.status==='pending_site_engineer'||r.status==='pending_dc').map(r=>r.villa_id+'_'+r.clearance_activity_id));
+  const toSend = readyItems.filter(r=>{
+    const clrId=clrActivities[r.clearance_code]?.id;
+    return !alreadyActive.has(r.villa_id+'_'+clrId)&&r.villa_id&&clrId;
+  });
+  if(!toSend.length){toast('Nothing new to release','info');return;}
+  const btn=document.getElementById('btn-submit-all');
+  if(btn){btn.disabled=true;btn.textContent='Releasing…';}
+  try{
+    const myDiscipline = getUserDiscipline();
+  const payloads=toSend.map(r=>({
+      villa_id:r.villa_id,
+      clearance_activity_id:clrActivities[r.clearance_code]?.id,
+      // Route: mixed disciplines → SE review; single discipline → straight to DC
+      status: r.requiresSEReview ? 'pending_site_engineer' : 'pending_dc',
+      auto_submitted:false,
+      auto_submitted_at:new Date().toISOString(),
+      prereq_wir_codes:(r.prereq_results||[]).map(p=>p.code),
+      prereq_status_snapshot:Object.fromEntries((r.prereq_results||[]).map(p=>[p.code,p.status])),
+      raised_by_name:window.__MEP_USER__?.full_name||'Site Engineer',
+      raised_by_discipline:myDiscipline, reraised_count:0
+    }));
+    for(let i=0;i<payloads.length;i+=50) await fp('clearance_release_requests',payloads.slice(i,i+50));
+    const seCount=payloads.filter(p=>p.status==='pending_site_engineer').length;
+    const dcCount=payloads.filter(p=>p.status==='pending_dc').length;
+    toast(`Released: ${seCount} to SE review, ${dcCount} direct to DC`,'ok');
+    requests = await faAll('clearance_release_requests?select=*&order=created_at.desc');
+    renderAll();
+    // stay on current tab after bulk release
+  }catch(e){toast('Release error: '+e.message,'err');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg> Release All';}}
+}
+
+// Step 2: Other discipline engineer submits to DC
+async function submitSingle(reqId){
+  if(!isAdmin()&&!hasPerm('request_release')){toast('You need Request Release permission','err');return;}
+  const req=requests.find(r=>r.id===reqId);
+  if(!isAdmin()&&req?.raised_by_discipline&&getUserDiscipline()===req.raised_by_discipline){
+    toast('You cannot approve your own release — must be confirmed by the other discipline','err');return;
+  }
+  try{
+    await patch(`clearance_release_requests?id=eq.${reqId}`,{
+      status:'pending_dc',
+      auto_submitted_at:new Date().toISOString(),
+      updated_at:new Date().toISOString()
+    });
+    toast('Submitted to DC','ok');
+    requests = await faAll('clearance_release_requests?select=*&order=created_at.desc');
+    renderAll();
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
+async function submitAllToDC(){
+  if(!isAdmin()&&!hasPerm('request_release')){toast('You need Request Release permission','err');return;}
+  const myDiscipline=getUserDiscipline();
+  // Only submit items where the other discipline can approve (not your own releases, unless admin)
+  const seItems=requests.filter(r=>r.status==='pending_site_engineer'&&(isAdmin()||r.raised_by_discipline!==myDiscipline));
+  if(!seItems.length){toast('No clearances you can submit to DC — awaiting the other discipline','info');return;}
+  const btn=document.getElementById('btn-submit-all-dc');
+  if(btn){btn.disabled=true;btn.textContent='Submitting…';}
+  try{
+    for(const r of seItems){
+      await patch(`clearance_release_requests?id=eq.${r.id}`,{status:'pending_dc',auto_submitted_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+    }
+    toast(`${seItems.length} clearance(s) submitted to DC`,'ok');
+    requests = await faAll('clearance_release_requests?select=*&order=created_at.desc');
+    renderAll();
+    switchTab('pending');
+  }catch(e){toast('Submit error: '+e.message,'err');}
+  finally{if(btn){btn.disabled=false;btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg> Submit All to DC';}}
+}
+
+function renderSEReview(){
+  const cl=document.getElementById('sef-cl')?.value;
+  const clr=document.getElementById('sef-clr')?.value;
+  const q=(document.getElementById('sef-q')?.value||'').toLowerCase();
+  let items=requests.filter(r=>r.status==='pending_site_engineer');
+  items=applyFilter(items,{cl,q});
+  if(clr)items=items.filter(r=>getClrCode(r.clearance_activity_id)===clr);
+  document.getElementById('sereview-count').textContent=`${items.length} pending review`;
+  document.getElementById('kpi-sereview').innerHTML=`
+    <div class="kpi" style=""><div class="kpi-v" style="color:var(--review)">${items.length}</div><div class="kpi-l">Pending SE Review</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Released, awaiting DC submission</div><div class="kpi-bar" style="background:var(--review)"></div></div>
+  `;
+  const el=document.getElementById('sereview-list');
+  if(!items.length){el.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>No clearances pending SE review.</p></div>';return;}
+  const canReq=isAdmin()||hasPerm('request_release');
+  const myDiscipline=getUserDiscipline();
+  el.innerHTML=items.map(r=>{
+    const v=getVilla(r.villa_id);
+    const clrCode=getClrCode(r.clearance_activity_id);
+    const clrName=clrActivities[clrCode]?.name||clrCode;
+    const prereqs=getPrereqsForType(clrCode,v?.villa_type||null);
+    const prereqHtml=prereqs.map(code=>{
+      const st=(wirStatusMap[r.villa_id]||{})[code]||'not_submitted';
+      const disc=wirActivities[code]?.discipline||'mechanical';
+      const discColor=disc==='electrical'?'var(--progress)':'var(--accent-text)';
+      return`<span class="prereq-chip pc-${st}">${code} <span style="font-size:8px;opacity:.75;color:${discColor}">[${disc[0].toUpperCase()}]</span>: ${st.replace(/_/g,' ')}</span>`;
+    }).join('');
+    // Cross-discipline rule: you cannot approve your own release — must be approved by the OTHER discipline
+    const sameDisc = !isAdmin() && r.raised_by_discipline && myDiscipline === r.raised_by_discipline;
+    const raisedDisc = r.raised_by_discipline||'—';
+    const otherDisc = raisedDisc === 'mechanical' ? 'electrical' : raisedDisc === 'electrical' ? 'mechanical' : 'other discipline';
+    let actions;
+    if(!canReq){
+      actions=`<div class="card-actions"><span style="font-size:11px;color:var(--text-dim)">⚠ You need Request Release permission.</span></div>`;
+    } else if(sameDisc){
+      actions=`<div class="card-actions">
+        <span style="font-size:11px;color:var(--progress)">⏳ Awaiting <strong>${otherDisc}</strong> sign-off — released by ${r.raised_by_name||raisedDisc}</span>
+      </div>`;
+    } else {
+      actions=`<div class="card-actions">
+        <button class="btn btn-primary btn-sm" onclick="submitSingle(${r.id})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+          Submit to DC
+        </button>
+        <span style="font-size:10px;color:var(--text-dim)">Released by ${r.raised_by_name||raisedDisc} (${raisedDisc})</span>
+      </div>`;
+    }
+    return`<div class="clr-card status-pending_site_engineer">
+      <div class="card-top">
+        <span class="villa-badge">${v.cluster||'?'} · Villa ${v.villa_no||'?'}</span>
+        <span class="clr-name">${clrName}</span>
+        <span class="clr-code">${clrCode}</span>
+        <span class="status-pill sp-pending_site_engineer">SE Review</span>
+      </div>
+      <div class="card-meta">
+        <span>Released: ${fmtDT(r.auto_submitted_at||r.created_at)}</span>
+        <span>By: ${r.raised_by_name||'—'} <span style="font-size:10px;opacity:.7">(${raisedDisc})</span></span>
+      </div>
+      ${prereqHtml?`<div class="card-prereqs">${prereqHtml}</div>`:''}
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+
+
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t||'dark');}
+try{applyTheme(localStorage.getItem('mep_theme'));}catch(e){}
+window.addEventListener('storage',e=>{if(e.key==='mep_theme')applyTheme(e.newValue);});
+window.addEventListener('message',e=>{
+  if(!e.data||typeof e.data!=='object')return;
+  if(e.data.type==='theme'){applyTheme(e.data.theme);try{localStorage.setItem('mep_theme',e.data.theme);}catch(ex){}}
+  if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;window.__MEP_PERMS__=e.data.user?.permissions||[];checkPageAccess();}
+});
+if(window.self!==window.top)document.body.classList.add('in-shell');
+try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+
+// ── PAGE ACCESS GUARD ──
+function checkPageAccess(){
+  const perms=window.__MEP_PERMS__||[];
+  let stored=[];
+  try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);stored=j.profile?.permissions||j.permissions||[];}}catch(e){}
+  const all=[...new Set([...perms,...stored])];
+  const admin=all.includes('manage_users')&&all.includes('manage_system');
+  if(admin||all.includes('request_release')) return;
+  document.getElementById('page-access-denied').style.display='flex';
+  document.querySelector('body > *:not(#page-access-denied)') && 
+    document.querySelectorAll('body > *:not(#page-access-denied)').forEach(el=>el.style.visibility='hidden');
+}
+
+checkPageAccess();
+init();
+</script>
+<div id="page-access-denied" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:16px">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--rejected)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>
+  <div style="font-size:18px;font-weight:700;color:var(--text)">Access Denied</div>
+  <div style="font-size:13px;color:var(--text-muted);text-align:center;max-width:320px">You need the <strong style="color:var(--accent-text)">Request Release</strong> permission to access this page.<br>Contact your administrator.</div>
+</div>
+</body>
+</html>

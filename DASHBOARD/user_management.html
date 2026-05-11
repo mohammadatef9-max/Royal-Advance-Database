@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>User Management · MEP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --st-approved-bg:#163d28;--st-approved-bd:#1f5a39;--st-approved-tx:#6ee2a3;
+  --st-rejected-bg:#4a1820;--st-rejected-bd:#6b2530;--st-rejected-tx:#ff8a99;
+  --st-progress-bg:#2a2410;--st-progress-bd:#4a3c14;--st-progress-tx:#f4c95a;
+  --st-review-bg:#1c2348;--st-review-bd:#2c3870;--st-review-tx:#a3b3ff;
+  --font:"Inter",-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --radius:6px;--radius-lg:10px;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
+  --st-approved-bg:#e3f5ea;--st-approved-bd:#b8e0c7;--st-approved-tx:#15803d;
+  --st-rejected-bg:#fde8eb;--st-rejected-bd:#f5b8c1;--st-rejected-tx:#b91c1c;
+  --st-progress-bg:#fef5d8;--st-progress-bd:#f3dca3;--st-progress-tx:#92580a;
+  --st-review-bg:#e8eeff;--st-review-bd:#c0cdf5;--st-review-tx:#2942a8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select{font:inherit;color:inherit}
+
+/* Hide topbar when in shell */
+body.in-shell .topbar{display:none!important}
+
+/* ── Topbar ── */
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-crumb{font-size:11px;color:var(--text-dim);font-weight:500}
+.tb-name{font-size:14px;font-weight:600;color:var(--text)}
+.tb-spacer{flex:1}
+.tb-live{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx);font-size:11px;font-weight:600}
+.tb-live-dot{width:6px;height:6px;border-radius:50%;background:var(--st-approved-tx);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.tb-clock{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+
+/* ── Page head ── */
+.page-head{padding:16px 20px 12px;border-bottom:1px solid var(--border-subtle);flex-shrink:0;display:flex;align-items:center;gap:12px}
+.page-title{font-size:18px;font-weight:700;letter-spacing:-.01em}
+.page-sub{font-size:12px;color:var(--text-dim);margin-top:2px}
+.page-head-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+/* ── Content ── */
+.content{flex:1;overflow-y:auto;padding:20px}
+.content::-webkit-scrollbar{width:6px}
+.content::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 14px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-panel);color:var(--text-muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--bg-hover);color:var(--text);border-color:var(--border-strong)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover{filter:brightness(1.1)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;filter:none}
+.btn-danger{background:var(--st-rejected-bg);border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.btn-danger:hover{filter:brightness(1.1)}
+.btn-success{background:var(--st-approved-bg);border-color:var(--st-approved-bd);color:var(--st-approved-tx)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-icon{width:28px;height:28px;padding:0;border-radius:var(--radius)}
+
+/* ── Search bar ── */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.search-wrap{position:relative;flex:1;min-width:200px;max-width:320px}
+.search-wrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text-dim);pointer-events:none}
+.search-input{width:100%;background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px 7px 32px;font-size:12px;color:var(--text);outline:none;transition:border-color .15s}
+.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search-input::placeholder{color:var(--text-faint)}
+.filter-sel{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;font-size:12px;color:var(--text);outline:none;cursor:pointer}
+.filter-sel:focus{border-color:var(--accent)}
+.count-pill{background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent);border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;font-family:var(--font-mono)}
+
+/* ── User table ── */
+.user-table{width:100%;border-collapse:collapse}
+.user-table th{background:var(--bg-panel);color:var(--text-dim);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.user-table td{padding:10px 12px;border-bottom:1px solid var(--border-subtle);vertical-align:middle}
+.user-table tr:last-child td{border-bottom:none}
+.user-table tbody tr{transition:background .1s}
+.user-table tbody tr:hover td{background:var(--bg-hover)}
+.user-table tbody tr.inactive{opacity:.55}
+
+/* avatar */
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:-.01em}
+.avatar.inactive-av{background:var(--border-strong);color:var(--text-dim)}
+.user-cell{display:flex;align-items:center;gap:10px}
+.user-name{font-size:13px;font-weight:500;color:var(--text)}
+.user-email{font-size:11px;color:var(--text-dim);font-family:var(--font-mono)}
+
+/* role badges */
+.role-main{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.role-super_admin{background:rgba(168,85,247,.15);color:#c084fc;border:1px solid rgba(168,85,247,.3)}
+.role-admin{background:var(--accent-soft);color:var(--accent-text);border:1px solid rgba(79,140,255,.3)}
+.role-staff{background:var(--bg-panel);color:var(--text-muted);border:1px solid var(--border)}
+
+.side-roles{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.side-pill{display:inline-block;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim);padding:1px 6px;border-radius:3px;font-size:10px;white-space:nowrap}
+
+/* disc badge */
+.disc-badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:600}
+.disc-mech{background:var(--st-review-bg);color:var(--st-review-tx);border:1px solid var(--st-review-bd)}
+.disc-elec{background:var(--st-progress-bg);color:var(--st-progress-tx);border:1px solid var(--st-progress-bd)}
+.disc-both{background:var(--st-approved-bg);color:var(--st-approved-tx);border:1px solid var(--st-approved-bd)}
+
+/* status */
+.status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-active{background:var(--st-approved-tx)}
+.dot-inactive{background:var(--text-faint)}
+.status-text{font-size:12px}
+
+/* actions */
+.actions-cell{display:flex;gap:6px;justify-content:flex-end}
+
+/* ── Empty state ── */
+.empty-state{text-align:center;padding:48px 20px;color:var(--text-faint)}
+.empty-state svg{margin-bottom:12px;opacity:.4}
+.empty-state h3{font-size:14px;font-weight:600;color:var(--text-muted);margin-bottom:4px}
+.empty-state p{font-size:12px}
+
+/* ── Modal overlay ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;width:520px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.modal-head h2{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px}
+.modal-body{flex:1;overflow-y:auto;padding:20px}
+.modal-body::-webkit-scrollbar{width:5px}
+.modal-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-shrink:0}
+
+/* form fields */
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.form-row input,.form-row select{width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:9px 11px;border-radius:var(--radius);font-size:13px;outline:none;transition:border-color .15s}
+.form-row input:focus,.form-row select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.form-row input::placeholder{color:var(--text-faint)}
+.form-row select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%238a93a3' d='M5 6L0 0h10z'/></svg>");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-hint{font-size:10px;color:var(--text-faint);margin-top:4px}
+
+/* side roles checkboxes */
+.side-role-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.side-role-item{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
+.side-role-item:hover{border-color:var(--border-strong)}
+.side-role-item.checked{border-color:var(--accent);background:var(--accent-soft)}
+.side-role-item input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.side-role-label{font-size:12px;color:var(--text-muted);font-weight:500;user-select:none}
+.side-role-item.checked .side-role-label{color:var(--accent-text)}
+
+/* password strength */
+.pw-strength{height:3px;border-radius:2px;margin-top:6px;background:var(--border);overflow:hidden}
+.pw-bar{height:100%;border-radius:2px;transition:width .3s,background .3s;width:0}
+
+/* alert */
+.alert{padding:9px 12px;border-radius:var(--radius);font-size:12px;margin-bottom:12px}
+.alert-error{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.alert-success{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx)}
+.alert-info{background:var(--st-review-bg);border:1px solid var(--st-review-bd);color:var(--st-review-tx)}
+
+/* spinner */
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:inline-block;vertical-align:middle;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* section divider */
+.section-div{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);padding:10px 0 6px;border-top:1px solid var(--border-subtle);margin-top:4px;margin-bottom:8px}
+.section-div:first-child{border-top:none;padding-top:0;margin-top:0}
+
+/* confirm modal */
+.confirm-modal{width:380px}
+.confirm-body{padding:20px;text-align:center}
+.confirm-icon{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;margin:0 auto 14px;font-size:22px}
+.confirm-icon.danger{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd)}
+.confirm-icon.success{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd)}
+.confirm-title{font-size:15px;font-weight:700;margin-bottom:6px}
+.confirm-desc{font-size:12px;color:var(--text-muted);line-height:1.6}
+
+/* ── Tabs ── */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0;background:var(--bg-elev)}
+.tab{padding:10px 16px;font-size:13px;font-weight:500;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
+.tab-panel{display:none;flex:1;overflow-y:auto}
+.tab-panel.active{display:flex;flex-direction:column}
+
+/* ── Roles layout ── */
+.roles-layout{display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;align-items:start}
+@media(max-width:900px){.roles-layout{grid-template-columns:1fr}}
+.roles-col-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+
+/* Role cards */
+.role-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:12px}
+.role-card-head{padding:12px 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border-subtle)}
+.role-card-icon{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:14px;flex-shrink:0}
+.role-card-info{flex:1;min-width:0}
+.role-card-name{font-size:13px;font-weight:600;color:var(--text)}
+.role-card-desc{font-size:11px;color:var(--text-dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.role-card-actions{display:flex;gap:6px}
+.role-card-body{padding:12px 14px}
+
+/* Permissions grid in role card */
+.perm-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.perm-item{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:5px;background:var(--bg-panel);border:1px solid var(--border-subtle)}
+.perm-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.perm-dot.on{background:var(--st-approved-tx)}
+.perm-dot.off{background:var(--text-faint)}
+.perm-label{font-size:11px;color:var(--text-muted);font-weight:500}
+.perm-item.has-perm .perm-label{color:var(--st-approved-tx)}
+
+/* Side role list */
+.side-role-list{display:flex;flex-direction:column;gap:8px}
+.side-role-row{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);padding:10px 14px;display:flex;align-items:center;gap:10px}
+.side-role-row-name{flex:1;font-size:13px;font-weight:500;color:var(--text)}
+.side-role-row-desc{font-size:11px;color:var(--text-dim);flex:2}
+.side-role-row-actions{display:flex;gap:6px}
+
+/* Perm checkboxes in modal */
+.perm-check-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}
+.perm-check-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;transition:border-color .15s}
+.perm-check-item:hover{border-color:var(--border-strong)}
+.perm-check-item.checked{border-color:var(--accent);background:var(--accent-soft)}
+.perm-check-item input[type=checkbox]{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;margin-top:1px}
+.perm-check-label{font-size:11px;font-weight:500;color:var(--text-muted)}
+.perm-check-desc{font-size:10px;color:var(--text-faint);margin-top:1px}
+.perm-check-item.checked .perm-check-label{color:var(--accent-text)}
+.perm-check-item.checked .perm-check-desc{color:var(--accent-soft)}
+
+/* Level input */
+.level-preview{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--accent-text);border:1px solid rgba(79,140,255,.3)}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="tb-crumb">Admin / Users</div>
+    <div class="tb-name">User Management</div>
+  </div>
+  <div class="tb-spacer"></div>
+  <span class="tb-clock" id="clock">--:--:--</span>
+  <div class="tb-live"><span class="tb-live-dot"></span>Live</div>
+</div>
+
+<div class="page-head">
+  <div>
+    <div class="page-title">Team & Roles</div>
+    <div class="page-sub">Manage users, roles and permissions</div>
+  </div>
+  <div class="page-head-right" id="head-actions">
+    <span class="count-pill" id="user-count">—</span>
+    <button class="btn btn-primary" id="head-add-btn" onclick="openAddModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add User
+    </button>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" id="tab-users" onclick="switchTab('users')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+    Users
+  </div>
+  <div class="tab" id="tab-roles" onclick="switchTab('roles')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    Roles & Permissions
+  </div>
+</div>
+
+<!-- Users tab -->
+<div class="tab-panel active content" id="panel-users">
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="search" placeholder="Search by name or email…" oninput="applyFilters()">
+    </div>
+    <select class="filter-sel" id="filter-role" onchange="applyFilters()">
+      <option value="">All Roles</option>
+      <option value="super_admin">Super Admin</option>
+      <option value="admin">Admin</option>
+      <option value="staff">Staff</option>
+    </select>
+    <select class="filter-sel" id="filter-status" onchange="applyFilters()">
+      <option value="">All Status</option>
+      <option value="active">Active</option>
+      <option value="inactive">Inactive</option>
+    </select>
+    <select class="filter-sel" id="filter-disc" onchange="applyFilters()">
+      <option value="">All Disciplines</option>
+      <option value="mechanical">Mechanical</option>
+      <option value="electrical">Electrical</option>
+      <option value="both">Both</option>
+    </select>
+  </div>
+
+  <table class="user-table" id="user-table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>Main Role</th>
+        <th>Side Roles</th>
+        <th>Discipline</th>
+        <th>Status</th>
+        <th style="text-align:right">Actions</th>
+      </tr>
+    </thead>
+    <tbody id="user-tbody">
+      <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-faint)">
+        <div class="spin" style="border-top-color:var(--accent);border-color:var(--border-strong)"></div> Loading users…
+      </td></tr>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- end panel-users -->
+
+<!-- Roles tab -->
+<div class="tab-panel" id="panel-roles">
+  <div class="roles-layout">
+
+    <!-- LEFT: Main Roles -->
+    <div>
+      <div class="roles-col-title">
+        Main Roles
+        <button class="btn btn-sm btn-primary" onclick="openNewMainRoleModal()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Role
+        </button>
+      </div>
+      <div id="main-roles-list">
+        <div style="color:var(--text-faint);font-size:12px;padding:20px;text-align:center">Loading…</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Side Roles -->
+    <div>
+      <div class="roles-col-title">
+        Side Roles <span style="font-size:11px;font-weight:400;color:var(--text-dim)">(job titles — stackable)</span>
+        <button class="btn btn-sm btn-primary" onclick="openNewSideRoleModal()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Side Role
+        </button>
+      </div>
+      <div class="side-role-list" id="side-roles-list">
+        <div style="color:var(--text-faint);font-size:12px;padding:20px;text-align:center">Loading…</div>
+      </div>
+    </div>
+
+  </div>
+</div><!-- end panel-roles -->
+
+
+<!-- ── Add / Edit User Modal ── -->
+<div class="modal-overlay" id="user-modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Add User
+      </h2>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-alert"></div>
+
+      <div class="section-div">Identity</div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Full Name *</label>
+          <input type="text" id="f-fullname" placeholder="e.g. Ahmed Al-Rashidi">
+        </div>
+        <div class="form-row">
+          <label>Display Name</label>
+          <input type="text" id="f-displayname" placeholder="e.g. Ahmed">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Email Address *</label>
+        <input type="email" id="f-email" placeholder="name@royaladvance.ae">
+      </div>
+
+      <div id="password-section">
+        <div class="section-div">Password</div>
+        <div class="form-row">
+          <label>Password *</label>
+          <input type="password" id="f-password" placeholder="Min 8 characters" oninput="checkPw()">
+          <div class="pw-strength"><div class="pw-bar" id="pw-bar"></div></div>
+          <div class="form-hint" id="pw-hint">Enter a secure password</div>
+        </div>
+      </div>
+
+      <div class="section-div">Role & Access</div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Main Role *</label>
+          <select id="f-mainrole">
+            <option value="">— Select Role —</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Discipline *</label>
+          <select id="f-discipline">
+            <option value="">— Select —</option>
+            <option value="mechanical">Mechanical</option>
+            <option value="electrical">Electrical</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-div">Side Roles <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(job title — stack multiple)</span></div>
+      <div class="side-role-grid" id="side-role-grid"></div>
+
+      <div id="status-section" style="display:none">
+        <div class="section-div">Account Status</div>
+        <div class="form-row">
+          <label>Status</label>
+          <select id="f-status">
+            <option value="true">Active</option>
+            <option value="false">Inactive (deactivated)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveUser()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Save User
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Confirm Modal ── -->
+<div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
+  <div class="modal confirm-modal">
+    <div class="confirm-body">
+      <div class="confirm-icon" id="confirm-icon">⚠</div>
+      <div class="confirm-title" id="confirm-title">Are you sure?</div>
+      <div class="confirm-desc" id="confirm-desc"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeConfirm()">Cancel</button>
+      <button class="btn" id="confirm-ok-btn" onclick="confirmAction()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ── Edit/Create Main Role Modal ── -->
+<div class="modal-overlay" id="main-role-modal" onclick="if(event.target===this)closeMainRoleModal()">
+  <div class="modal" style="width:580px">
+    <div class="modal-head">
+      <h2 id="main-role-modal-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        New Main Role
+      </h2>
+      <button class="btn btn-sm" onclick="closeMainRoleModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="main-role-alert"></div>
+      <div class="section-div">Role Identity</div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Role Name * <span style="font-weight:400;text-transform:none;letter-spacing:0">(no spaces — use underscore)</span></label>
+          <input type="text" id="mr-name" placeholder="e.g. supervisor" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')">
+        </div>
+        <div class="form-row">
+          <label>Access Level * <span style="font-weight:400;text-transform:none;letter-spacing:0">(higher = more access)</span></label>
+          <input type="number" id="mr-level" placeholder="e.g. 30" min="0" max="99">
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Description</label>
+        <input type="text" id="mr-desc" placeholder="Brief description of this role…">
+      </div>
+      <div class="section-div">Permissions</div>
+      <div class="perm-check-grid" id="perm-check-grid"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeMainRoleModal()">Cancel</button>
+      <button class="btn btn-primary" id="main-role-save-btn" onclick="saveMainRole()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Save Role
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── New/Edit Side Role Modal ── -->
+<div class="modal-overlay" id="side-role-modal" onclick="if(event.target===this)closeSideRoleModal()">
+  <div class="modal" style="width:420px">
+    <div class="modal-head">
+      <h2 id="side-role-modal-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        New Side Role
+      </h2>
+      <button class="btn btn-sm" onclick="closeSideRoleModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="side-role-alert"></div>
+      <div class="form-row">
+        <label>Role Name * <span style="font-weight:400;text-transform:none;letter-spacing:0">(no spaces — use underscore)</span></label>
+        <input type="text" id="sr-name" placeholder="e.g. mep_coordinator" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'')">
+        <div class="form-hint">This becomes the internal code. e.g. "mep_coordinator" shows as "Mep Coordinator"</div>
+      </div>
+      <div class="form-row">
+        <label>Description</label>
+        <input type="text" id="sr-desc" placeholder="What does this role do?">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeSideRoleModal()">Cancel</button>
+      <button class="btn btn-primary" id="side-role-save-btn" onclick="saveSideRole()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+function getH(extra) {
+  let token = window.__MEP_TOKEN__;
+  if (!token) {
+    try {
+      const s = localStorage.getItem('mep_session');
+      if (s) { const j = JSON.parse(s); if (j && j.access_token && j.expires_at && Date.now() < j.expires_at - 30000) token = j.access_token; }
+    } catch(e) {}
+  }
+  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(token||KEY),'Content-Type':'application/json'}, extra||{});
+}
+
+// ── State ──
+let allUsers = [];
+let allRoles = [];
+let mainRoles = [];
+let sideRoles = [];
+let editingUserId = null;
+let confirmCallback = null;
+
+// ── Clock ──
+(function(){ function tick(){ const el=document.getElementById('clock'); if(el) el.textContent=new Date().toTimeString().slice(0,8); } tick(); setInterval(tick,1000); })();
+
+// ── Load data ──
+async function loadAll() {
+  try {
+    const [usersRes, rolesRes] = await Promise.all([
+      fetch(`${SB}/rest/v1/user_profile_view?select=*&order=full_name`, { headers: getH() }),
+      fetch(`${SB}/rest/v1/roles?select=*&order=role_type.desc,level.desc`, { headers: getH() }),
+    ]);
+    allUsers = await usersRes.json();
+    allRoles = await rolesRes.json();
+    mainRoles = allRoles.filter(r => r.role_type === 'main');
+    sideRoles = allRoles.filter(r => r.role_type === 'side');
+    renderTable(allUsers);
+    buildRoleSelects();
+  } catch(e) {
+    showTableError('Failed to load users: ' + e.message);
+  }
+}
+
+function buildRoleSelects() {
+  // Main role select
+  const sel = document.getElementById('f-mainrole');
+  sel.innerHTML = '<option value="">— Select Role —</option>';
+  mainRoles.forEach(r => {
+    const o = document.createElement('option');
+    o.value = r.id;
+    o.textContent = fmtRole(r.role_name);
+    sel.appendChild(o);
+  });
+
+  // Side role checkboxes
+  const grid = document.getElementById('side-role-grid');
+  grid.innerHTML = sideRoles.map(r => `
+    <label class="side-role-item" onclick="toggleSideRole(this)">
+      <input type="checkbox" value="${r.id}" data-name="${r.role_name}">
+      <span class="side-role-label">${fmtRole(r.role_name)}</span>
+    </label>
+  `).join('');
+}
+
+// ── Render table ──
+function renderTable(users) {
+  document.getElementById('user-count').textContent = users.length + ' user' + (users.length !== 1 ? 's' : '');
+  const tbody = document.getElementById('user-tbody');
+  if (!users.length) {
+    tbody.innerHTML = `<tr><td colspan="6">
+      <div class="empty-state">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <h3>No users found</h3>
+        <p>Try adjusting your filters</p>
+      </div>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => {
+    const initials = u.avatar_initials || '?';
+    const mainRole = u.main_role || 'staff';
+    const sides = (u.side_roles || []).filter(Boolean);
+    const disc = u.discipline || '';
+    const active = u.is_active;
+
+    const sideHTML = sides.length
+      ? `<div class="side-roles">${sides.map(s => `<span class="side-pill">${fmtRole(s)}</span>`).join('')}</div>`
+      : `<span style="color:var(--text-faint);font-size:11px">None</span>`;
+
+    const discClass = disc === 'mechanical' ? 'disc-mech' : disc === 'electrical' ? 'disc-elec' : disc === 'both' ? 'disc-both' : '';
+    const discLabel = disc ? disc.charAt(0).toUpperCase() + disc.slice(1) : '—';
+
+    return `<tr class="${active ? '' : 'inactive'}" data-id="${u.id}">
+      <td>
+        <div class="user-cell">
+          <div class="avatar ${active ? '' : 'inactive-av'}">${initials}</div>
+          <div>
+            <div class="user-name">${escH(u.full_name || '—')}</div>
+            <div class="user-email">${escH(u.email || '—')}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="role-main role-${mainRole}">${fmtRole(mainRole)}</span></td>
+      <td>${sideHTML}</td>
+      <td>${discClass ? `<span class="disc-badge ${discClass}">${discLabel}</span>` : `<span style="color:var(--text-faint)">—</span>`}</td>
+      <td>
+        <span class="status-dot ${active ? 'dot-active' : 'dot-inactive'}"></span>
+        <span class="status-text" style="color:${active ? 'var(--st-approved-tx)' : 'var(--text-faint)'}">${active ? 'Active' : 'Inactive'}</span>
+      </td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn btn-sm btn-icon" title="Edit user" onclick="openEditModal(${u.id})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          ${active
+            ? `<button class="btn btn-sm btn-icon btn-danger" title="Deactivate" onclick="promptDeactivate(${u.id},'${escH(u.full_name)}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+               </button>`
+            : `<button class="btn btn-sm btn-icon btn-success" title="Reactivate" onclick="promptReactivate(${u.id},'${escH(u.full_name)}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+               </button>`
+          }
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function showTableError(msg) {
+  document.getElementById('user-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--st-rejected-tx)">${msg}</td></tr>`;
+}
+
+// ── Filters ──
+function applyFilters() {
+  const q     = document.getElementById('search').value.toLowerCase();
+  const role  = document.getElementById('filter-role').value;
+  const stat  = document.getElementById('filter-status').value;
+  const disc  = document.getElementById('filter-disc').value;
+
+  const filtered = allUsers.filter(u => {
+    if (q && !u.full_name?.toLowerCase().includes(q) && !u.email?.toLowerCase().includes(q)) return false;
+    if (role && u.main_role !== role) return false;
+    if (stat === 'active' && !u.is_active) return false;
+    if (stat === 'inactive' && u.is_active) return false;
+    if (disc && u.discipline !== disc) return false;
+    return true;
+  });
+  renderTable(filtered);
+}
+
+// ── Add modal ──
+function openAddModal() {
+  editingUserId = null;
+  document.getElementById('modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    Add New User`;
+  document.getElementById('modal-save-btn').innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    Create User`;
+  document.getElementById('password-section').style.display = '';
+  document.getElementById('status-section').style.display = 'none';
+
+  // Clear all fields
+  ['f-fullname','f-displayname','f-email','f-password'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-mainrole').value = '';
+  document.getElementById('f-discipline').value = '';
+  document.getElementById('pw-bar').style.width = '0';
+  document.getElementById('pw-hint').textContent = 'Enter a secure password';
+  document.querySelectorAll('.side-role-item').forEach(el => { el.classList.remove('checked'); el.querySelector('input').checked = false; });
+  document.getElementById('modal-alert').innerHTML = '';
+  document.getElementById('user-modal').classList.add('open');
+  setTimeout(() => document.getElementById('f-fullname').focus(), 100);
+}
+
+// ── Edit modal ──
+async function openEditModal(userId) {
+  const user = allUsers.find(u => u.id === userId);
+  if (!user) return;
+  editingUserId = userId;
+
+  document.getElementById('modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Edit User`;
+  document.getElementById('modal-save-btn').innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    Save Changes`;
+
+  document.getElementById('password-section').style.display = 'none'; // no pw change in edit
+  document.getElementById('status-section').style.display = '';
+
+  document.getElementById('f-fullname').value  = user.full_name || '';
+  document.getElementById('f-displayname').value = user.display_name || '';
+  document.getElementById('f-email').value     = user.email || '';
+  document.getElementById('f-discipline').value = user.discipline || '';
+  document.getElementById('f-status').value    = String(user.is_active !== false);
+
+  // Set main role
+  const mainRoleObj = mainRoles.find(r => r.role_name === user.main_role);
+  document.getElementById('f-mainrole').value = mainRoleObj ? mainRoleObj.id : '';
+
+  // Set side roles
+  const userSides = (user.side_roles || []).filter(Boolean);
+  document.querySelectorAll('.side-role-item').forEach(el => {
+    const input = el.querySelector('input');
+    const checked = userSides.includes(input.getAttribute('data-name'));
+    input.checked = checked;
+    el.classList.toggle('checked', checked);
+  });
+
+  document.getElementById('modal-alert').innerHTML = '';
+  document.getElementById('user-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('user-modal').classList.remove('open');
+  editingUserId = null;
+}
+
+// ── Toggle side role checkbox ──
+function toggleSideRole(el) {
+  const cb = el.querySelector('input');
+  // The label click already toggles the checkbox naturally
+  setTimeout(() => {
+    el.classList.toggle('checked', cb.checked);
+  }, 0);
+}
+
+// ── Password strength ──
+function checkPw() {
+  const pw = document.getElementById('f-password').value;
+  const bar = document.getElementById('pw-bar');
+  const hint = document.getElementById('pw-hint');
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+  const colors = ['#ff8a99','#f4c95a','#f4c95a','#6ee2a3','#6ee2a3'];
+  const labels = ['Too short','Weak','Fair','Good','Strong'];
+  bar.style.width = (score / 5 * 100) + '%';
+  bar.style.background = colors[score] || colors[0];
+  hint.textContent = labels[score] || labels[0];
+  hint.style.color = colors[score] || colors[0];
+}
+
+// ── Save user ──
+async function saveUser() {
+  const btn = document.getElementById('modal-save-btn');
+  const alertEl = document.getElementById('modal-alert');
+  alertEl.innerHTML = '';
+
+  const fullName   = document.getElementById('f-fullname').value.trim();
+  const displayName = document.getElementById('f-displayname').value.trim() || fullName.split(' ')[0];
+  const email      = document.getElementById('f-email').value.trim().toLowerCase();
+  const discipline = document.getElementById('f-discipline').value;
+  const mainRoleId = parseInt(document.getElementById('f-mainrole').value);
+  const isActive   = document.getElementById('f-status').value !== 'false';
+
+  // Validation
+  if (!fullName) return showModalAlert('Full name is required.', 'error');
+  if (!email || !email.includes('@')) return showModalAlert('A valid email is required.', 'error');
+  if (!discipline) return showModalAlert('Please select a discipline.', 'error');
+  if (!mainRoleId) return showModalAlert('Please select a main role.', 'error');
+
+  // Collect selected side roles
+  const selectedSideRoles = Array.from(document.querySelectorAll('.side-role-item input:checked'))
+    .map(cb => parseInt(cb.value));
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Saving…';
+
+  try {
+    if (editingUserId) {
+      // ── EDIT existing user ──
+      await fetch(`${SB}/rest/v1/users?id=eq.${editingUserId}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ full_name: fullName, display_name: displayName, email, discipline, main_role_id: mainRoleId, is_active: isActive })
+      });
+
+      // Update side roles: delete all then re-insert
+      await fetch(`${SB}/rest/v1/user_roles?user_id=eq.${editingUserId}`, {
+        method: 'DELETE', headers: getH()
+      });
+      if (selectedSideRoles.length) {
+        await fetch(`${SB}/rest/v1/user_roles`, {
+          method: 'POST',
+          headers: getH({ 'Prefer': 'return=minimal' }),
+          body: JSON.stringify(selectedSideRoles.map(rid => ({ user_id: editingUserId, role_id: rid })))
+        });
+      }
+
+      showModalAlert('User updated successfully.', 'success');
+      setTimeout(() => { closeModal(); loadAll(); }, 800);
+
+    } else {
+      // ── CREATE new user ──
+      const password = document.getElementById('f-password').value;
+      if (!password || password.length < 8) return showModalAlert('Password must be at least 8 characters.', 'error');
+
+      // Call the create_mep_user RPC — runs server-side with SECURITY DEFINER
+      // so it can write to auth.users without needing service role key
+      const rpcRes = await fetch(`${SB}/rest/v1/rpc/create_mep_user`, {
+        method: 'POST',
+        headers: getH(),
+        body: JSON.stringify({
+          p_email: email,
+          p_password: password,
+          p_full_name: fullName,
+          p_display_name: displayName,
+          p_discipline: discipline,
+          p_main_role_id: mainRoleId,
+          p_side_role_ids: selectedSideRoles
+        })
+      });
+      const rpcData = await rpcRes.json();
+      if (rpcData.error) throw new Error(rpcData.error);
+      if (!rpcData.success) throw new Error('User creation failed');
+
+      showModalAlert('User created successfully!', 'success');
+      setTimeout(() => { closeModal(); loadAll(); }, 800);
+    }
+
+  } catch(e) {
+    showModalAlert('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = editingUserId
+      ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Changes`
+      : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Create User`;
+  }
+}
+
+function showModalAlert(msg, type) {
+  document.getElementById('modal-alert').innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  if (type === 'error') {
+    const btn = document.getElementById('modal-save-btn');
+    btn.disabled = false;
+  }
+}
+
+// ── Confirm: deactivate ──
+function promptDeactivate(userId, name) {
+  document.getElementById('confirm-icon').className = 'confirm-icon danger';
+  document.getElementById('confirm-icon').textContent = '⊘';
+  document.getElementById('confirm-title').textContent = 'Deactivate ' + name + '?';
+  document.getElementById('confirm-desc').textContent = 'This user will no longer be able to log in. Their data and history will be preserved. You can reactivate them at any time.';
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.className = 'btn btn-danger';
+  btn.textContent = 'Deactivate';
+  confirmCallback = () => setUserActive(userId, false);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+// ── Confirm: reactivate ──
+function promptReactivate(userId, name) {
+  document.getElementById('confirm-icon').className = 'confirm-icon success';
+  document.getElementById('confirm-icon').textContent = '✓';
+  document.getElementById('confirm-title').textContent = 'Reactivate ' + name + '?';
+  document.getElementById('confirm-desc').textContent = 'This user will be able to log in again with their existing credentials and role assignments.';
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.className = 'btn btn-success';
+  btn.textContent = 'Reactivate';
+  confirmCallback = () => setUserActive(userId, true);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+async function setUserActive(userId, active) {
+  closeConfirm();
+  try {
+    await fetch(`${SB}/rest/v1/users?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: getH({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ is_active: active })
+    });
+    loadAll();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+function confirmAction() { if (confirmCallback) confirmCallback(); }
+function closeConfirm() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  confirmCallback = null;
+}
+
+// ── Helpers ──
+function fmtRole(r) {
+  if (!r) return '—';
+  return r.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+function escH(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+
+// ════════════════════════════════════════
+// ROLES & PERMISSIONS
+// ════════════════════════════════════════
+
+let allPerms = [];
+let editingMainRoleId = null;
+let editingSideRoleId = null;
+
+const PERM_LABELS = {
+  view_dashboard:        { label: 'View Dashboard',       desc: 'Access dashboards & keyplans' },
+  enter_progress:        { label: 'Enter Progress',        desc: 'Submit progress updates' },
+  import_wir:            { label: 'Import WIR',            desc: 'Import DC WIR CSV logs' },
+  import_clearance:      { label: 'Import Clearance',      desc: 'Import DC clearance CSV' },
+  request_release:       { label: 'Request Release',       desc: 'Create release requests' },
+  confirm_release:       { label: 'Confirm Release',       desc: 'Confirm discipline release' },
+  approve_release:       { label: 'Approve Release',       desc: 'Final release approval' },
+  bypass_wir:            { label: 'Bypass WIR',            desc: 'Override WIR requirement' },
+  manage_users:          { label: 'Manage Users',          desc: 'Add/edit/deactivate users' },
+  manage_activities:     { label: 'Manage Activities',     desc: 'Add/edit activity codes' },
+  manage_subcontractors: { label: 'Manage Subcontractors', desc: 'Manage subcontractor list' },
+  manage_targets:        { label: 'Manage Targets',        desc: 'Set weekly targets' },
+  view_all_clusters:     { label: 'View All Clusters',     desc: 'See all clusters (no filter)' },
+  export_data:           { label: 'Export Data',           desc: 'Export CSV & reports' },
+  manage_system:         { label: 'Manage System',         desc: 'DB config & system settings' },
+};
+
+const ROLE_ICONS = { super_admin: '👑', admin: '🔑', staff: '👤' };
+const ROLE_COLORS = {
+  super_admin: 'background:rgba(168,85,247,.2);color:#c084fc',
+  admin: 'background:var(--accent-soft);color:var(--accent-text)',
+  staff: 'background:var(--bg-panel);color:var(--text-muted)',
+};
+
+// ── Tab switch ──
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+
+  const headAddBtn = document.getElementById('head-add-btn');
+  const countPill  = document.getElementById('user-count');
+  if (tab === 'users') {
+    headAddBtn.style.display = '';
+    countPill.style.display = '';
+  } else {
+    headAddBtn.style.display = 'none';
+    countPill.style.display = 'none';
+    renderRolesTab();
+  }
+}
+
+// ── Load and render roles tab ──
+async function renderRolesTab() {
+  document.getElementById('main-roles-list').innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:20px;text-align:center">Loading…</div>';
+  document.getElementById('side-roles-list').innerHTML = '<div style="color:var(--text-faint);font-size:12px;padding:20px;text-align:center">Loading…</div>';
+
+  try {
+    const [rolesRes, permsRes, rolePermsRes] = await Promise.all([
+      fetch(`${SB}/rest/v1/roles?select=*&order=role_type.desc,level.desc`, { headers: getH() }),
+      fetch(`${SB}/rest/v1/permissions?select=*&order=code`, { headers: getH() }),
+      fetch(`${SB}/rest/v1/role_permissions?select=role_id,permission_id`, { headers: getH() }),
+    ]);
+
+    const roles    = await rolesRes.json();
+    allPerms       = await permsRes.json();
+    const rolePerms = await rolePermsRes.json();
+
+    // Map: role_id → Set of permission_ids
+    const rpMap = {};
+    rolePerms.forEach(rp => {
+      if (!rpMap[rp.role_id]) rpMap[rp.role_id] = new Set();
+      rpMap[rp.role_id].add(rp.permission_id);
+    });
+
+    // Sync allRoles
+    allRoles = roles;
+    mainRoles = roles.filter(r => r.role_type === 'main');
+    sideRoles = roles.filter(r => r.role_type === 'side');
+    buildRoleSelects();
+
+    // Render main roles
+    const mainList = document.getElementById('main-roles-list');
+    mainList.innerHTML = mainRoles.map(r => {
+      const myPerms = rpMap[r.id] || new Set();
+      const icon = ROLE_ICONS[r.role_name] || '🛡';
+      const color = ROLE_COLORS[r.role_name] || 'background:var(--bg-panel);color:var(--text-muted)';
+      const isSystem = ['super_admin','admin','staff'].includes(r.role_name);
+
+      const permHTML = allPerms.map(p => {
+        const has = myPerms.has(p.id);
+        const info = PERM_LABELS[p.code] || { label: fmtRole(p.code), desc: '' };
+        return `<div class="perm-item ${has ? 'has-perm' : ''}">
+          <span class="perm-dot ${has ? 'on' : 'off'}"></span>
+          <span class="perm-label">${info.label}</span>
+        </div>`;
+      }).join('');
+
+      return `<div class="role-card">
+        <div class="role-card-head">
+          <div class="role-card-icon" style="${color}">${icon}</div>
+          <div class="role-card-info">
+            <div class="role-card-name">${fmtRole(r.role_name)} <span style="font-size:10px;color:var(--text-faint);font-family:var(--font-mono)">lvl ${r.level}</span></div>
+            <div class="role-card-desc">${escH(r.description || '—')}</div>
+          </div>
+          <div class="role-card-actions">
+            <button class="btn btn-sm" onclick="openEditMainRoleModal(${r.id})" title="Edit permissions">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit
+            </button>
+            ${!isSystem ? `<button class="btn btn-sm btn-danger" onclick="promptDeleteRole(${r.id},'${escH(r.role_name)}','main')" title="Delete role">✕</button>` : ''}
+          </div>
+        </div>
+        <div class="role-card-body">
+          <div class="perm-grid">${permHTML}</div>
+        </div>
+      </div>`;
+    }).join('') || '<div style="color:var(--text-faint);font-size:12px;padding:12px">No main roles found.</div>';
+
+    // Render side roles
+    const sideList = document.getElementById('side-roles-list');
+    sideList.innerHTML = '<div class="side-role-list">' + sideRoles.map(r => `
+      <div class="side-role-row">
+        <div style="width:28px;height:28px;border-radius:7px;background:var(--bg-panel);border:1px solid var(--border);display:grid;place-items:center;font-size:13px;flex-shrink:0">⚙</div>
+        <div class="side-role-row-name">${fmtRole(r.role_name)}</div>
+        <div class="side-role-row-desc">${escH(r.description || '—')}</div>
+        <div class="side-role-row-actions">
+          <button class="btn btn-sm btn-icon" onclick="openEditSideRoleModal(${r.id})" title="Edit">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-sm btn-icon btn-danger" onclick="promptDeleteRole(${r.id},'${escH(r.role_name)}','side')" title="Delete">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div>
+      </div>
+    `).join('') + '</div>' || '<div style="color:var(--text-faint);font-size:12px;padding:12px">No side roles found.</div>';
+
+  } catch(e) {
+    document.getElementById('main-roles-list').innerHTML = `<div style="color:var(--st-rejected-tx);font-size:12px;padding:12px">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Build perm checkboxes ──
+function buildPermCheckboxes(checkedIds) {
+  const grid = document.getElementById('perm-check-grid');
+  grid.innerHTML = allPerms.map(p => {
+    const info = PERM_LABELS[p.code] || { label: fmtRole(p.code), desc: p.description || '' };
+    const checked = checkedIds && checkedIds.has(p.id);
+    return `<label class="perm-check-item ${checked ? 'checked' : ''}" onclick="togglePermCheck(this)">
+      <input type="checkbox" value="${p.id}" ${checked ? 'checked' : ''}>
+      <div>
+        <div class="perm-check-label">${info.label}</div>
+        <div class="perm-check-desc">${info.desc}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function togglePermCheck(el) {
+  setTimeout(() => el.classList.toggle('checked', el.querySelector('input').checked), 0);
+}
+
+// ── Open: new main role ──
+function openNewMainRoleModal() {
+  editingMainRoleId = null;
+  document.getElementById('main-role-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    New Main Role`;
+  document.getElementById('mr-name').value = '';
+  document.getElementById('mr-name').disabled = false;
+  document.getElementById('mr-level').value = '';
+  document.getElementById('mr-desc').value = '';
+  document.getElementById('main-role-alert').innerHTML = '';
+  buildPermCheckboxes(new Set());
+  document.getElementById('main-role-modal').classList.add('open');
+}
+
+// ── Open: edit main role ──
+async function openEditMainRoleModal(roleId) {
+  editingMainRoleId = roleId;
+  const role = allRoles.find(r => r.id === roleId);
+  if (!role) return;
+
+  document.getElementById('main-role-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Edit: ${fmtRole(role.role_name)}`;
+  document.getElementById('mr-name').value = role.role_name;
+  document.getElementById('mr-name').disabled = ['super_admin','admin','staff'].includes(role.role_name);
+  document.getElementById('mr-level').value = role.level || 0;
+  document.getElementById('mr-desc').value = role.description || '';
+  document.getElementById('main-role-alert').innerHTML = '';
+
+  // Fetch current permissions for this role
+  const res = await fetch(`${SB}/rest/v1/role_permissions?select=permission_id&role_id=eq.${roleId}`, { headers: getH() });
+  const rps = await res.json();
+  const checkedIds = new Set(rps.map(rp => rp.permission_id));
+  buildPermCheckboxes(checkedIds);
+  document.getElementById('main-role-modal').classList.add('open');
+}
+
+function closeMainRoleModal() { document.getElementById('main-role-modal').classList.remove('open'); }
+
+// ── Save main role ──
+async function saveMainRole() {
+  const btn = document.getElementById('main-role-save-btn');
+  const alertEl = document.getElementById('main-role-alert');
+  alertEl.innerHTML = '';
+
+  const name  = document.getElementById('mr-name').value.trim();
+  const level = parseInt(document.getElementById('mr-level').value);
+  const desc  = document.getElementById('mr-desc').value.trim();
+  const selectedPermIds = Array.from(document.querySelectorAll('#perm-check-grid input:checked')).map(cb => parseInt(cb.value));
+
+  if (!name) return alertEl.innerHTML = '<div class="alert alert-error">Role name is required.</div>';
+  if (!/^[a-z0-9_]+$/.test(name)) return alertEl.innerHTML = '<div class="alert alert-error">Role name: lowercase letters, numbers and underscores only.</div>';
+  if (isNaN(level) || level < 0) return alertEl.innerHTML = '<div class="alert alert-error">Access level must be 0 or higher.</div>';
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Saving…';
+
+  try {
+    let roleId = editingMainRoleId;
+
+    if (!editingMainRoleId) {
+      // Create new role
+      const res = await fetch(`${SB}/rest/v1/roles`, {
+        method: 'POST',
+        headers: getH({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify({ role_name: name, description: desc, role_type: 'main', level })
+      });
+      const data = await res.json();
+      if (data.error || !data[0]) throw new Error(data.message || data.error || 'Failed to create role');
+      roleId = data[0].id;
+    } else {
+      // Update existing
+      await fetch(`${SB}/rest/v1/roles?id=eq.${roleId}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ level, description: desc, ...( !document.getElementById('mr-name').disabled ? { role_name: name } : {}) })
+      });
+      // Delete existing permissions
+      await fetch(`${SB}/rest/v1/role_permissions?role_id=eq.${roleId}`, {
+        method: 'DELETE', headers: getH()
+      });
+    }
+
+    // Insert permissions
+    if (selectedPermIds.length) {
+      await fetch(`${SB}/rest/v1/role_permissions`, {
+        method: 'POST',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify(selectedPermIds.map(pid => ({ role_id: roleId, permission_id: pid })))
+      });
+    }
+
+    alertEl.innerHTML = '<div class="alert alert-success">Role saved successfully.</div>';
+    setTimeout(() => { closeMainRoleModal(); renderRolesTab(); loadAll(); }, 700);
+
+  } catch(e) {
+    alertEl.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Role`;
+  }
+}
+
+// ── New side role ──
+function openNewSideRoleModal() {
+  editingSideRoleId = null;
+  document.getElementById('side-role-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+    New Side Role`;
+  document.getElementById('sr-name').value = '';
+  document.getElementById('sr-name').disabled = false;
+  document.getElementById('sr-desc').value = '';
+  document.getElementById('side-role-alert').innerHTML = '';
+  document.getElementById('side-role-modal').classList.add('open');
+}
+
+// ── Edit side role ──
+function openEditSideRoleModal(roleId) {
+  editingSideRoleId = roleId;
+  const role = sideRoles.find(r => r.id === roleId);
+  if (!role) return;
+  document.getElementById('side-role-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Edit: ${fmtRole(role.role_name)}`;
+  document.getElementById('sr-name').value = role.role_name;
+  document.getElementById('sr-name').disabled = true; // can't rename existing side roles (used as references)
+  document.getElementById('sr-desc').value = role.description || '';
+  document.getElementById('side-role-alert').innerHTML = '';
+  document.getElementById('side-role-modal').classList.add('open');
+}
+
+function closeSideRoleModal() { document.getElementById('side-role-modal').classList.remove('open'); }
+
+// ── Save side role ──
+async function saveSideRole() {
+  const btn = document.getElementById('side-role-save-btn');
+  const alertEl = document.getElementById('side-role-alert');
+  alertEl.innerHTML = '';
+
+  const name = document.getElementById('sr-name').value.trim();
+  const desc = document.getElementById('sr-desc').value.trim();
+
+  if (!name) return alertEl.innerHTML = '<div class="alert alert-error">Role name is required.</div>';
+  if (!editingSideRoleId && !/^[a-z0-9_]+$/.test(name)) return alertEl.innerHTML = '<div class="alert alert-error">Lowercase letters, numbers and underscores only.</div>';
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Saving…';
+
+  try {
+    if (!editingSideRoleId) {
+      const res = await fetch(`${SB}/rest/v1/roles`, {
+        method: 'POST',
+        headers: getH({ 'Prefer': 'return=representation' }),
+        body: JSON.stringify({ role_name: name, description: desc, role_type: 'side', level: 0 })
+      });
+      const data = await res.json();
+      if (data.error || !data[0]) throw new Error(data.message || data.error || 'Failed to create side role');
+    } else {
+      await fetch(`${SB}/rest/v1/roles?id=eq.${editingSideRoleId}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ description: desc })
+      });
+    }
+
+    alertEl.innerHTML = '<div class="alert alert-success">Side role saved.</div>';
+    setTimeout(() => { closeSideRoleModal(); renderRolesTab(); buildRoleSelects(); }, 700);
+
+  } catch(e) {
+    alertEl.innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save`;
+  }
+}
+
+// ── Delete role ──
+function promptDeleteRole(roleId, roleName, type) {
+  document.getElementById('confirm-icon').className = 'confirm-icon danger';
+  document.getElementById('confirm-icon').textContent = '🗑';
+  document.getElementById('confirm-title').textContent = 'Delete "' + fmtRole(roleName) + '"?';
+  document.getElementById('confirm-desc').textContent = type === 'main'
+    ? 'This will permanently delete the role and remove it from all users assigned to it. This cannot be undone.'
+    : 'This side role will be removed from all users and permanently deleted.';
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.className = 'btn btn-danger';
+  btn.textContent = 'Delete';
+  confirmCallback = () => deleteRole(roleId, type);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+async function deleteRole(roleId, type) {
+  closeConfirm();
+  try {
+    // Remove from user_roles first
+    await fetch(`${SB}/rest/v1/user_roles?role_id=eq.${roleId}`, { method: 'DELETE', headers: getH() });
+    // Remove permissions if main role
+    if (type === 'main') {
+      await fetch(`${SB}/rest/v1/role_permissions?role_id=eq.${roleId}`, { method: 'DELETE', headers: getH() });
+    }
+    // Delete the role
+    await fetch(`${SB}/rest/v1/roles?id=eq.${roleId}`, { method: 'DELETE', headers: getH() });
+    renderRolesTab();
+    loadAll();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// ── Init ──
+loadAll();
+</script>
+
+<script>
+// ── MEP Theme Sync ──
+(function() {
+  function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); }
+  try { applyTheme(localStorage.getItem('mep_theme')); } catch(e) {}
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'mep_theme' && e.newValue) applyTheme(e.newValue);
+  });
+  window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'theme') { applyTheme(e.data.theme); try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {} }
+    if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; }
+  });
+  if (window.self !== window.top) document.body.classList.add('in-shell');
+  try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
+})();
+</script>
+</body>
+</html>

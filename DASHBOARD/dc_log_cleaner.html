@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DC Log Cleaner · MEP Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --approved:#6ee2a3;--approved-bg:#163d28;--approved-bd:#1f5a39;
+  --rejected:#ff8a99;--rejected-bg:#4a1820;--rejected-bd:#6b2530;
+  --progress:#f4c95a;--progress-bg:#2a2410;--progress-bd:#4a3c14;
+  --font:"Inter",-apple-system,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
+  --approved:#15803d;--approved-bg:#e3f5ea;--approved-bd:#b8e0c7;
+  --rejected:#b91c1c;--rejected-bg:#fde8eb;--rejected-bd:#f5b8c1;
+  --progress:#92580a;--progress-bg:#fef5d8;--progress-bd:#f3dca3;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+body.in-shell .topbar{display:none!important}
+
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-crumb{font-size:11px;color:var(--text-dim);font-weight:500;letter-spacing:.04em;text-transform:uppercase}
+.tb-sep{color:var(--border-strong);margin:0 2px}
+.tb-title{font-size:14px;font-weight:600}
+.tb-spacer{flex:1}
+.tb-live{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--approved-bg);border:1px solid var(--approved-bd);color:var(--approved);font-size:11px;font-weight:600}
+.tb-live-dot{width:6px;height:6px;border-radius:50%;background:var(--approved);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.tb-clock{font-family:var(--mono);font-size:12px;color:var(--text-muted)}
+.tb-theme{padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text-muted);font-size:11px}
+.tb-theme:hover{background:var(--bg-hover);color:var(--text)}
+
+.tabs{background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;padding:0 20px;gap:2px;height:44px;flex-shrink:0}
+.tab-btn{display:flex;align-items:center;gap:7px;padding:0 16px;border:none;background:transparent;color:var(--text-muted);font-size:13px;font-weight:500;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent-text);border-bottom-color:var(--accent)}
+
+.tab-content{display:none;flex:1;overflow:auto;flex-direction:column}
+.tab-content.active{display:flex}
+.main{padding:18px 20px;display:flex;flex-direction:column;gap:14px;flex:1}
+
+.drop-section{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:16px 18px;flex-shrink:0}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
+.drop-grid{display:grid;gap:10px}
+.cols-3{grid-template-columns:repeat(3,1fr)}
+.cols-2{grid-template-columns:repeat(2,1fr)}
+
+.drop-zone{border:2px dashed var(--border-strong);border-radius:10px;padding:16px 12px;text-align:center;cursor:pointer;transition:all .2s;position:relative;background:var(--bg-panel)}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:var(--accent-soft)}
+.drop-zone.loaded{border-style:solid;border-color:var(--approved-bd);background:var(--approved-bg)}
+.drop-zone.error{border-style:solid;border-color:var(--rejected-bd);background:var(--rejected-bg)}
+.dz-icon{font-size:22px;margin-bottom:5px;opacity:.7}
+.dz-label{font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:2px}
+.dz-sub{font-size:10px;color:var(--text-faint)}
+.dz-filename{font-size:10px;font-family:var(--mono);color:var(--approved);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dz-count{font-size:10px;color:var(--text-dim);margin-top:2px}
+.dz-error{font-size:10px;color:var(--rejected);margin-top:3px}
+.dz-clear{position:absolute;top:6px;right:6px;background:none;border:none;color:var(--text-faint);font-size:13px;line-height:1;padding:2px 5px;border-radius:4px}
+.dz-clear:hover{background:var(--rejected-bg);color:var(--rejected)}
+input[type=file]{display:none}
+
+.summary-bar{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:12px 18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;flex-shrink:0}
+.stat-item{display:flex;flex-direction:column;gap:1px}
+.stat-val{font-size:20px;font-weight:700;font-family:var(--mono);line-height:1}
+.stat-val.accent{color:var(--accent-text)}
+.stat-val.green{color:var(--approved)}
+.stat-val.amber{color:var(--progress)}
+.stat-lbl{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}
+.stat-sep{width:1px;height:30px;background:var(--border);flex-shrink:0}
+.bar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text-muted);font-size:12px;font-weight:600;transition:all .15s;white-space:nowrap}
+.btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text);border-color:var(--border-strong)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover:not(:disabled){background:#3d7aff}
+.btn-ghost{background:transparent;border-color:var(--border);color:var(--text-muted)}
+
+.preview-section{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;flex:1;min-height:180px}
+.preview-head{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.preview-title{font-size:12px;font-weight:600}
+.preview-sub{font-size:11px;color:var(--text-dim);font-family:var(--mono)}
+.preview-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tbl-wrap{overflow:auto;flex:1}
+.tbl-wrap::-webkit-scrollbar{width:7px;height:7px}
+.tbl-wrap::-webkit-scrollbar-track{background:var(--bg)}
+.tbl-wrap::-webkit-scrollbar-thumb{background:var(--border-strong);border:2px solid var(--bg);border-radius:4px}
+table{border-collapse:collapse;width:100%;font-size:11px;white-space:nowrap}
+thead th{background:var(--bg-panel);border:1px solid var(--border);padding:6px 10px;color:var(--text-muted);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.05em;position:sticky;top:0;z-index:10}
+td{border:1px solid var(--border-subtle);padding:5px 10px;color:var(--text-muted)}
+tbody tr:nth-child(even) td{background:var(--bg-panel)}
+tbody tr:hover td{background:var(--bg-hover)!important;color:var(--text)}
+.td-code{font-family:var(--mono);color:var(--accent-text);font-weight:600}
+.td-villa{font-family:var(--mono);font-weight:700;color:var(--text)}
+.src-pill{display:inline-flex;align-items:center;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.src-plumbing{background:rgba(79,140,255,0.15);color:#93b6ff}
+.src-hvac{background:rgba(244,201,90,0.15);color:#f4c95a}
+.src-electrical{background:rgba(163,179,255,0.15);color:#a3b3ff}
+.src-mep{background:rgba(110,226,163,0.15);color:#6ee2a3}
+.src-civil{background:rgba(255,138,153,0.15);color:#ff8a99}
+
+.upload-section{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:14px 16px;flex-shrink:0}
+.prog-bar{background:var(--bg-panel);border-radius:4px;height:5px;overflow:hidden;margin:8px 0}
+.prog-fill{height:100%;background:var(--accent);border-radius:4px;transition:width .3s;width:0%}
+.log-box{background:var(--bg-input);border:1px solid var(--border);border-radius:7px;padding:8px 10px;max-height:120px;overflow-y:auto;font-family:var(--mono);font-size:11px;line-height:1.7}
+.log-info{color:var(--text-dim)}.log-ok{color:var(--approved)}.log-err{color:var(--rejected)}.log-warn{color:var(--progress)}
+
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;gap:7px;color:var(--text-dim);font-size:13px;text-align:center}
+.empty-icon{font-size:32px;opacity:.4;margin-bottom:3px}
+
+#toast{position:fixed;bottom:20px;right:20px;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;z-index:9999;transform:translateY(40px);opacity:0;transition:all .3s;pointer-events:none;border:1px solid}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.ok{background:var(--approved-bg);color:var(--approved);border-color:var(--approved-bd)}
+#toast.err{background:var(--rejected-bg);color:var(--rejected);border-color:var(--rejected-bd)}
+#toast.info{background:var(--accent-soft);color:var(--accent-text);border-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="tb-crumb">MEP Tracker</span><span class="tb-sep">›</span>
+  <span class="tb-title">DC Log Cleaner</span>
+  <div class="tb-spacer"></div>
+  <div class="tb-live"><div class="tb-live-dot"></div>Ready</div>
+  <div class="tb-clock" id="clock">--:--:--</div>
+  <button class="tb-theme" onclick="toggleTheme()">☀︎ / ◑</button>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" id="tab-btn-wir" onclick="switchTab('wir')">📋 WIR Log</button>
+  <button class="tab-btn" id="tab-btn-clr" onclick="switchTab('clr')">🗂️ Clearance Log</button>
+</div>
+
+<!-- ══ WIR TAB ══ -->
+<div class="tab-content active" id="tab-wir"><div class="main">
+
+  <div class="drop-section">
+    <div class="sec-title">Step 1 — Drop DC WIR Log Files (xlsx / xlsm) · Header at row 15 · Removes Status E</div>
+    <div class="drop-grid cols-3">
+      <div class="drop-zone" id="dz-wir-plumbing" ondragover="onDragOver(event,'wir','plumbing')" ondragleave="onDragLeave('wir','plumbing')" ondrop="onDrop(event,'wir','plumbing')" onclick="document.getElementById('fi-wir-plumbing').click()">
+        <div class="dz-icon">🔧</div><div class="dz-label">Plumbing / Mechanical</div><div class="dz-sub">MEP_WIR_LOG_FOR_PLUMBING</div>
+        <div class="dz-filename" id="fn-wir-plumbing"></div><div class="dz-count" id="fc-wir-plumbing"></div><div class="dz-error" id="fe-wir-plumbing"></div>
+        <button class="dz-clear" id="clr-wir-plumbing" style="display:none" onclick="clearFile(event,'wir','plumbing')">✕</button>
+      </div>
+      <input type="file" id="fi-wir-plumbing" accept=".xlsx,.xlsm,.xls" onchange="onFileInput(event,'wir','plumbing')">
+
+      <div class="drop-zone" id="dz-wir-hvac" ondragover="onDragOver(event,'wir','hvac')" ondragleave="onDragLeave('wir','hvac')" ondrop="onDrop(event,'wir','hvac')" onclick="document.getElementById('fi-wir-hvac').click()">
+        <div class="dz-icon">❄️</div><div class="dz-label">HVAC</div><div class="dz-sub">MEP_WIR_LOG_FOR_HVAC</div>
+        <div class="dz-filename" id="fn-wir-hvac"></div><div class="dz-count" id="fc-wir-hvac"></div><div class="dz-error" id="fe-wir-hvac"></div>
+        <button class="dz-clear" id="clr-wir-hvac" style="display:none" onclick="clearFile(event,'wir','hvac')">✕</button>
+      </div>
+      <input type="file" id="fi-wir-hvac" accept=".xlsx,.xlsm,.xls" onchange="onFileInput(event,'wir','hvac')">
+
+      <div class="drop-zone" id="dz-wir-electrical" ondragover="onDragOver(event,'wir','electrical')" ondragleave="onDragLeave('wir','electrical')" ondrop="onDrop(event,'wir','electrical')" onclick="document.getElementById('fi-wir-electrical').click()">
+        <div class="dz-icon">⚡</div><div class="dz-label">Electrical</div><div class="dz-sub">MEP_WIR_LOG_FOR_ELECTRICAL</div>
+        <div class="dz-filename" id="fn-wir-electrical"></div><div class="dz-count" id="fc-wir-electrical"></div><div class="dz-error" id="fe-wir-electrical"></div>
+        <button class="dz-clear" id="clr-wir-electrical" style="display:none" onclick="clearFile(event,'wir','electrical')">✕</button>
+      </div>
+      <input type="file" id="fi-wir-electrical" accept=".xlsx,.xlsm,.xls" onchange="onFileInput(event,'wir','electrical')">
+    </div>
+  </div>
+
+  <div class="summary-bar" id="sum-wir" style="display:none">
+    <div class="stat-item"><div class="stat-val accent" id="sw-total">0</div><div class="stat-lbl">Total Rows</div></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><div class="stat-val" id="sw-plumbing">0</div><div class="stat-lbl">Plumbing</div></div>
+    <div class="stat-item"><div class="stat-val" id="sw-hvac">0</div><div class="stat-lbl">HVAC</div></div>
+    <div class="stat-item"><div class="stat-val" id="sw-electrical">0</div><div class="stat-lbl">Electrical</div></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><div class="stat-val amber" id="sw-removed">0</div><div class="stat-lbl">Removed (E)</div></div>
+    <div class="stat-item"><div class="stat-val green" id="sw-clean">0</div><div class="stat-lbl">Clean Rows</div></div>
+    <div class="bar-right">
+      <button class="btn btn-ghost" onclick="clearTab('wir')">✕ Clear</button>
+      <button class="btn btn-ghost" onclick="downloadCSV('wir')">⬇ Download CSV</button>
+      <button class="btn btn-primary" id="btn-upload-wir" onclick="startUpload('wir')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Upload to System
+      </button>
+    </div>
+  </div>
+
+  <div class="preview-section">
+    <div class="preview-head">
+      <div><div class="preview-title">Preview — WIR</div><div class="preview-sub" id="prev-sub-wir">Drop files above to begin</div></div>
+      <div class="preview-right">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);cursor:pointer">
+          <input type="checkbox" id="chk-src-wir" onchange="renderPreview('wir')" style="accent-color:var(--accent)"> Show source
+        </label>
+      </div>
+    </div>
+    <div class="tbl-wrap" id="prev-tbl-wir">
+      <div class="empty-state"><div class="empty-icon">📋</div><div>Drop your 3 WIR files above</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">Plumbing + HVAC + Electrical → merged & cleaned automatically</div></div>
+    </div>
+  </div>
+
+  <div class="upload-section" id="upload-wir" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:600">Upload Progress</div>
+      <div style="font-size:11px;color:var(--text-dim)" id="upload-status-wir"></div>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill-wir"></div></div>
+    <div class="log-box" id="log-wir"></div>
+  </div>
+
+</div></div>
+
+<!-- ══ CLEARANCE TAB ══ -->
+<div class="tab-content" id="tab-clr"><div class="main">
+
+  <div class="drop-section">
+    <div class="sec-title">Step 1 — Drop DC Clearance Log Files (xlsx / xlsm) · Header at row 8 · Keeps L/S = L only</div>
+    <div class="drop-grid cols-2">
+      <div class="drop-zone" id="dz-clr-mep" ondragover="onDragOver(event,'clr','mep')" ondragleave="onDragLeave('clr','mep')" ondrop="onDrop(event,'clr','mep')" onclick="document.getElementById('fi-clr-mep').click()">
+        <div class="dz-icon">🔩</div><div class="dz-label">MEP Clearance</div><div class="dz-sub">Mechanical + Electrical + Plumbing</div>
+        <div class="dz-filename" id="fn-clr-mep"></div><div class="dz-count" id="fc-clr-mep"></div><div class="dz-error" id="fe-clr-mep"></div>
+        <button class="dz-clear" id="clr-clr-mep" style="display:none" onclick="clearFile(event,'clr','mep')">✕</button>
+      </div>
+      <input type="file" id="fi-clr-mep" accept=".xlsx,.xlsm,.xls" onchange="onFileInput(event,'clr','mep')">
+
+      <div class="drop-zone" id="dz-clr-civil" ondragover="onDragOver(event,'clr','civil')" ondragleave="onDragLeave('clr','civil')" ondrop="onDrop(event,'clr','civil')" onclick="document.getElementById('fi-clr-civil').click()">
+        <div class="dz-icon">🏗️</div><div class="dz-label">Civil Clearance</div><div class="dz-sub">Civil works clearance log</div>
+        <div class="dz-filename" id="fn-clr-civil"></div><div class="dz-count" id="fc-clr-civil"></div><div class="dz-error" id="fe-clr-civil"></div>
+        <button class="dz-clear" id="clr-clr-civil" style="display:none" onclick="clearFile(event,'clr','civil')">✕</button>
+      </div>
+      <input type="file" id="fi-clr-civil" accept=".xlsx,.xlsm,.xls" onchange="onFileInput(event,'clr','civil')">
+    </div>
+  </div>
+
+  <div class="summary-bar" id="sum-clr" style="display:none">
+    <div class="stat-item"><div class="stat-val accent" id="sc-total">0</div><div class="stat-lbl">Total Rows</div></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><div class="stat-val" id="sc-mep">0</div><div class="stat-lbl">MEP</div></div>
+    <div class="stat-item"><div class="stat-val" id="sc-civil">0</div><div class="stat-lbl">Civil</div></div>
+    <div class="stat-sep"></div>
+    <div class="stat-item"><div class="stat-val amber" id="sc-removed">0</div><div class="stat-lbl">Removed (S)</div></div>
+    <div class="stat-item"><div class="stat-val green" id="sc-clean">0</div><div class="stat-lbl">Clean Rows</div></div>
+    <div class="bar-right">
+      <button class="btn btn-ghost" onclick="clearTab('clr')">✕ Clear</button>
+      <button class="btn btn-ghost" onclick="downloadCSV('clr')">⬇ Download CSV</button>
+      <button class="btn btn-primary" id="btn-upload-clr" onclick="startUpload('clr')">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Upload to System
+      </button>
+    </div>
+  </div>
+
+  <div class="preview-section">
+    <div class="preview-head">
+      <div><div class="preview-title">Preview — Clearance</div><div class="preview-sub" id="prev-sub-clr">Drop files above to begin</div></div>
+      <div class="preview-right">
+        <label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);cursor:pointer">
+          <input type="checkbox" id="chk-src-clr" onchange="renderPreview('clr')" style="accent-color:var(--accent)"> Show source
+        </label>
+      </div>
+    </div>
+    <div class="tbl-wrap" id="prev-tbl-clr">
+      <div class="empty-state"><div class="empty-icon">🗂️</div><div>Drop your 2 Clearance files above</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">MEP + Civil → merged, L only, CIVIL Clearance Code renamed automatically</div></div>
+    </div>
+  </div>
+
+  <div class="upload-section" id="upload-clr" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <div style="font-size:12px;font-weight:600">Upload Progress</div>
+      <div style="font-size:11px;color:var(--text-dim)" id="upload-status-clr"></div>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill-clr"></div></div>
+    <div class="log-box" id="log-clr"></div>
+  </div>
+
+</div></div>
+
+<div id="toast"></div>
+
+<script>
+const SB='https://tactslhsxglzcbsteokf.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+function getH(ex){let t=window.__MEP_TOKEN__;if(!t){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(t||KEY),'Content-Type':'application/json'},ex||{});}
+function hasAuthToken(){if(window.__MEP_TOKEN__)return true;try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)return true;}}catch(e){}return false;}
+function waitForToken(ms){if(hasAuthToken())return Promise.resolve(true);return new Promise(r=>{const d=Date.now()+ms;function c(){if(hasAuthToken()){r(true);return;}if(Date.now()>d){r(false);return;}setTimeout(c,150);}c();});}
+async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:getH()});return r.json();}
+async function sbGetAll(p){let a=[],o=0;while(true){const r=await fetch(`${SB}/rest/v1/${p}&limit=1000&offset=${o}`,{headers:{...getH(),'Prefer':'count=none'}});const d=await r.json();if(!Array.isArray(d)||!d.length)break;a=a.concat(d);if(d.length<1000)break;o+=1000;}return a;}
+
+// ── Config ──
+const WIR_HDR=14, CLR_HDR=6;
+
+const WIR_COLS=['Activity Code','Activity','Location','Villa No','Villas Type','Discipline','Sub- Contractor Name','Submitted Date','Response Date','Status','Revision'];
+const CLR_COLS=['Reference Number','MEP Clearance Code','Activity','Sector/ Cluster/ Zone','Villa No.','Building Type/ Villa Type','Clearance Received Date','Clearance Released Date','Remarks','Status'];
+
+// Map raw header → canonical name
+const WIR_MAP={'Activity code':'Activity Code','Activity Code':'Activity Code','Activity ':'Activity','Activity':'Activity','Villa':'Villa No','Villa No':'Villa No','Villa Type':'Villas Type','Villas Type':'Villas Type','Sub- Contractor Name':'Sub- Contractor Name','Sub-Contractor Name':'Sub- Contractor Name','Sub Contractor Name':'Sub- Contractor Name'};
+// CLR_MAP not used directly — clearance uses fuzzy matching below
+const CLR_MAP={};
+
+// Fuzzy match: normalize a string for comparison
+function normH(s){return (s||'').toLowerCase().replace(/[\s\/\.\-]+/g,'');}
+
+// Map clearance header row → canonical CLR_COLS names using keyword rules
+function buildClrColMap(hdrRow){
+  const colMap={};
+  const n=normH;
+
+  // Rules: canonical name → test function on normalized header
+  const rules=[
+    ['Reference Number',      h=>h.includes('ref')&&(h.includes('num')||h.includes('no')||h.startsWith('ref'))],
+    ['MEP Clearance Code',    h=>(h.includes('mep')||h.includes('civil'))&&h.includes('clearance')&&h.includes('code') || h.includes('clearancecode') || (h.includes('clr')&&h.includes('code'))],
+    ['Activity',              h=>h==='activity'||h==='activity'||h.startsWith('activ')&&!h.includes('code')],
+    ['Sector/ Cluster/ Zone', h=>h.includes('sector')||h.includes('cluster')||h.includes('zone')],
+    ['Villa No.',             h=>h.includes('villa')&&(h.includes('no')||h.includes('num')||h.length<=10)],
+    ['Building Type/ Villa Type', h=>(h.includes('build')||h.includes('villa'))&&h.includes('type')],
+    ['Clearance Received Date', h=>(h.includes('receiv')&&h.includes('date')&&!h.includes('releas')&&!h.includes('return')) || (h.includes('clearance')&&h.includes('request')&&h.includes('date'))],
+    ['Clearance Released Date',   h=>h.includes('releas')&&h.includes('date')&&!h.includes('receiv')],
+    ['Remarks',               h=>h.includes('remark')||h.includes('comment')||h.includes('note')],
+    ['Status',                h=>h==='status'],
+  ];
+
+  rules.forEach(([canonical, test])=>{
+    if(canonical in colMap) return;
+    for(let i=0;i<hdrRow.length;i++){
+      const raw=(hdrRow[i]||'').toString().trim();
+      if(test(n(raw))){colMap[canonical]=i;break;}
+    }
+  });
+  return colMap;
+}
+
+const state={wir:{plumbing:null,hvac:null,electrical:null,merged:[]},clr:{mep:null,civil:null,merged:[]}};
+
+// ── Clock / Theme ──
+(function tick(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString('en-GB');setTimeout(tick,1000);})();
+function toggleTheme(){const t=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('mep_theme',t);}catch(e){}}
+try{const t=localStorage.getItem('mep_theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}
+
+function switchTab(tab){['wir','clr'].forEach(t=>{document.getElementById('tab-'+t).classList.toggle('active',t===tab);document.getElementById('tab-btn-'+t).classList.toggle('active',t===tab);});}
+
+// ── Drag & Drop ──
+function onDragOver(e,tab,type){e.preventDefault();document.getElementById('dz-'+tab+'-'+type).classList.add('drag-over');}
+function onDragLeave(tab,type){document.getElementById('dz-'+tab+'-'+type).classList.remove('drag-over');}
+function onDrop(e,tab,type){e.preventDefault();document.getElementById('dz-'+tab+'-'+type).classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)processFile(f,tab,type);}
+function onFileInput(e,tab,type){const f=e.target.files[0];if(f)processFile(f,tab,type);}
+
+function clearFile(e,tab,type){
+  e.stopPropagation();
+  state[tab][type]=null;
+  const id=tab+'-'+type;
+  document.getElementById('dz-'+id).classList.remove('loaded','error');
+  ['fn','fc','fe'].forEach(p=>document.getElementById(p+'-'+id).textContent='');
+  document.getElementById('clr-'+id).style.display='none';
+  document.getElementById('fi-'+id).value='';
+  remerge(tab);
+}
+function clearTab(tab){const types=tab==='wir'?['plumbing','hvac','electrical']:['mep','civil'];types.forEach(t=>clearFile({stopPropagation:()=>{}},tab,t));}
+
+// ── Process file ──
+function processFile(file,tab,type){
+  const id=tab+'-'+type;
+  document.getElementById('dz-'+id).classList.remove('loaded','error');
+  document.getElementById('fe-'+id).textContent='';
+  document.getElementById('fn-'+id).textContent='Reading…';
+
+  const keepCols=tab==='wir'?WIR_COLS:CLR_COLS;
+
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    // Yield to browser before heavy XLSX parse so UI stays responsive
+    setTimeout(function(){
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array',cellDates:true,dense:true});
+
+      // WIR: fixed header at row 15 (idx 14)
+      // CLR: scan only first 30 rows of each sheet using sheet range - no full parse
+      let hdrIdx=tab==='wir'?WIR_HDR:0;
+      let activeSheet=wb.SheetNames[0];
+
+      if(tab==='clr'){
+        let found=false;
+        for(const shName of wb.SheetNames){
+          const ws=wb.Sheets[shName];
+          // Read only first 30 rows using row range to avoid parsing full sheet
+          const preview=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:'',range:{s:{r:0,c:0},e:{r:29,c:50}}});
+          for(let ri=0;ri<preview.length;ri++){
+            const cells=(preview[ri]||[]).map(c=>(c||'').toString().trim());
+            const hasRef=cells.some(c=>c.toLowerCase().includes('reference number'));
+            const hasCode=cells.some(c=>c.toLowerCase().includes('clearance code'));
+            if(hasRef&&hasCode){hdrIdx=ri;activeSheet=shName;found=true;break;}
+          }
+          if(found)break;
+        }
+        if(!found){
+          // Fallback: reference number alone
+          for(const shName of wb.SheetNames){
+            const ws=wb.Sheets[shName];
+            const preview=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:'',range:{s:{r:0,c:0},e:{r:29,c:50}}});
+            for(let ri=0;ri<preview.length;ri++){
+              const cells=(preview[ri]||[]).map(c=>(c||'').toString().trim());
+              if(cells.some(c=>c.toLowerCase().includes('reference number'))){hdrIdx=ri;activeSheet=shName;found=true;break;}
+            }
+            if(found)break;
+          }
+        }
+        if(!found) throw new Error('Could not find header row. Sheets found: '+wb.SheetNames.join(', '));
+      }
+      const raw=XLSX.utils.sheet_to_json(wb.Sheets[activeSheet],{header:1,raw:false,dateNF:'DD/MM/YYYY',defval:''});
+      if(raw.length<=hdrIdx) throw new Error('File has fewer rows than expected — is this the right file?');
+
+      const hdrRow=raw[hdrIdx];
+
+      // Build col index map
+      let colMap={};
+      if(tab==='wir'){
+        hdrRow.forEach((h,i)=>{
+          const key=(h||'').toString().trim();
+          const canon=WIR_MAP[key]||key;
+          if(WIR_COLS.includes(canon)&&!(canon in colMap)) colMap[canon]=i;
+        });
+      } else {
+        colMap=buildClrColMap(hdrRow);
+      }
+
+      // Find L/S col for clearance
+      let lsIdx=-1;
+      if(tab==='clr'){
+        hdrRow.forEach((h,i)=>{const h2=(h||'').toString().trim();if(h2==='L/S'||h2==='L/s'||h2==='l/s') lsIdx=i;});
+      }
+
+      // For clearance, 'Clearance Released Date' is optional (Civil file may not have it)
+      const optionalCols=tab==='clr'?['Clearance Released Date']:[];
+      const missing=keepCols.filter(c=>!(c in colMap)&&!optionalCols.includes(c));
+      if(missing.length){
+        const found=hdrRow.map((h,i)=>'['+i+']='+JSON.stringify((h||'').toString().trim())).join(', ');
+        throw new Error('Missing columns: '+missing.join(', ')+'\n\nHeaders found: '+found);
+      }
+
+      const rows=[];let removed=0;
+      for(let i=hdrIdx+1;i<raw.length;i++){
+        const r=raw[i];
+        if(!r||r.every(c=>c===null||c===undefined||c==='')) continue;
+        const obj={};
+        keepCols.forEach(col=>{const v=r[colMap[col]];obj[col]=(v===null||v===undefined)?'':v.toString().trim();});
+
+        if(tab==='wir'){
+          if(!obj['Villa No']) continue;
+          const st=obj['Status'];
+          if(st==='E'||st==='e'){removed++;continue;}
+        }
+        if(tab==='clr'){
+          if(lsIdx>=0){const ls=(r[lsIdx]||'').toString().trim();if(ls!=='L'){removed++;continue;}}
+          if(!obj['Villa No.']) continue;
+        }
+        obj['_source']=type;
+        rows.push(obj);
+      }
+
+      state[tab][type]={name:file.name,rows,removed};
+      document.getElementById('dz-'+id).classList.add('loaded');
+      document.getElementById('fn-'+id).textContent=file.name;
+      document.getElementById('fc-'+id).textContent=rows.length+' rows · '+removed+' removed';
+      document.getElementById('clr-'+id).style.display='block';
+      remerge(tab);
+      toast(type.toUpperCase()+': '+rows.length+' rows loaded','ok');
+    }catch(err){
+      document.getElementById('dz-'+id).classList.add('error');
+      document.getElementById('fn-'+id).textContent=file.name;
+      document.getElementById('fe-'+id).textContent='⚠ '+err.message;
+      document.getElementById('clr-'+id).style.display='block';
+      toast('Error: '+err.message,'err');
+    }
+    },0);// end setTimeout
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ── Merge & update summary ──
+function remerge(tab){
+  const types=tab==='wir'?['plumbing','hvac','electrical']:['mep','civil'];
+  let merged=[],removed=0,counts={};
+  types.forEach(t=>{const f=state[tab][t];counts[t]=f?f.rows.length:0;if(f){merged=merged.concat(f.rows);removed+=f.removed||0;}});
+  state[tab].merged=merged;
+
+  const hasAny=merged.length>0||types.some(t=>state[tab][t]);
+  document.getElementById('sum-'+tab).style.display=hasAny?'flex':'none';
+
+  if(tab==='wir'){
+    document.getElementById('sw-total').textContent=merged.length+removed;
+    document.getElementById('sw-plumbing').textContent=counts.plumbing||0;
+    document.getElementById('sw-hvac').textContent=counts.hvac||0;
+    document.getElementById('sw-electrical').textContent=counts.electrical||0;
+    document.getElementById('sw-removed').textContent=removed;
+    document.getElementById('sw-clean').textContent=merged.length;
+  } else {
+    document.getElementById('sc-total').textContent=merged.length+removed;
+    document.getElementById('sc-mep').textContent=counts.mep||0;
+    document.getElementById('sc-civil').textContent=counts.civil||0;
+    document.getElementById('sc-removed').textContent=removed;
+    document.getElementById('sc-clean').textContent=merged.length;
+  }
+  renderPreview(tab);
+}
+
+// ── Preview ──
+function renderPreview(tab){
+  const wrap=document.getElementById('prev-tbl-'+tab);
+  const showSrc=document.getElementById('chk-src-'+tab).checked;
+  const merged=state[tab].merged;
+  const keepCols=tab==='wir'?WIR_COLS:CLR_COLS;
+
+  if(!merged.length){
+    wrap.innerHTML=tab==='wir'
+      ?'<div class="empty-state"><div class="empty-icon">📋</div><div>Drop your 3 WIR files above</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">Plumbing + HVAC + Electrical → merged & cleaned automatically</div></div>'
+      :'<div class="empty-state"><div class="empty-icon">🗂️</div><div>Drop your 2 Clearance files above</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">MEP + Civil → merged, L only, CIVIL Clearance Code renamed automatically</div></div>';
+    document.getElementById('prev-sub-'+tab).textContent='Drop files above to begin';
+    return;
+  }
+
+  const preview=merged.slice(0,200);
+  document.getElementById('prev-sub-'+tab).textContent=`Showing ${preview.length} of ${merged.length} rows · ${merged.length} will be exported`;
+
+  const cols=showSrc?[...keepCols,'_source']:keepCols;
+  let html='<table><thead><tr>'+cols.map(c=>'<th>'+(c==='_source'?'Source':c)+'</th>').join('')+'</tr></thead><tbody>';
+  preview.forEach(row=>{
+    html+='<tr>';
+    cols.forEach(c=>{
+      if(c==='_source'){html+=`<td><span class="src-pill src-${row[c]}">${row[c]}</span></td>`;return;}
+      const val=row[c]||'';
+      const cls=(c==='Activity Code'||c==='MEP Clearance Code'||c==='Revision')?'td-code':(c==='Villa No'||c==='Villa No.')?'td-villa':'';
+      html+=`<td class="${cls}">${esc(val)}</td>`;
+    });
+    html+='</tr>';
+  });
+  wrap.innerHTML=html+'</tbody></table>';
+}
+
+// ── Download CSV ──
+function downloadCSV(tab){
+  const merged=state[tab].merged;
+  if(!merged.length){toast('No data to export','err');return;}
+  const keepCols=tab==='wir'?WIR_COLS:CLR_COLS;
+  const csv=[keepCols.join(','),...merged.map(r=>keepCols.map(c=>{const v=(r[c]||'').toString();return(v.includes(',')||v.includes('"')||v.includes('\n'))?'"'+v.replace(/"/g,'""')+'"':v;}).join(','))].join('\n');
+  const a=document.createElement('a');
+  const date=new Date().toISOString().slice(0,10);
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
+  a.download=(tab==='wir'?'WIR_Clean_':'Clearance_Clean_')+date+'.csv';
+  a.click();
+  toast('Downloaded '+merged.length+' rows','ok');
+}
+
+// ── Supabase helpers ──
+function safeDate(v){if(!v)return null;const s=String(v).trim();if(!s)return null;if(/^\d+$/.test(s)){const n=parseInt(s);if(n<1||n>60000)return null;const d=new Date(Date.UTC(1899,11,30)+n*86400000);return isNaN(d)?null:d.toISOString().split('T')[0];}const d=new Date(s);if(isNaN(d))return null;const y=d.getFullYear();return(y<2000||y>2040)?null:d.toISOString().split('T')[0];}
+function normWir(s){s=(s||'').toUpperCase().trim();return s==='A'||s==='B'?'approved':s==='C'||s==='D'?'rejected':s==='UR'?'under_review':'not_submitted';}
+function normClr(s){s=(s||'').toLowerCase().trim();return s.includes('fully approved')?'fully_approved':s.includes('not approved')||s.includes('rejected')?'not_approved':s.includes('pending')?'pending':'not_approved';}
+function addLog(tab,msg,cls='info'){const el=document.getElementById('log-'+tab);if(!el)return;const d=document.createElement('div');d.className='log-'+cls;d.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+
+// ── Upload ──
+async function startUpload(tab){
+  const merged=state[tab].merged;
+  if(!merged.length){toast('No data to upload','err');return;}
+  const btn=document.getElementById('btn-upload-'+tab);
+  btn.disabled=true;
+  document.getElementById('upload-'+tab).style.display='block';
+  document.getElementById('log-'+tab).innerHTML='';
+  document.getElementById('prog-fill-'+tab).style.width='0%';
+
+  addLog(tab,'🔐 Checking authentication…','info');
+  if(!await waitForToken(5000)){addLog(tab,'❌ Not authenticated. Please log in first.','err');btn.disabled=false;return;}
+  addLog(tab,'✅ Auth OK — loading reference data…','info');
+
+  let villaMap={},actMap={},clrMap={};
+  try{
+    const [clusters,villas,acts,clrs]=await Promise.all([
+      sbGet('clusters?select=id,code'),
+      sbGetAll('villas?select=id,villa_no,cluster_id'),
+      tab==='wir'?sbGetAll('activities?select=id,activity_code&is_active=eq.true'):Promise.resolve([]),
+      tab==='clr'?sbGetAll('clearance_activities?select=id,clearance_code&is_active=eq.true'):Promise.resolve([]),
+    ]);
+    const cm={};clusters.forEach(c=>cm[c.id]=c.code);
+    villas.forEach(v=>{
+      const cl=cm[v.cluster_id]||'';
+      villaMap[cl+'_'+v.villa_no]=v.id;
+      villaMap[cl.replace('C','')+'_'+v.villa_no]=v.id;
+    });
+    acts.forEach(a=>actMap[a.activity_code.trim()]=a.id);
+    clrs.forEach(c=>clrMap[c.clearance_code.trim()]=c.id);
+    addLog(tab,`✅ ${villas.length} villas · ${acts.length||clrs.length} activities loaded`,'info');
+
+    // Debug: show first row mapping
+    if(merged.length>0){
+      const r0=merged[0];
+      if(tab==='wir') addLog(tab,'🔍 Row 1 — villa="'+(r0['Villa No']||'')+'" cluster="'+(r0['Location']||'')+'" code="'+(r0['Activity Code']||'')+'"','info');
+      else addLog(tab,'🔍 Row 1 — villa="'+(r0['Villa No.']||'')+'" cluster="'+(r0['Sector/ Cluster/ Zone']||'')+'" code="'+(r0['MEP Clearance Code']||'')+'"','info');
+    }
+  }catch(e){addLog(tab,'❌ Reference data error: '+e.message,'err');btn.disabled=false;return;}
+
+  const table=tab==='wir'?'dc_import_log':'clearance_import_log';
+
+  // Clear existing records
+  addLog(tab,'🗑 Clearing existing '+table+' records…','info');
+  const del=await fetch(`${SB}/rest/v1/${table}?id=gte.0`,{method:'DELETE',headers:getH({'Prefer':'return=minimal'})});
+  if(!del.ok){
+    const errTxt=await del.text();
+    addLog(tab,'❌ Delete failed ('+del.status+'): '+errTxt.slice(0,120),'err');
+    btn.disabled=false;return;
+  }
+  addLog(tab,'✅ Old records cleared','info');
+
+  // Create import batch (same as csv_import_tool)
+  let batchId=null;
+  try{
+    const batchResp=await fetch(SB+'/rest/v1/import_batches',{
+      method:'POST',
+      headers:{...getH(),'Prefer':'return=representation'},
+      body:JSON.stringify({file_name:'dc_log_cleaner_'+tab+'_'+new Date().toISOString().slice(0,10),record_type:tab==='wir'?'wir':'clearance',total_rows:merged.length,status:'processing'})
+    });
+    if(batchResp.ok){const bd=await batchResp.json();batchId=Array.isArray(bd)?bd[0]?.id:bd?.id;addLog(tab,'Import batch created — ID: '+batchId,'info');}
+    else addLog(tab,'⚠ Batch creation skipped ('+batchResp.status+') — continuing','warn');
+  }catch(e){addLog(tab,'⚠ Batch creation error: '+e.message+' — continuing','warn');}
+
+  const CHUNK=50;
+  let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0;
+
+  for(let i=0;i<merged.length;i++){
+    const r=merged[i];
+
+    if(tab==='wir'){
+      const villa=parseInt(r['Villa No']);
+      const cluster=(r['Location']||'').trim().toUpperCase();
+      const code=(r['Activity Code']||'').trim();
+      if(!villa||isNaN(villa)||!cluster||!code){
+        skipped++;
+        if(skipped<=3) addLog(tab,'⚠ Skip row '+(i+1)+': villa="'+(r['Villa No']||'')+'" cluster="'+cluster+'" code="'+code+'"','warn');
+        continue;
+      }
+      const vid=villaMap[cluster+'_'+villa];
+      const aid=actMap[code];
+      const ms=!vid?'unmatched_villa':!aid?'unmatched_activity':'matched';
+      if(ms==='matched') matched++; else unmatched++;
+      const disc=(r['Discipline']||'').trim().toUpperCase();
+      const dn=disc==='PL'||disc==='DR'||disc==='MECH'||disc==='M'?'mechanical':disc==='EL'||disc==='ELEC'?'electrical':disc==='AC'||disc==='HVAC'?'mechanical':null;
+      const rev=r['Revision']||null;
+      records.push({
+        import_batch_id:batchId,villa_id:vid||null,activity_id:aid||null,
+        record_type:'wir',raw_activity_code:code,raw_villa_no:villa,raw_cluster:cluster,
+        raw_activity_name:r['Activity']||null,raw_villa_type:r['Villas Type']||null,
+        raw_subcontractor:r['Sub- Contractor Name']||null,raw_status:r['Status']||null,
+        normalised_status:normWir(r['Status']),discipline:dn,discipline_raw:disc||null,
+        submitted_date:safeDate(r['Submitted Date']),response_date:safeDate(r['Response Date']),
+        revision:rev,revision_no:rev?parseInt(rev.replace(/[^0-9]/g,''))||0:null,
+        source_row_no:i+1,match_status:ms
+      });
+    } else {
+      const villa=parseInt(r['Villa No.']);
+      const cluster=(r['Sector/ Cluster/ Zone']||'').trim().toUpperCase();
+      const code=(r['MEP Clearance Code']||'').trim();
+      if(!villa||isNaN(villa)||!cluster||!code){
+        skipped++;
+        if(skipped<=3) addLog(tab,'⚠ Skip row '+(i+1)+': villa="'+(r['Villa No.']||'')+'" cluster="'+cluster+'" code="'+code+'"','warn');
+        continue;
+      }
+      const vid=villaMap[cluster+'_'+villa];
+      const aid=clrMap[code];
+      const ms=!vid?'unmatched_villa':!aid?'unmatched_clearance':'matched';
+      if(ms==='matched') matched++; else unmatched++;
+      records.push({
+        import_batch_id:batchId,villa_id:vid||null,clearance_activity_id:aid||null,
+        reference_number:r['Reference Number']||null,raw_clearance_code:code,
+        raw_activity_name:r['Activity']||null,raw_cluster:cluster,raw_villa_no:villa,
+        raw_villa_type:r['Building Type/ Villa Type']||null,raw_status:r['Status']||null,
+        normalised_status:normClr(r['Status']),
+        clearance_received_date:safeDate(r['Clearance Received Date']),
+        clearance_released_date:safeDate(r['Clearance Released Date']),
+        remarks:r['Remarks']||null,source_row_no:i+1,match_status:ms
+      });
+    }
+
+    // Upload chunk with 3 retries (same as csv_import_tool)
+    if(records.length>=CHUNK||(i===merged.length-1&&records.length>0)){
+      const chunk=records.splice(0,records.length);
+      const startRow=chunk[0].source_row_no,endRow=chunk[chunk.length-1].source_row_no;
+      let ok=false;
+      for(let attempt=1;attempt<=3;attempt++){
+        try{
+          const resp=await fetch(`${SB}/rest/v1/${table}`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify(chunk)});
+          if(resp.ok){ok=true;break;}
+          const errTxt=await resp.text();
+          addLog(tab,`⚠ Chunk rows ${startRow}–${endRow} attempt ${attempt} failed (${resp.status}): ${errTxt.slice(0,120)}`,'warn');
+        }catch(e){
+          addLog(tab,`⚠ Chunk rows ${startRow}–${endRow} attempt ${attempt} network error: ${e.message}`,'warn');
+        }
+        if(attempt<3) await new Promise(res=>setTimeout(res,600*attempt));
+      }
+      if(ok) uploaded+=chunk.length;
+      else{chunksFailed++;addLog(tab,`❌ Chunk rows ${startRow}–${endRow} FAILED after 3 attempts`,'err');}
+      document.getElementById('prog-fill-'+tab).style.width=Math.round((i+1)/merged.length*100)+'%';
+      document.getElementById('upload-status-'+tab).textContent=uploaded+'/'+merged.length+' rows';
+    }
+  }
+
+  // Finalize batch
+  if(batchId){
+    await fetch(SB+'/rest/v1/import_batches?id=eq.'+batchId,{method:'PATCH',headers:getH(),body:JSON.stringify({matched_rows:matched,skipped_rows:unmatched+skipped,status:chunksFailed>0?'completed_with_errors':'completed'})});
+  }
+
+  document.getElementById('prog-fill-'+tab).style.width='100%';
+  const summary=`${uploaded} uploaded · ${matched} matched · ${unmatched} unmatched · ${skipped} skipped`+(chunksFailed>0?` · ${chunksFailed} chunks FAILED`:'');
+  addLog(tab,(chunksFailed>0?'⚠ Completed with errors — ':'✅ Done — ')+summary,chunksFailed>0?'warn':'ok');
+  toast(chunksFailed>0?'Completed with errors: '+uploaded+' rows':'Upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
+
+  // Notify parent shell (Option 3) — triggers banner for all users via Realtime too
+  if(uploaded>0){
+    try{
+      const who=window.__MEP_USER__?.full_name||'';
+      window.parent.postMessage({type:'data_updated',dataType:tab,uploadedBy:who,rows:uploaded},'*');
+    }catch(e){}
+  }
+
+  btn.disabled=false;
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function toast(msg,type='info'){const t=document.getElementById('toast');t.textContent=msg;t.className='show '+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3500);}
+
+window.addEventListener('message',function(e){if(!e.data||typeof e.data!=='object')return;if(e.data.type==='theme')document.documentElement.setAttribute('data-theme',e.data.theme);if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;}});
+try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+</script>
+</body>
+</html>

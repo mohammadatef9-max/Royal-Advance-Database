@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reference Data · MEP Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0b0e14;
+  --bg-elev:#11151c;
+  --bg-panel:#151a23;
+  --border:rgba(255,255,255,0.07);
+  --border-hover:rgba(255,255,255,0.13);
+  --accent:#4f8cff;
+  --accent-soft:rgba(79,140,255,0.14);
+  --accent-text:#93b6ff;
+  --text:#e2e8f0;
+  --text-muted:#64748b;
+  --text-dim:#94a3b8;
+  --approved:#6ee2a3;
+  --approved-bg:rgba(110,226,163,0.10);
+  --rejected:#ff8a99;
+  --rejected-bg:rgba(255,138,153,0.10);
+  --progress:#f4c95a;
+  --review:#a3b3ff;
+  --mono:'JetBrains Mono',monospace;
+  --radius:10px;
+  --shadow:0 4px 24px rgba(0,0,0,0.35);
+}
+body.light-theme {
+  --bg:#f1f4f9;
+  --bg-elev:#ffffff;
+  --bg-panel:#f8fafc;
+  --border:rgba(0,0,0,0.08);
+  --border-hover:rgba(0,0,0,0.15);
+  --text:#1e293b;
+  --text-muted:#94a3b8;
+  --text-dim:#475569;
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px;display:flex;flex-direction:column}
+
+/* ── IN-SHELL: hide topbar ── */
+body.in-shell .topbar{display:none!important}
+body.in-shell{height:100vh;display:flex;flex-direction:column}
+
+/* ── TOPBAR ── */
+.topbar{
+  height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;
+}
+.topbar-crumb{font-size:11px;color:var(--text-muted);letter-spacing:.04em;text-transform:uppercase}
+.topbar-sep{color:var(--border-hover);font-size:16px}
+.topbar-title{font-size:14px;font-weight:600;color:var(--text)}
+.topbar-clock{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--text-muted)}
+
+/* ── PAGE LAYOUT ── */
+.page-wrap{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
+body.in-shell .page-wrap{height:100vh}
+
+/* ── PAGE HEAD ── */
+
+
+/* ── TABS ── */
+.tab-bar{
+  display:flex;gap:4px;padding:8px 24px 0;flex-shrink:0;border-bottom:1px solid var(--border);
+}
+.tab-btn{
+  padding:8px 18px;border-radius:8px 8px 0 0;border:1px solid transparent;
+  border-bottom:none;font-size:13px;font-weight:500;cursor:pointer;
+  background:transparent;color:var(--text-muted);transition:all .15s;
+  position:relative;bottom:-1px;
+}
+.tab-btn:hover{color:var(--text);background:var(--bg-panel)}
+.tab-btn.active{
+  background:var(--bg-elev);color:var(--accent-text);
+  border-color:var(--border);border-bottom-color:var(--bg-elev);
+}
+.tab-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:18px;border-radius:9px;padding:0 5px;
+  font-size:10px;font-weight:600;font-family:var(--mono);
+  background:var(--accent-soft);color:var(--accent-text);margin-left:6px;
+}
+
+/* ── TOOLBAR ── */
+.toolbar{
+  display:flex;align-items:center;gap:10px;padding:14px 24px;
+  flex-shrink:0;flex-wrap:wrap;
+}
+.search-wrap{position:relative;flex:1;min-width:200px;max-width:380px}
+.search-wrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:.4;pointer-events:none}
+.search-input{
+  width:100%;padding:8px 12px 8px 34px;
+  background:var(--bg-elev);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;
+  outline:none;transition:border-color .15s;
+}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text-muted)}
+
+.filter-sel{
+  padding:8px 12px;background:var(--bg-elev);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:13px;font-family:'Inter',sans-serif;
+  outline:none;cursor:pointer;
+}
+.filter-sel:focus{border-color:var(--accent)}
+
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:8px 16px;
+  border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;
+  border:none;transition:all .15s;font-family:'Inter',sans-serif;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#3d7aff;transform:translateY(-1px)}
+.btn-ghost{background:var(--bg-panel);color:var(--text-dim);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border-hover);color:var(--text)}
+.btn-danger{background:var(--rejected-bg);color:var(--rejected);border:1px solid rgba(255,138,153,.2)}
+.btn-danger:hover{background:rgba(255,138,153,.18)}
+.toolbar-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+
+/* ── CONTENT AREA ── */
+.tab-content{display:none;flex:1;overflow:hidden;flex-direction:column}
+.tab-content.active{display:flex;flex:1;min-height:0}
+
+/* ── TABLE ── */
+.table-wrap{flex:1;overflow:auto;padding:0 24px 24px}
+.tbl{width:100%;border-collapse:collapse}
+.tbl thead th{
+  padding:10px 14px;text-align:left;font-size:11px;font-weight:600;
+  color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;
+  background:var(--bg-elev);position:sticky;top:0;z-index:10;
+  border-bottom:1px solid var(--border);white-space:nowrap;
+}
+.tbl tbody tr{border-bottom:1px solid var(--border);transition:background .1s;cursor:default}
+.tbl tbody tr:hover{background:var(--bg-panel)}
+.tbl td{padding:11px 14px;font-size:13px;color:var(--text);vertical-align:middle}
+.tbl td:first-child{font-family:var(--mono);font-size:12px;color:var(--accent-text);font-weight:500}
+.tbl .td-name{font-weight:500}
+.tbl .td-disc{
+  font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;
+  text-transform:uppercase;letter-spacing:.04em;display:inline-block;
+}
+.disc-mechanical{background:rgba(79,140,255,.14);color:#93b6ff}
+.disc-electrical{background:rgba(244,201,90,.14);color:#f4c95a}
+.disc-civil{background:rgba(163,179,255,.14);color:#a3b3ff}
+.disc-both{background:rgba(110,226,163,.14);color:#6ee2a3}
+
+.tbl .td-actions{display:flex;gap:6px;opacity:0;transition:opacity .1s}
+.tbl tbody tr:hover .td-actions{opacity:1}
+.icon-btn{
+  width:28px;height:28px;border-radius:6px;border:none;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--bg-panel);color:var(--text-muted);transition:all .15s;
+}
+.icon-btn:hover{background:var(--border);color:var(--text)}
+.icon-btn.del:hover{background:var(--rejected-bg);color:var(--rejected)}
+
+/* ── EMPTY / LOADING ── */
+.empty-state{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  color:var(--text-muted);gap:8px;padding:40px;
+}
+.empty-state svg{opacity:.3}
+.empty-state p{font-size:14px}
+.empty-state small{font-size:12px;opacity:.6}
+.loading-row td{text-align:center;color:var(--text-muted);padding:40px!important}
+
+/* ── STATS BAR ── */
+.stats-bar{
+  display:flex;gap:20px;padding:0 24px 12px;flex-shrink:0;flex-wrap:wrap;
+}
+.stat-chip{
+  display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);
+}
+.stat-chip strong{font-weight:600;color:var(--text);font-family:var(--mono);font-size:13px}
+.stat-dot{width:7px;height:7px;border-radius:50%}
+
+/* ── MODAL ── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
+  z-index:1000;align-items:center;justify-content:center;padding:20px;
+  backdrop-filter:blur(4px);
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--bg-elev);border:1px solid var(--border);border-radius:14px;
+  padding:28px;width:100%;max-width:460px;box-shadow:var(--shadow);
+}
+.modal h2{font-size:16px;font-weight:700;margin-bottom:4px}
+.modal p{font-size:12px;color:var(--text-muted);margin-bottom:20px}
+.form-group{margin-bottom:16px}
+.form-label{font-size:12px;font-weight:500;color:var(--text-dim);margin-bottom:6px;display:block}
+.form-input,.form-select{
+  width:100%;padding:9px 12px;background:var(--bg-panel);
+  border:1px solid var(--border);border-radius:8px;color:var(--text);
+  font-size:13px;font-family:'Inter',sans-serif;outline:none;transition:border-color .15s;
+}
+.form-input:focus,.form-select:focus{border-color:var(--accent)}
+.form-input::placeholder{color:var(--text-muted)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+.modal-err{font-size:12px;color:var(--rejected);margin-top:8px;display:none}
+
+/* ── TOAST ── */
+.toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;
+  background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;
+  box-shadow:var(--shadow);font-size:13px;color:var(--text);
+  animation:slideIn .2s ease;min-width:240px;max-width:340px;
+}
+.toast.success{border-left:3px solid var(--approved)}
+.toast.error{border-left:3px solid var(--rejected)}
+.toast.info{border-left:3px solid var(--accent)}
+@keyframes slideIn{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fadeOut{to{transform:translateX(40px);opacity:0}}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR (hidden when in shell) -->
+<div class="topbar">
+  <span class="topbar-crumb">MEP Tracker</span>
+  <span class="topbar-sep">/</span>
+  <span class="topbar-title">Reference Data</span>
+  <span class="topbar-clock" id="clock">--:--:--</span>
+</div>
+
+<div class="page-wrap">
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tab-wir" onclick="switchTab('wir')">
+      WIR Activities <span class="tab-badge" id="badge-wir">—</span>
+    </button>
+    <button class="tab-btn" id="tab-clr" onclick="switchTab('clr')">
+      Clearance Items <span class="tab-badge" id="badge-clr">—</span>
+    </button>
+    <button class="tab-btn" id="tab-map" onclick="switchTab('map')">
+      WIR Mappings <span class="tab-badge" id="badge-map">—</span>
+    </button>
+    <button class="tab-btn" id="tab-alias" onclick="switchTab('alias')">
+      Clearance Aliases <span class="tab-badge" id="badge-alias">—</span>
+    </button>
+    <button class="tab-btn" id="tab-maint" onclick="switchTab('maint')" style="color:var(--rejected,#ff8a99)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+      Maintenance
+    </button>
+  </div>
+
+  <!-- ══ WIR TAB ══ -->
+  <div class="tab-content active" id="content-wir">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" id="wir-search" placeholder="Search code or name…" oninput="filterWir()">
+      </div>
+      <select class="filter-sel" id="wir-disc-filter" onchange="filterWir()">
+        <option value="">All Disciplines</option>
+        <option value="mechanical">Mechanical</option>
+        <option value="electrical">Electrical</option>
+        <option value="civil">Civil</option>
+        </select>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" onclick="refreshWir()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary" onclick="openWirModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          New Activity
+        </button>
+      </div>
+    </div>
+    <div class="stats-bar" id="wir-stats"></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:120px">Code</th>
+            <th>Activity Name</th>
+            <th style="width:130px">Discipline</th>
+            <th style="width:80px">Status</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody id="wir-tbody">
+          <tr class="loading-row"><td colspan="5">Loading activities…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ CLEARANCE TAB ══ -->
+  <div class="tab-content" id="content-clr">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" id="clr-search" placeholder="Search code or name…" oninput="filterClr()">
+      </div>
+      <select class="filter-sel" id="clr-disc-filter" onchange="filterClr()">
+        <option value="">All Disciplines</option>
+        <option value="mechanical">Mechanical</option>
+        <option value="electrical">Electrical</option>
+        <option value="civil">Civil</option>
+        </select>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" onclick="refreshClr()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary" onclick="openClrModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          New Clearance Item
+        </button>
+      </div>
+    </div>
+    <div class="stats-bar" id="clr-stats"></div>
+    <div class="table-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:160px">Clearance Code</th>
+            <th>Clearance Name</th>
+            <th style="width:130px">Discipline</th>
+            <th style="width:80px">Status</th>
+            <th style="width:80px"></th>
+          </tr>
+        </thead>
+        <tbody id="clr-tbody">
+          <tr class="loading-row"><td colspan="5">Loading clearance items…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ WIR MAPPINGS TAB ══ -->
+  <div class="tab-content" id="content-map" style="flex-direction:column;overflow-y:auto;flex:1;min-height:0">
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input class="search-input" id="map-search" placeholder="Search clearance or WIR code…" oninput="filterMap()">
+    </div>
+    <div class="toolbar-right">
+      <button class="btn btn-ghost" onclick="loadMap()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        Refresh
+      </button>
+      <button class="btn btn-primary" onclick="openMapModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+        Add Mapping
+      </button>
+    </div>
+  </div>
+  <div class="stats-bar" id="map-stats"></div>
+  <!-- Split layout: list on left, add form on right -->
+  <div style="flex:1;overflow-y:auto;padding:0 24px 24px">
+  <div style="display:grid;grid-template-columns:1fr 380px;gap:16px">
+    <!-- LEFT: mappings list -->
+    <div>
+      <div id="map-list"></div>
+    </div>
+    <!-- RIGHT: add new mapping form (always visible) -->
+    <div style="position:sticky;top:0;align-self:start">
+      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)">Add New Mapping</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Link a clearance to a WIR that must be approved before it can be released.</div>
+        <div class="form-group">
+          <label class="form-label">Clearance (needs this WIR first)</label>
+          <select class="form-select" id="map-clr-sel" onchange="updateMapPreview()"><option value="">— Select Clearance —</option></select>
+        </div>
+        <div style="text-align:center;font-size:18px;color:var(--text-muted);margin:8px 0">↓ requires</div>
+        <div class="form-group">
+          <label class="form-label">WIR Activity (must be Approved first)</label>
+          <select class="form-select" id="map-wir-sel" onchange="updateMapPreview()"><option value="">— Select WIR —</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Villa Type (optional)</label>
+          <select class="form-select" id="map-vtype-sel" onchange="updateMapPreview()">
+            <option value="">All Villa Types (default)</option><option value="3A">3A</option><option value="3D">3D</option><option value="4A">4A</option><option value="4B">4B</option><option value="4C">4C</option><option value="5A">5A</option><option value="5AA">5AA</option><option value="5B">5B</option><option value="5C">5C</option><option value="6B">6B</option><option value="6C">6C</option><option value="A3">A3</option><option value="A4">A4</option><option value="A5">A5</option><option value="AC">AC</option><option value="B4">B4</option><option value="B5">B5</option><option value="B6">B6</option><option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option><option value="D3">D3</option><option value="D4">D4</option><option value="T3">T3</option>
+          </select>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Leave as "All Villa Types" to apply to every villa. Select a type to restrict this WIR requirement to specific villas only.</div>
+        </div>
+        <div id="map-preview" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text-muted);margin-bottom:14px;min-height:48px">Select a clearance and WIR to preview the mapping.</div>
+        <div id="map-alert" style="margin-bottom:8px"></div>
+        <button class="btn btn-primary" style="width:100%" onclick="addMapping()">Add Mapping</button>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+  <!-- ══ CLEARANCE ALIASES TAB ══ -->
+  <div class="tab-content" id="content-alias" style="flex-direction:column">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" id="alias-search" placeholder="Search canonical or alias code…" oninput="filterAlias()">
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" onclick="loadAlias()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary" onclick="openAliasModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          New Alias
+        </button>
+      </div>
+    </div>
+    <div class="stats-bar" id="alias-stats"></div>
+    <div style="flex:1;overflow-y:auto;padding:0 24px 24px">
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:16px">
+      <div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:10px 14px">
+          <strong style="color:var(--progress)">How aliases work:</strong> When a clearance code changes (e.g. MCLR-29A + MCLR-29B merged into MCLR-29),
+          add MCLR-29A and MCLR-29B as aliases of MCLR-29. Old villas with MCLR-29A/29B <em>fully approved</em> will be treated as already done — they won't appear in the DC release queue.
+          New villas use MCLR-29 and go through normally.
+        </div>
+        <div id="alias-list"></div>
+      </div>
+      <div style="align-self:start">
+        <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--text)">Add New Alias</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">Map an old clearance code to its new canonical replacement.</div>
+          <div class="form-group">
+            <label class="form-label">New (Canonical) Code</label>
+            <select class="form-select" id="alias-canonical-sel"><option value="">— Select new code —</option></select>
+          </div>
+          <div style="text-align:center;font-size:18px;color:var(--text-muted);margin:8px 0">↑ replaces</div>
+          <div class="form-group">
+            <label class="form-label">Old (Alias) Code</label>
+            <select class="form-select" id="alias-old-sel"><option value="">— Select old code —</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Note (optional)</label>
+            <input class="form-input" id="alias-note" placeholder="e.g. MCLR-29A merged into MCLR-29">
+          </div>
+          <div id="alias-alert" style="margin-bottom:8px"></div>
+          <button class="btn btn-primary" style="width:100%" onclick="addAlias()">Add Alias</button>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+</div>
+
+  <!-- ══ MAINTENANCE TAB ══ -->
+  <div class="tab-content" id="content-maint" style="flex-direction:column;overflow-y:auto;padding:24px 20px">
+    <div style="max-width:580px;display:flex;flex-direction:column;gap:14px">
+
+      <div style="background:var(--rejected-bg,#4a1820);border:1px solid var(--rejected-bd,#6b2530);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--rejected,#ff8a99)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--rejected,#ff8a99)">Danger Zone — Admin Only</div>
+          <div style="font-size:11px;color:var(--text-muted,#8a93a3);margin-top:1px">These actions are permanent and cannot be undone.</div>
+        </div>
+      </div>
+
+      <!-- Delete DC Actioned -->
+      <div style="background:var(--bg-panel,#151a23);border:1px solid var(--border,#1e2531);border-radius:10px;padding:16px 18px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--text,#e6e9ef);margin-bottom:5px">Delete DC Actioned Requests</div>
+            <div style="font-size:11px;color:var(--text-muted,#8a93a3);line-height:1.7">
+              Deletes all requests with status
+              <code style="font-family:monospace;font-size:10px;background:var(--bg-elev,#11151c);padding:1px 5px;border-radius:3px">dc_released</code>,
+              <code style="font-family:monospace;font-size:10px;background:var(--bg-elev,#11151c);padding:1px 5px;border-radius:3px">dc_rejected</code>,
+              <code style="font-family:monospace;font-size:10px;background:var(--bg-elev,#11151c);padding:1px 5px;border-radius:3px">csv_confirmed</code>,
+              <code style="font-family:monospace;font-size:10px;background:var(--bg-elev,#11151c);padding:1px 5px;border-radius:3px">csv_failed</code>.
+              Pending and SE Review requests are not affected.
+            </div>
+            <div id="maint-dc-count" style="font-size:11px;color:var(--text-dim,#5b6373);margin-top:8px;font-family:monospace">—</div>
+          </div>
+          <button class="btn btn-err" id="btn-del-dc" onclick="confirmDeleteDCActioned()" style="flex-shrink:0;align-self:center" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete Actioned
+          </button>
+        </div>
+      </div>
+
+      <!-- Delete ALL -->
+      <div style="background:var(--bg-panel,#151a23);border:1px solid var(--border,#1e2531);border-radius:10px;padding:16px 18px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--text,#e6e9ef);margin-bottom:5px">Delete ALL Release Requests</div>
+            <div style="font-size:11px;color:var(--text-muted,#8a93a3);line-height:1.7">
+              Permanently deletes every record in <code style="font-family:monospace;font-size:10px;background:var(--bg-elev,#11151c);padding:1px 5px;border-radius:3px">clearance_release_requests</code> including pending ones. Use only to fully reset the workflow.
+            </div>
+            <div id="maint-all-count" style="font-size:11px;color:var(--text-dim,#5b6373);margin-top:8px;font-family:monospace">—</div>
+          </div>
+          <button class="btn btn-err" id="btn-del-all" onclick="confirmDeleteAllRequests()" style="flex-shrink:0;align-self:center;opacity:.75" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Delete All
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div><!-- end content-maint -->
+
+<!-- ══ NEW WIR MODAL ══ -->
+<div class="modal-overlay" id="wir-modal">
+  <div class="modal">
+    <h2 id="wir-modal-title">New WIR Activity</h2>
+    <p id="wir-modal-sub">Add a new activity code to the tracker so it can be matched during CSV import.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Activity Code *</label>
+        <input class="form-input" id="wir-code" placeholder="e.g. 3600" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Discipline *</label>
+        <select class="form-select" id="wir-disc">
+          <option value="mechanical">Mechanical</option>
+          <option value="electrical">Electrical</option>
+          <option value="civil">Civil</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Activity Name *</label>
+      <input class="form-input" id="wir-name" placeholder="e.g. Fire Fighting — GF Slab">
+    </div>
+    <div class="modal-err" id="wir-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeWirModal()">Cancel</button>
+      <button class="btn btn-primary" id="wir-save-btn" onclick="saveWir()">Save Activity</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NEW CLEARANCE MODAL ══ -->
+<div class="modal-overlay" id="clr-modal">
+  <div class="modal">
+    <h2 id="clr-modal-title">New Clearance Item</h2>
+    <p id="clr-modal-sub">Add a new clearance code. Once added it will be matched during CSV import instead of being skipped.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Clearance Code *</label>
+        <input class="form-input" id="clr-code" placeholder="e.g. CLR-MEP-001" maxlength="40">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Discipline *</label>
+        <select class="form-select" id="clr-disc">
+          <option value="mechanical">Mechanical</option>
+          <option value="electrical">Electrical</option>
+          <option value="civil">Civil</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Clearance Name *</label>
+      <input class="form-input" id="clr-name" placeholder="e.g. MEP Rough-in Clearance — Level 1">
+    </div>
+    <div class="modal-err" id="clr-err"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeClrModal()">Cancel</button>
+      <button class="btn btn-primary" id="clr-save-btn" onclick="saveClr()">Save Clearance Item</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+// ── CONFIG ──
+const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+function getH() {
+  let tok = window.__MEP_TOKEN__;
+  if (!tok) {
+    try {
+      const s = localStorage.getItem('mep_session');
+      if (s) { const j = JSON.parse(s); if (j && j.access_token && j.expires_at && Date.now() < j.expires_at - 30000) tok = j.access_token; }
+    } catch(e) {}
+  }
+  return { 'apikey': KEY, 'Authorization': 'Bearer ' + (tok || KEY), 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+}
+
+// ── AUTH via postMessage ──
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'session') {
+    window.__MEP_TOKEN__ = e.data.token;
+    window.__MEP_USER__  = e.data.user;
+    window.__MEP_PERMS__ = e.data.user?.permissions || [];
+    checkAccess();
+  }
+  if (e.data && e.data.type === 'theme') applyTheme(e.data.theme);
+});
+
+// ── THEME ──
+function applyTheme(t) {
+  document.body.classList.toggle('light-theme', t === 'light');
+}
+window.addEventListener('storage', e => {
+  if (e.key === 'mep_theme') applyTheme(e.newValue);
+});
+applyTheme(localStorage.getItem('mep_theme'));
+
+// In-shell detection
+if (window.self !== window.top) document.body.classList.add('in-shell');
+
+// ── CLOCK ──
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-GB');
+}
+setInterval(tick, 1000); tick();
+
+// ── STATE ──
+let wirAll = [], clrAll = [];
+let currentTab = 'wir';
+let editingWirId = null, editingClrId = null;
+
+// ── TAB SWITCH ──
+function switchTab(tab) {
+  currentTab = tab;
+  ['wir','clr','map','alias','maint'].forEach(t => {
+    document.getElementById('tab-'+t)?.classList.toggle('active', t === tab);
+    document.getElementById('content-'+t)?.classList.toggle('active', t === tab);
+  });
+  if (tab === 'map') {
+    if (mapAll.length === 0 && !window._mapLoading) {
+      window._mapLoading = true;
+      loadMap().finally(() => { window._mapLoading = false; });
+    } else {
+      buildMapList();
+    }
+  }
+  if (tab === 'alias') {
+    if (aliasAll.length === 0 && !window._aliasLoading) {
+      window._aliasLoading = true;
+      loadAlias().finally(() => { window._aliasLoading = false; });
+    } else {
+      buildAliasList();
+    }
+  }
+  if(tab==='maint') loadMaintCounts();
+}
+
+// ── TOAST ──
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  const icons = { success: '✓', error: '✕', info: 'ℹ' };
+  el.innerHTML = `<span style="font-size:15px">${icons[type]}</span><span>${msg}</span>`;
+  c.appendChild(el);
+  setTimeout(() => { el.style.animation = 'fadeOut .3s ease forwards'; setTimeout(() => el.remove(), 300); }, 3200);
+}
+
+// ── FETCH ALL (paginated) ──
+async function fetchAll(endpoint) {
+  let all = [], offset = 0;
+  while (true) {
+    const r = await fetch(`${SB}/rest/v1/${endpoint}&limit=500&offset=${offset}`, { headers: getH() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!Array.isArray(d) || !d.length) break;
+    all = all.concat(d);
+    if (d.length < 500) break;
+    offset += 500;
+  }
+  return all;
+}
+
+// ── DISCIPLINE BADGE ──
+function discBadge(d) {
+  const d2 = (d || '').toLowerCase();
+  const map = { mechanical: ['disc-mechanical','Mechanical'], electrical: ['disc-electrical','Electrical'], civil: ['disc-civil','Civil'] };
+  const [cls, label] = map[d2] || ['disc-civil', d || '—'];
+  return `<span class="td-disc ${cls}">${label}</span>`;
+}
+
+function statusBadge(active) {
+  return active
+    ? `<span style="font-size:11px;color:var(--approved);font-weight:600">Active</span>`
+    : `<span style="font-size:11px;color:var(--text-muted)">Inactive</span>`;
+}
+
+// ════════════════════════════════════
+// ── WIR ACTIVITIES ──
+// ════════════════════════════════════
+async function loadWir() {
+  try {
+    wirAll = await fetchAll('activities?select=id,activity_code,activity_name,discipline,is_active&order=activity_code.asc');
+    document.getElementById('badge-wir').textContent = wirAll.length;
+    renderWir(wirAll);
+    renderWirStats(wirAll);
+  } catch(e) {
+    document.getElementById('wir-tbody').innerHTML = `<tr class="loading-row"><td colspan="5" style="color:var(--rejected)">Error loading: ${e.message}</td></tr>`;
+    toast('Failed to load WIR activities', 'error');
+  }
+}
+
+function refreshWir() { loadWir(); }
+
+function renderWirStats(data) {
+  const active = data.filter(r => r.is_active).length;
+  const mech   = data.filter(r => r.discipline === 'mechanical').length;
+  const elec   = data.filter(r => r.discipline === 'electrical').length;
+  document.getElementById('wir-stats').innerHTML = `
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${data.length}</strong> total</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--approved)"></div><strong>${active}</strong> active</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${mech}</strong> mechanical</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--progress)"></div><strong>${elec}</strong> electrical</div>
+  `;
+}
+
+function filterWir() {
+  const q    = document.getElementById('wir-search').value.toLowerCase();
+  const disc = document.getElementById('wir-disc-filter').value;
+  const filtered = wirAll.filter(r => {
+    const matchQ = !q || (r.activity_code || '').toLowerCase().includes(q) || (r.activity_name || '').toLowerCase().includes(q);
+    const matchD = !disc || r.discipline === disc;
+    return matchQ && matchD;
+  });
+  renderWir(filtered);
+}
+
+function renderWir(data) {
+  const tbody = document.getElementById('wir-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="5" style="color:var(--text-muted)">No activities match.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.activity_code || '—'}</td>
+      <td class="td-name">${r.activity_name || '—'}</td>
+      <td>${discBadge(r.discipline)}</td>
+      <td>${statusBadge(r.is_active)}</td>
+      <td>
+        <div class="td-actions">
+          <button class="icon-btn" title="Edit" onclick="editWir(${r.id})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn del" title="Deactivate" onclick="toggleWir(${r.id}, ${r.is_active})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openWirModal(reset = true) {
+  if (reset) {
+    editingWirId = null;
+    document.getElementById('wir-modal-title').textContent = 'New WIR Activity';
+    document.getElementById('wir-modal-sub').textContent = 'Add a new activity code so it can be matched during CSV import.';
+    document.getElementById('wir-code').value = '';
+    document.getElementById('wir-name').value = '';
+    document.getElementById('wir-disc').value = 'mechanical';
+    document.getElementById('wir-save-btn').textContent = 'Save Activity';
+  }
+  document.getElementById('wir-err').style.display = 'none';
+  document.getElementById('wir-modal').classList.add('open');
+  document.getElementById('wir-code').focus();
+}
+function closeWirModal() { document.getElementById('wir-modal').classList.remove('open'); }
+
+function editWir(id) {
+  const r = wirAll.find(x => x.id === id);
+  if (!r) return;
+  editingWirId = id;
+  document.getElementById('wir-modal-title').textContent = 'Edit WIR Activity';
+  document.getElementById('wir-modal-sub').textContent = 'Update the activity code details.';
+  document.getElementById('wir-code').value = r.activity_code || '';
+  document.getElementById('wir-name').value = r.activity_name || '';
+  document.getElementById('wir-disc').value = r.discipline || 'mechanical';
+  document.getElementById('wir-save-btn').textContent = 'Update Activity';
+  openWirModal(false);
+}
+
+async function toggleWir(id, currentActive) {
+  const action = currentActive ? 'deactivate' : 'activate';
+  if (!confirm(`Are you sure you want to ${action} this activity?`)) return;
+  try {
+    const r = await fetch(`${SB}/rest/v1/activities?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: getH(),
+      body: JSON.stringify({ is_active: !currentActive })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast(`Activity ${action}d`, 'success');
+    await loadWir();
+  } catch(e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function saveWir() {
+  const code = document.getElementById('wir-code').value.trim();
+  const name = document.getElementById('wir-name').value.trim();
+  const disc = document.getElementById('wir-disc').value;
+  const errEl = document.getElementById('wir-err');
+  errEl.style.display = 'none';
+
+  if (!code || !name) { errEl.textContent = 'Code and name are required.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('wir-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    if (editingWirId) {
+      const r = await fetch(`${SB}/rest/v1/activities?id=eq.${editingWirId}`, {
+        method: 'PATCH', headers: getH(),
+        body: JSON.stringify({ activity_code: code, activity_name: name, discipline: disc })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast('Activity updated', 'success');
+    } else {
+      const r = await fetch(`${SB}/rest/v1/activities`, {
+        method: 'POST', headers: getH(),
+        body: JSON.stringify({ activity_code: code, activity_name: name, discipline: disc, is_active: true })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast('Activity created — CSV import will now match "' + code + '"', 'success');
+    }
+    closeWirModal();
+    await loadWir();
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = editingWirId ? 'Update Activity' : 'Save Activity';
+  }
+}
+
+// ════════════════════════════════════
+// ── CLEARANCE ITEMS ──
+// ════════════════════════════════════
+async function loadClr() {
+  try {
+    clrAll = await fetchAll('clearance_activities?select=id,clearance_code,clearance_name,discipline,is_active&order=clearance_code.asc');
+    document.getElementById('badge-clr').textContent = clrAll.length;
+    renderClr(clrAll);
+    renderClrStats(clrAll);
+  } catch(e) {
+    document.getElementById('clr-tbody').innerHTML = `<tr class="loading-row"><td colspan="5" style="color:var(--rejected)">Error loading: ${e.message}</td></tr>`;
+    toast('Failed to load clearance items', 'error');
+  }
+}
+
+function refreshClr() { loadClr(); }
+
+function renderClrStats(data) {
+  const active = data.filter(r => r.is_active).length;
+  const mech   = data.filter(r => r.discipline === 'mechanical').length;
+  const elec   = data.filter(r => r.discipline === 'electrical').length;
+  document.getElementById('clr-stats').innerHTML = `
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${data.length}</strong> total</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--approved)"></div><strong>${active}</strong> active</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${mech}</strong> mechanical</div>
+    <div class="stat-chip"><div class="stat-dot" style="background:var(--progress)"></div><strong>${elec}</strong> electrical</div>
+  `;
+}
+
+function filterClr() {
+  const q    = document.getElementById('clr-search').value.toLowerCase();
+  const disc = document.getElementById('clr-disc-filter').value;
+  const filtered = clrAll.filter(r => {
+    const matchQ = !q || (r.clearance_code || '').toLowerCase().includes(q) || (r.clearance_name || '').toLowerCase().includes(q);
+    const matchD = !disc || r.discipline === disc;
+    return matchQ && matchD;
+  });
+  renderClr(filtered);
+}
+
+function renderClr(data) {
+  const tbody = document.getElementById('clr-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr class="loading-row"><td colspan="5" style="color:var(--text-muted)">No clearance items match.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td>${r.clearance_code || '—'}</td>
+      <td class="td-name">${r.clearance_name || '—'}</td>
+      <td>${discBadge(r.discipline)}</td>
+      <td>${statusBadge(r.is_active)}</td>
+      <td>
+        <div class="td-actions">
+          <button class="icon-btn" title="Edit" onclick="editClr(${r.id})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn del" title="Deactivate" onclick="toggleClr(${r.id}, ${r.is_active})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openClrModal(reset = true) {
+  if (reset) {
+    editingClrId = null;
+    document.getElementById('clr-modal-title').textContent = 'New Clearance Item';
+    document.getElementById('clr-modal-sub').textContent = 'Add a new clearance code. It will be matched during CSV import instead of being skipped.';
+    document.getElementById('clr-code').value = '';
+    document.getElementById('clr-name').value = '';
+    document.getElementById('clr-disc').value = 'mechanical';
+    document.getElementById('clr-save-btn').textContent = 'Save Clearance Item';
+  }
+  document.getElementById('clr-err').style.display = 'none';
+  document.getElementById('clr-modal').classList.add('open');
+  document.getElementById('clr-code').focus();
+}
+function closeClrModal() { document.getElementById('clr-modal').classList.remove('open'); }
+
+function editClr(id) {
+  const r = clrAll.find(x => x.id === id);
+  if (!r) return;
+  editingClrId = id;
+  document.getElementById('clr-modal-title').textContent = 'Edit Clearance Item';
+  document.getElementById('clr-modal-sub').textContent = 'Update the clearance code details.';
+  document.getElementById('clr-code').value = r.clearance_code || '';
+  document.getElementById('clr-name').value = r.clearance_name || '';
+  document.getElementById('clr-disc').value = r.discipline || 'mechanical';
+  document.getElementById('clr-save-btn').textContent = 'Update Clearance Item';
+  openClrModal(false);
+}
+
+async function toggleClr(id, currentActive) {
+  const action = currentActive ? 'deactivate' : 'activate';
+  if (!confirm(`Are you sure you want to ${action} this clearance item?`)) return;
+  try {
+    const r = await fetch(`${SB}/rest/v1/clearance_activities?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: getH(),
+      body: JSON.stringify({ is_active: !currentActive })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    toast(`Clearance item ${action}d`, 'success');
+    await loadClr();
+  } catch(e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function saveClr() {
+  const code = document.getElementById('clr-code').value.trim();
+  const name = document.getElementById('clr-name').value.trim();
+  const disc = document.getElementById('clr-disc').value;
+  const errEl = document.getElementById('clr-err');
+  errEl.style.display = 'none';
+
+  if (!code || !name) { errEl.textContent = 'Code and name are required.'; errEl.style.display = 'block'; return; }
+
+  const btn = document.getElementById('clr-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    if (editingClrId) {
+      const r = await fetch(`${SB}/rest/v1/clearance_activities?id=eq.${editingClrId}`, {
+        method: 'PATCH', headers: getH(),
+        body: JSON.stringify({ clearance_code: code, clearance_name: name, discipline: disc })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast('Clearance item updated', 'success');
+    } else {
+      const r = await fetch(`${SB}/rest/v1/clearance_activities`, {
+        method: 'POST', headers: getH(),
+        body: JSON.stringify({ clearance_code: code, clearance_name: name, discipline: disc, is_active: true })
+      });
+      if (!r.ok) throw new Error(await r.text());
+      toast('Clearance item created — "' + code + '" will now match on import', 'success');
+    }
+    closeClrModal();
+    await loadClr();
+  } catch(e) {
+    errEl.textContent = 'Error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = editingClrId ? 'Update Clearance Item' : 'Save Clearance Item';
+  }
+}
+
+// ── CLOSE MODALS ON OVERLAY CLICK ──
+document.getElementById('wir-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeWirModal(); });
+document.getElementById('clr-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeClrModal(); });
+
+
+// ════════════════════════════════════
+// ── WIR MAPPINGS ──
+// ════════════════════════════════════
+let mapAll = [];   // [{id, clr_code, clr_name, wir_code, wir_name, discipline}]
+let wirAllMap = {};  // activity_code → {id, name, discipline}
+let clrAllMap = {};  // clearance_code → {id, name, discipline}
+
+async function loadMap() {
+  try {
+    // Load activities and clearances if not already loaded
+    if (!Object.keys(wirAllMap).length) {
+      const w = await fetchAll('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true&order=activity_code.asc');
+      w.forEach(a => { wirAllMap[a.activity_code] = {id: a.id, name: a.activity_name, discipline: a.discipline}; });
+      // Populate selects
+      const ws = document.getElementById('map-wir-sel');
+      if (ws.options.length <= 1) {
+        w.forEach(a => { const o = document.createElement('option'); o.value = a.activity_code; o.textContent = `${a.activity_code} — ${a.activity_name}`; ws.appendChild(o); });
+        ws.addEventListener('change', updateMapPreview);
+      }
+    }
+    if (!Object.keys(clrAllMap).length) {
+      const cl = await fetchAll('clearance_activities?select=id,clearance_code,clearance_name,discipline&is_active=eq.true&order=clearance_code.asc');
+      cl.forEach(c => { clrAllMap[c.clearance_code] = {id: c.id, name: c.clearance_name, discipline: c.discipline}; });
+      const cs = document.getElementById('map-clr-sel');
+      if (cs.options.length <= 1) {
+        cl.forEach(c => { const o = document.createElement('option'); o.value = c.clearance_code; o.textContent = `${c.clearance_code} — ${c.clearance_name}`; cs.appendChild(o); });
+        cs.addEventListener('change', updateMapPreview);
+      }
+    }
+    // Load mappings from activity_dependencies
+    const rows = await fetchAll('activity_dependencies?select=id,clearance_activity_id,required_wir_activity_id,discipline,villa_type&dependent_type=eq.clearance&is_active=eq.true');
+    // Build id → code reverse maps
+    const clrIdToCode = {}, wirIdToCode = {};
+    Object.entries(clrAllMap).forEach(([code, c]) => clrIdToCode[c.id] = code);
+    Object.entries(wirAllMap).forEach(([code, w]) => wirIdToCode[w.id] = code);
+    mapAll = rows.map(r => {
+      const clrCode = clrIdToCode[r.clearance_activity_id] || '?';
+      const wirCode = wirIdToCode[r.required_wir_activity_id] || '?';
+      return {
+        id: r.id,
+        clr_code: clrCode,
+        clr_name: clrAllMap[clrCode]?.name || clrCode,
+        wir_code: wirCode,
+        wir_name: wirAllMap[wirCode]?.name || wirCode,
+        discipline: r.discipline,
+        villa_type: r.villa_type || null
+      };
+    });
+    document.getElementById('badge-map').textContent = mapAll.length;
+    const clrCount = new Set(mapAll.map(m => m.clr_code)).size;
+    document.getElementById('map-stats').innerHTML = `
+      <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${mapAll.length}</strong> total mappings</div>
+      <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${clrCount}</strong> clearances mapped</div>
+    `;
+    buildMapList();
+  } catch(e) {
+    toast('Failed to load mappings: ' + e.message, 'error');
+  }
+}
+
+function filterMap() { buildMapList(); }
+
+function buildMapList() {
+  const q = (document.getElementById('map-search')?.value || '').toLowerCase().trim();
+  const list = document.getElementById('map-list');
+  if (!list) return;
+
+  // Group by clearance code
+  const grouped = {};
+  mapAll.forEach(m => {
+    if (!grouped[m.clr_code]) grouped[m.clr_code] = [];
+    grouped[m.clr_code].push(m);
+  });
+
+  let entries = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+  if (q) {
+    entries = entries.filter(([cc, items]) =>
+      cc.toLowerCase().includes(q) ||
+      items[0].clr_name.toLowerCase().includes(q) ||
+      items.some(m => m.wir_code.toLowerCase().includes(q) || m.wir_name.toLowerCase().includes(q))
+    );
+  }
+
+  if (!entries.length) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">No mappings found.</div>';
+    return;
+  }
+
+  list.innerHTML = entries.map(([clrCode, items]) => {
+    const wirRows = items.map(m => {
+      const disc = wirAllMap[m.wir_code]?.discipline || m.discipline || 'mechanical';
+      return `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--approved);font-size:11px">↳ WIR</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--accent-text);background:var(--accent-soft);padding:2px 6px;border-radius:4px">${m.wir_code}</span>
+        <span style="color:var(--text-dim);flex:1">${m.wir_name}</span>
+        <span class="td-disc disc-${disc}" style="font-size:9px;padding:1px 7px">${disc}</span>
+        ${m.villa_type ? `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;background:var(--progress-bg);color:var(--progress);white-space:nowrap">${m.villa_type} only</span>` : '<span style="font-size:9px;color:var(--text-dim)">all types</span>'}
+        <button class="icon-btn del" title="Remove" onclick="removeMapping(${m.id},'${m.clr_code}','${m.wir_code}')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`;
+    }).join('');
+
+    return `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-panel);border-bottom:1px solid var(--border)">
+        <span style="font-family:var(--mono);font-size:12px;color:var(--accent-text);background:var(--accent-soft);padding:2px 8px;border-radius:4px">${clrCode}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text);flex:1">${items[0].clr_name}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${items.length} WIR${items.length !== 1 ? 's' : ''}</span>
+      </div>
+      <div style="padding:4px 14px">${wirRows}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateMapPreview() {
+  const clrCode = document.getElementById('map-clr-sel')?.value;
+  const wirCode = document.getElementById('map-wir-sel')?.value;
+  const prev = document.getElementById('map-preview');
+  if (!clrCode || !wirCode) { prev.innerHTML = 'Select a clearance and WIR to preview.'; prev.style.color = 'var(--text-muted)'; return; }
+  const clrName = clrAllMap[clrCode]?.name || clrCode;
+  const wirName = wirAllMap[wirCode]?.name || wirCode;
+  const wirDisc = wirAllMap[wirCode]?.discipline || 'mechanical';
+  const exists = mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode);
+  const vtPrev = document.getElementById('map-vtype-sel')?.value || null;
+  const existsForType = mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode && (m.villa_type||null) === vtPrev);
+  prev.style.color = 'var(--text)';
+  prev.innerHTML = `<div style="font-size:11px"><b style="color:var(--accent-text)">${clrCode}</b> ${clrName}<br>
+    <span style="color:var(--approved)">↳ requires WIR</span> <b style="color:var(--progress)">${wirCode}</b> ${wirName} to be Approved<br>
+    <span style="color:var(--text-dim)">Discipline: </span><span class="td-disc disc-${wirDisc}" style="font-size:9px;padding:1px 7px">${wirDisc}</span>
+    <span style="color:var(--text-dim);margin-left:8px">Applies to: </span><b style="color:var(--progress-text)">${vtPrev || 'ALL villa types'}</b></div>
+    ${existsForType ? '<div style="color:var(--rejected);margin-top:6px;font-size:10px">⚠ This exact mapping already exists.</div>' : ''}`;
+}
+
+async function addMapping() {
+  const clrCode = document.getElementById('map-clr-sel')?.value;
+  const wirCode = document.getElementById('map-wir-sel')?.value;
+  const disc    = wirAllMap[wirCode]?.discipline || 'mechanical';
+  const alertEl = document.getElementById('map-alert');
+  alertEl.innerHTML = '';
+  const villaType = document.getElementById('map-vtype-sel')?.value || null;
+  if (!clrCode || !wirCode) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Select both a clearance and a WIR.</div>'; return; }
+  if (mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode && (m.villa_type||null) === villaType)) {
+    alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">This exact mapping already exists.</div>'; return;
+  }
+  const clrId = clrAllMap[clrCode]?.id;
+  const wirId = wirAllMap[wirCode]?.id;
+  if (!clrId || !wirId) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">IDs not found — refresh and try again.</div>'; return; }
+  try {
+    const r = await fetch(`${SB}/rest/v1/activity_dependencies`, {
+      method: 'POST',
+      headers: {...getH(), 'Prefer': 'return=representation'},
+      body: JSON.stringify({clearance_activity_id: clrId, required_wir_activity_id: wirId, discipline: disc, dependent_type: 'clearance', is_active: true, villa_type: villaType||null})
+    });
+    if (!r.ok) throw new Error(await r.text());
+    alertEl.innerHTML = '<div style="color:var(--approved);font-size:11px;padding:4px 0">✓ Mapping added successfully.</div>';
+    document.getElementById('map-clr-sel').value = '';
+    document.getElementById('map-wir-sel').value = '';
+    document.getElementById('map-vtype-sel').value = '';
+    document.getElementById('map-preview').innerHTML = 'Select a clearance and WIR to preview.';
+    await loadMap();
+    setTimeout(() => { alertEl.innerHTML = ''; }, 3000);
+  } catch(e) {
+    alertEl.innerHTML = `<div style="color:var(--rejected);font-size:11px;padding:4px 0">Error: ${e.message}</div>`;
+  }
+}
+
+async function removeMapping(depId, clrCode, wirCode) {
+  if (!confirm(`Remove mapping?\n${clrCode} → WIR ${wirCode}\n\nThis clearance will no longer require this WIR.`)) return;
+  try {
+    const r = await fetch(`${SB}/rest/v1/activity_dependencies?id=eq.${depId}`, {
+      method: 'DELETE',
+      headers: {...getH(), 'Prefer': 'return=minimal'}
+    });
+    if (!r.ok) throw new Error(await r.text());
+    toast('Mapping removed', 'info');
+    await loadMap();
+  } catch(e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+function openMapModal() { switchTab('map'); }
+
+
+
+// ════════════════════════════════════
+// ── CLEARANCE ALIASES ──
+// ════════════════════════════════════
+let aliasAll = [];  // [{id, canonical_code, alias_code, note}]
+
+async function loadAlias() {
+  try {
+    // Populate dropdowns from already-loaded clearance data if available
+    const allClrs = Object.keys(clrAll.length ? {} : clrAll).length
+      ? clrAll
+      : await fetchAll('clearance_activities?select=id,clearance_code,clearance_name&is_active=eq.true&order=clearance_code.asc');
+
+    const canSel = document.getElementById('alias-canonical-sel');
+    const oldSel = document.getElementById('alias-old-sel');
+    if (canSel.options.length <= 1) {
+      // Use clrAll if loaded, else fetch
+      let clrs = clrAll;
+      if (!clrs.length) {
+        clrs = await fetchAll('clearance_activities?select=id,clearance_code,clearance_name&is_active=eq.true&order=clearance_code.asc');
+      }
+      clrs.forEach(c => {
+        [canSel, oldSel].forEach(sel => {
+          const o = document.createElement('option');
+          o.value = c.clearance_code;
+          o.textContent = `${c.clearance_code} — ${c.clearance_name}`;
+          sel.appendChild(o);
+        });
+      });
+    }
+
+    aliasAll = await fetchAll('clearance_aliases?select=id,canonical_code,alias_code,note&is_active=eq.true&order=canonical_code.asc');
+    document.getElementById('badge-alias').textContent = aliasAll.length;
+    document.getElementById('alias-stats').innerHTML = `
+      <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${aliasAll.length}</strong> total aliases</div>
+      <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${new Set(aliasAll.map(a=>a.canonical_code)).size}</strong> canonical codes</div>
+    `;
+    buildAliasList();
+  } catch(e) {
+    toast('Failed to load aliases: ' + e.message, 'error');
+  }
+}
+
+function filterAlias() { buildAliasList(); }
+
+function buildAliasList() {
+  const q = (document.getElementById('alias-search')?.value || '').toLowerCase().trim();
+  const list = document.getElementById('alias-list');
+  if (!list) return;
+
+  // Group by canonical code
+  const grouped = {};
+  aliasAll.forEach(a => {
+    if (!grouped[a.canonical_code]) grouped[a.canonical_code] = [];
+    grouped[a.canonical_code].push(a);
+  });
+
+  let entries = Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0]));
+  if (q) {
+    entries = entries.filter(([cc, items]) =>
+      cc.toLowerCase().includes(q) || items.some(a => a.alias_code.toLowerCase().includes(q))
+    );
+  }
+
+  if (!entries.length) {
+    list.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px">No aliases defined. Add one using the form.</div>';
+    return;
+  }
+
+  list.innerHTML = entries.map(([canonical, items]) => {
+    const clrName = clrAll.find(c => c.clearance_code === canonical)?.clearance_name || canonical;
+    const rows = items.map(a => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border)">
+        <span style="color:var(--progress);font-size:11px">↑ replaces</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--progress);background:var(--progress-bg);padding:2px 6px;border-radius:4px">${a.alias_code}</span>
+        ${a.note ? `<span style="color:var(--text-dim);flex:1;font-size:11px">${a.note}</span>` : '<span style="flex:1"></span>'}
+        <button class="icon-btn del" title="Remove" onclick="removeAlias(${a.id})">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>`).join('');
+    return `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-panel);border-bottom:1px solid var(--border)">
+        <span style="font-family:var(--mono);font-size:12px;color:var(--accent-text);background:var(--accent-soft);padding:2px 8px;border-radius:4px">${canonical}</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text);flex:1">${clrName}</span>
+        <span style="font-size:11px;color:var(--text-muted)">${items.length} alias${items.length !== 1 ? 'es' : ''}</span>
+      </div>
+      <div style="padding:4px 14px">${rows}</div>
+    </div>`;
+  }).join('');
+}
+
+function openAliasModal() { switchTab('alias'); }
+
+async function addAlias() {
+  const canonical = document.getElementById('alias-canonical-sel')?.value;
+  const oldCode   = document.getElementById('alias-old-sel')?.value;
+  const note      = document.getElementById('alias-note')?.value?.trim() || null;
+  const alertEl   = document.getElementById('alias-alert');
+  alertEl.innerHTML = '';
+
+  if (!canonical || !oldCode) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Select both codes.</div>'; return; }
+  if (canonical === oldCode)  { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Canonical and alias cannot be the same code.</div>'; return; }
+  if (aliasAll.some(a => a.canonical_code === canonical && a.alias_code === oldCode)) {
+    alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">This alias already exists.</div>'; return;
+  }
+
+  try {
+    const r = await fetch(`${SB}/rest/v1/clearance_aliases`, {
+      method: 'POST',
+      headers: {...getH(), 'Prefer': 'return=representation'},
+      body: JSON.stringify({canonical_code: canonical, alias_code: oldCode, note, is_active: true})
+    });
+    if (!r.ok) throw new Error(await r.text());
+    alertEl.innerHTML = '<div style="color:var(--approved);font-size:11px;padding:4px 0">✓ Alias added.</div>';
+    document.getElementById('alias-canonical-sel').value = '';
+    document.getElementById('alias-old-sel').value = '';
+    document.getElementById('alias-note').value = '';
+    await loadAlias();
+    setTimeout(() => { alertEl.innerHTML = ''; }, 3000);
+  } catch(e) {
+    alertEl.innerHTML = `<div style="color:var(--rejected);font-size:11px;padding:4px 0">Error: ${e.message}</div>`;
+  }
+}
+
+async function removeAlias(id) {
+  if (!confirm('Remove this alias?')) return;
+  try {
+    const r = await fetch(`${SB}/rest/v1/clearance_aliases?id=eq.${id}`, {
+      method: 'DELETE', headers: {...getH(), 'Prefer': 'return=minimal'}
+    });
+    if (!r.ok) throw new Error(await r.text());
+    toast('Alias removed', 'info');
+    await loadAlias();
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+
+// ── PERMISSION GUARD ──
+function hasPerm(p){
+  if(window.__MEP_PERMS__&&window.__MEP_PERMS__.length) return window.__MEP_PERMS__.includes(p);
+  try{
+    const s=localStorage.getItem('mep_session');
+    if(s){const j=JSON.parse(s);return(j.profile?.permissions||j.permissions||[]).includes(p);}
+  }catch(e){}
+  return false;
+}
+function isAdmin(){return hasPerm('manage_users')&&hasPerm('manage_system');}
+
+function checkAccess(){
+  if(isAdmin()||hasPerm('manage_activities')) return; // allowed
+  // No permission — show overlay and block the page
+  document.getElementById('access-denied').style.display='flex';
+  document.getElementById('access-denied').style.pointerEvents='all';
+  // Hide page content
+  document.querySelector('.page-wrap').style.visibility='hidden';
+}
+
+// ── INIT ──
+// Run access check on load (catches users who already have a session in localStorage)
+checkAccess();
+loadWir();
+loadClr();
+
+// ══ MAINTENANCE ══
+const ACTIONED_STATUSES=['dc_released','dc_rejected','csv_confirmed','csv_failed'];
+let _maintDeleting=false;
+
+async function loadMaintCounts(){
+  try{
+    const [actioned,all]=await Promise.all([
+      fetch(SB+'/rest/v1/clearance_release_requests?select=id&status=in.(dc_released,dc_rejected,csv_confirmed,csv_failed)',{headers:getH()}).then(r=>r.json()),
+      fetch(SB+'/rest/v1/clearance_release_requests?select=id',{headers:getH()}).then(r=>r.json()),
+    ]);
+    const ac=Array.isArray(actioned)?actioned.length:0;
+    const tc=Array.isArray(all)?all.length:0;
+    const e1=document.getElementById('maint-dc-count');
+    const e2=document.getElementById('maint-all-count');
+    if(e1) e1.textContent=ac+' actioned records';
+    if(e2) e2.textContent=tc+' total records';
+    const b1=document.getElementById('btn-del-dc');
+    const b2=document.getElementById('btn-del-all');
+    if(b1) b1.disabled=ac===0||!isAdmin();
+    if(b2) b2.disabled=tc===0||!isAdmin();
+  }catch(e){
+    const el=document.getElementById('maint-dc-count');
+    if(el) el.textContent='Error: '+e.message;
+  }
+}
+
+function confirmDeleteDCActioned(){
+  if(!isAdmin()){toast('Admin access required','err');return;}
+  const c=document.getElementById('maint-dc-count')?.textContent.match(/^\d+/)?.[0]||'?';
+  showMaintConfirm('Delete DC Actioned Requests',
+    'This will permanently delete <strong>'+c+'</strong> actioned requests (dc_released, dc_rejected, csv_confirmed, csv_failed).<br><br>Pending and SE Review requests will not be affected.',
+    'Delete '+c+' Records', deleteDCActioned);
+}
+
+function confirmDeleteAllRequests(){
+  if(!isAdmin()){toast('Admin access required','err');return;}
+  const c=document.getElementById('maint-all-count')?.textContent.match(/^\d+/)?.[0]||'?';
+  showMaintConfirm('Delete ALL Release Requests',
+    'This will permanently delete <strong>ALL '+c+'</strong> release requests including pending ones.<br><br>This fully resets the release workflow.',
+    'Delete ALL '+c+' Records', deleteAllRequests);
+}
+
+function showMaintConfirm(title,bodyHtml,label,onConfirm){
+  document.getElementById('maint-overlay')?.remove();
+  const ov=document.createElement('div');
+  ov.id='maint-overlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9000;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML=`<div style="background:var(--bg-panel,#151a23);border:1px solid var(--rejected-bd,#6b2530);border-radius:12px;width:440px;padding:24px;box-shadow:0 24px 64px rgba(0,0,0,.9)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--rejected,#ff8a99)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div style="font-size:14px;font-weight:700;color:var(--rejected,#ff8a99)">${title}</div>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted,#8a93a3);line-height:1.7;margin-bottom:18px">${bodyHtml}</div>
+    <div style="font-size:11px;color:var(--text-dim,#5b6373);margin-bottom:10px">Type <strong style="color:var(--rejected,#ff8a99);font-family:monospace">DELETE</strong> to confirm:</div>
+    <input id="maint-ci" type="text" autocomplete="off" placeholder="Type DELETE here"
+      style="width:100%;background:var(--bg-input,#0d1118);border:1px solid var(--rejected-bd,#6b2530);border-radius:7px;padding:8px 12px;color:var(--text,#e6e9ef);font-size:13px;font-family:monospace;margin-bottom:14px"
+      oninput="document.getElementById('maint-cb').disabled=this.value!=='DELETE'">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-ghost" onclick="document.getElementById('maint-overlay').remove()">Cancel</button>
+      <button class="btn btn-err" id="maint-cb" disabled onclick="execMaint()">${label}</button>
+    </div>
+    <div id="maint-msg" style="font-size:11px;margin-top:10px;color:var(--rejected,#ff8a99);text-align:center;min-height:16px"></div>
+  </div>`;
+  window._maintCb=onConfirm;
+  document.body.appendChild(ov);
+  setTimeout(()=>document.getElementById('maint-ci')?.focus(),80);
+}
+
+async function execMaint(){
+  if(_maintDeleting)return;
+  const btn=document.getElementById('maint-cb');
+  const msg=document.getElementById('maint-msg');
+  if(btn){btn.disabled=true;btn.textContent='Deleting…';}
+  _maintDeleting=true;
+  try{
+    await window._maintCb();
+    document.getElementById('maint-overlay')?.remove();
+    loadMaintCounts();
+  }catch(e){
+    if(msg) msg.textContent='Error: '+e.message;
+    if(btn){btn.disabled=false;btn.textContent='Retry';}
+  }finally{_maintDeleting=false;}
+}
+
+async function deleteDCActioned(){
+  for(const st of ACTIONED_STATUSES){
+    const r=await fetch(SB+'/rest/v1/clearance_release_requests?status=eq.'+st,
+      {method:'DELETE',headers:{...getH(),'Prefer':'return=minimal'}});
+    if(!r.ok) throw new Error('Failed deleting status '+st+': '+(await r.text()));
+  }
+  toast('DC actioned requests deleted','ok');
+}
+
+async function deleteAllRequests(){
+  const r=await fetch(SB+'/rest/v1/clearance_release_requests?id=gte.0',
+    {method:'DELETE',headers:{...getH(),'Prefer':'return=minimal'}});
+  if(!r.ok) throw new Error('Delete failed: '+(await r.text()));
+  toast('All release requests deleted','ok');
+}
+</script>
+<div id="access-denied" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none">
+  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--rejected)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>
+  <div style="font-size:18px;font-weight:700;color:var(--text)">Access Denied</div>
+  <div style="font-size:13px;color:var(--text-muted);text-align:center;max-width:320px">You need the <strong style="color:var(--accent-text)">Manage Activities</strong> permission to access Reference Data.<br>Contact your administrator.</div>
+</div>
+</body>
+</html>

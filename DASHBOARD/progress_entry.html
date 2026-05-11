@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Progress Entry · MEP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-cell:#0f1319;
+  --bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --st-approved-bg:#163d28;--st-approved-bd:#1f5a39;--st-approved-tx:#6ee2a3;
+  --st-rejected-bg:#4a1820;--st-rejected-bd:#6b2530;--st-rejected-tx:#ff8a99;
+  --st-progress-bg:#2a2410;--st-progress-bd:#4a3c14;--st-progress-tx:#f4c95a;
+  --st-review-bg:#1c2348;--st-review-bd:#2c3870;--st-review-tx:#a3b3ff;
+  --st-notsub-bg:#15191f;--st-notsub-bd:#232932;--st-notsub-tx:#6b7280;
+  --font:"Inter",-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --radius:6px;--radius-lg:10px;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-cell:#fff;--bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
+  --st-approved-bg:#e3f5ea;--st-approved-bd:#b8e0c7;--st-approved-tx:#15803d;
+  --st-rejected-bg:#fde8eb;--st-rejected-bd:#f5b8c1;--st-rejected-tx:#b91c1c;
+  --st-progress-bg:#fef5d8;--st-progress-bd:#f3dca3;--st-progress-tx:#92580a;
+  --st-review-bg:#e8eeff;--st-review-bd:#c0cdf5;--st-review-tx:#2942a8;
+  --st-notsub-bg:#f3f4f6;--st-notsub-bd:#e0e3e8;--st-notsub-tx:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);
+  font-size:13px;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+
+/* Topbar */
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-crumb{font-size:11px;color:var(--text-dim);font-weight:500}
+.tb-name{font-size:14px;font-weight:600;color:var(--text)}
+.tb-spacer{flex:1}
+.tb-live{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;
+  background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);
+  color:var(--st-approved-tx);font-size:11px;font-weight:600}
+.tb-live-dot{width:6px;height:6px;border-radius:50%;background:var(--st-approved-tx);
+  animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.tb-clock{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.tb-theme{padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg-panel);color:var(--text-muted);font-size:11px}
+.tb-theme:hover{background:var(--bg-hover);color:var(--text)}
+
+/* Page head */
+.page-head{padding:12px 20px;display:flex;align-items:baseline;gap:10px;
+  border-bottom:1px solid var(--border-subtle);flex-shrink:0}
+.page-title{font-size:18px;font-weight:600;letter-spacing:-.01em}
+.page-sub{font-size:13px;color:var(--text-dim)}
+
+/* Content */
+.content{flex:1;overflow-y:auto;padding:20px}
+.content::-webkit-scrollbar{width:8px}
+.content::-webkit-scrollbar-track{background:var(--bg)}
+.content::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+
+.layout{display:grid;grid-template-columns:320px 1fr;gap:16px;max-width:1400px;margin:0 auto}
+
+/* Cards */
+.card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px}
+.card-head{padding:12px 16px;border-bottom:1px solid var(--border-subtle);
+  display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.card-body{padding:16px}
+
+/* Form */
+.form-row{margin-bottom:12px}
+.form-row label{display:block;font-size:10px;font-weight:600;color:var(--text-dim);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.form-row select,.form-row input,.form-row textarea{
+  width:100%;background:var(--bg-input);border:1px solid var(--border);
+  color:var(--text);padding:8px 10px;border-radius:var(--radius);font-size:12px;outline:none;
+  transition:border-color .15s}
+.form-row select:focus,.form-row input:focus,.form-row textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.form-row input[readonly]{color:var(--text-muted);background:var(--bg-cell)}
+.form-row select{appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%238a93a3' d='M5 6L0 0h10z'/></svg>");
+  background-repeat:no-repeat;background-position:right 10px center;
+  background-color:var(--bg-input);padding-right:28px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 14px;border-radius:var(--radius);border:1px solid var(--border);
+  background:var(--bg-panel);color:var(--text-muted);font-size:12px;font-weight:600;
+  cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--bg-hover);color:var(--text);border-color:var(--border-strong)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-primary:disabled{background:var(--bg-panel);border-color:var(--border);color:var(--text-faint);cursor:not-allowed;filter:none}
+.btn-success{background:var(--st-approved-bg);border-color:var(--st-approved-bd);color:var(--st-approved-tx)}
+.btn-success:hover{filter:brightness(1.1)}
+.btn-danger{background:var(--st-rejected-bg);border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.btn-subtle{background:transparent;border-color:transparent;color:var(--text-muted)}
+.btn-subtle:hover{background:var(--bg-hover);border-color:var(--border)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-full{width:100%;margin-bottom:8px}
+
+/* Alert */
+.alert{padding:8px 12px;border-radius:var(--radius);font-size:12px;margin-top:8px}
+.alert-success{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx)}
+.alert-error{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.alert-info{background:var(--st-review-bg);border:1px solid var(--st-review-bd);color:var(--st-review-tx)}
+
+/* Retrieved box */
+.retrieved-box{background:var(--bg-cell);border:1px solid var(--border-subtle);
+  border-radius:var(--radius);padding:12px;margin-top:12px;display:none}
+.rb-title{font-size:10px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.rb-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-subtle);font-size:12px}
+.rb-row:last-child{border:none}
+.rb-label{color:var(--text-muted)}
+.rb-val{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+.status-badge{padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600}
+.s-completed{background:var(--st-approved-bg);color:var(--st-approved-tx)}
+.s-in_progress{background:var(--st-progress-bg);color:var(--st-progress-tx)}
+.s-not_started{background:var(--st-notsub-bg);color:var(--st-notsub-tx)}
+
+/* KPI strip */
+.kpi-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.kpi-box{background:var(--bg-cell);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 12px;text-align:center}
+.kpi-val{font-size:22px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi-lbl{font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:2px;font-weight:600}
+
+/* Summary table */
+.date-row{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.date-row label{font-size:11px;color:var(--text-muted);font-weight:500}
+.date-row input[type=date]{background:var(--bg-input);border:1px solid var(--border);
+  color:var(--text);padding:5px 8px;border-radius:var(--radius);font-size:11px;outline:none}
+.date-row input[type=date]:focus{border-color:var(--accent)}
+.sum-tabs{display:flex;gap:2px;background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:8px;padding:2px;margin-bottom:12px;width:fit-content}
+.sum-tab{padding:5px 14px;font-size:12px;font-weight:500;color:var(--text-muted);
+  border:none;background:transparent;border-radius:6px;cursor:pointer}
+.sum-tab:hover{color:var(--text)}
+.sum-tab.active{background:var(--accent-soft);color:var(--accent-text)}
+.sum-table{width:100%;border-collapse:collapse;font-size:11px}
+.sum-table th{background:var(--bg-cell);color:var(--text-muted);padding:6px 8px;
+  text-align:left;font-weight:600;border-bottom:1px solid var(--border);
+  font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.sum-table th.num,.sum-table td.num{text-align:right;font-family:var(--font-mono)}
+.sum-table td{padding:5px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-muted);font-size:11px}
+.sum-table tr:hover td{background:var(--bg-hover)}
+.sum-table .total-row td{color:var(--text);font-weight:600;border-top:1px solid var(--border);border-bottom:none}
+.sum-wrap{max-height:260px;overflow-y:auto}
+.sum-wrap::-webkit-scrollbar{width:5px}
+.sum-wrap::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+
+/* Ready list */
+.ready-item{background:var(--bg-cell);border:1px solid var(--border-subtle);
+  border-radius:var(--radius);padding:8px 12px;margin-bottom:6px;
+  display:grid;grid-template-columns:60px 80px 1fr auto;gap:10px;align-items:center;font-size:12px}
+.ready-item:hover{border-color:var(--border-strong);background:var(--bg-hover)}
+.cl-pill{display:inline-block;background:var(--accent-soft);color:var(--accent-text);
+  padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700}
+.ready-list{max-height:320px;overflow-y:auto}
+.ready-list::-webkit-scrollbar{width:5px}
+.ready-list::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+
+
+/* Mapping Modal */
+#map-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:none;align-items:center;justify-content:center}
+#map-overlay.open{display:flex}
+#map-modal{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);
+  width:700px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+#map-modal-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#map-modal-head h2{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+#map-modal-body{flex:1;overflow-y:auto;padding:16px}
+#map-modal-body::-webkit-scrollbar{width:6px}
+#map-modal-body::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
+.map-entry{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px 14px;margin-bottom:10px}
+.map-entry-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.map-entry-label{font-size:11px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em}
+.map-alias-input{background:var(--bg-input);border:1px solid var(--border);color:var(--text);
+  padding:6px 10px;border-radius:var(--radius);font-size:12px;outline:none;width:100%}
+.map-alias-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.map-codes-area{margin-top:8px}
+.map-codes-label{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;margin-bottom:6px}
+.map-code-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;min-height:28px;
+  background:var(--bg-cell);border:1px solid var(--border-subtle);border-radius:var(--radius);
+  padding:6px 8px}
+.map-pill{display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);
+  color:var(--accent-text);border:1px solid var(--accent);padding:2px 8px;border-radius:4px;
+  font-size:11px;font-family:var(--font-mono);font-weight:600}
+.map-pill-x{cursor:pointer;color:var(--accent-text);opacity:.7;font-size:13px;line-height:1}
+.map-pill-x:hover{opacity:1;color:var(--st-rejected-tx)}
+.map-code-add{display:flex;gap:6px;margin-top:6px}
+.map-code-select{flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);
+  padding:5px 8px;border-radius:var(--radius);font-size:11px;outline:none;appearance:none}
+.map-code-select:focus{border-color:var(--accent)}
+.map-footer{padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-shrink:0}
+.map-entry-actions{display:flex;gap:6px;margin-left:auto}
+.map-badge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+  background:var(--accent);color:#fff;border-radius:50%;font-size:9px;font-weight:700;flex-shrink:0}
+
+/* Export */
+.export-row{display:flex;gap:8px;align-items:center;padding:10px 16px;
+  border-top:1px solid var(--border-subtle);background:var(--bg)}
+
+/* Loading */
+#loading{position:fixed;inset:0;background:rgba(11,14,20,.95);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:12px}
+.spinner{width:24px;height:24px;border:2px solid var(--border-strong);
+  border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading p{color:var(--text-muted);font-size:13px}
+
+/* Hide inner topbar when loaded inside main_app.html shell */
+body.in-shell .topbar,
+body.in-shell header { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div><p id="load-msg">Loading…</p></div>
+
+<!-- Topbar -->
+<div class="topbar">
+  <div>
+    <div class="tb-crumb">Data / Progress</div>
+    <div class="tb-name">Progress Entry</div>
+  </div>
+  <div class="tb-spacer"></div>
+  <span class="tb-clock" id="clock">--:--:--</span>
+  <div class="tb-live"><span class="tb-live-dot"></span>Live</div>
+  <button class="tb-theme" onclick="(function(){var t=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('mep_theme',t);}catch(e){}try{window.parent.postMessage({type:'theme',theme:t},'*');}catch(e){}})()" >☀︎ / ◑</button>
+</div>
+
+<!-- Page head -->
+<div class="page-head">
+  <span class="page-title">Progress Entry</span>
+  <span class="page-sub">Ba Al Ghaiylam · Manual site progress updates</span>
+</div>
+
+<!-- Content -->
+<div class="content">
+  <div class="layout">
+
+    <!-- LEFT: Entry Form -->
+    <div>
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Progress Entry
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <label>Cluster</label>
+            <select id="f-cluster" onchange="onClusterChange()">
+              <option value="">— Select Cluster —</option>
+              <option>C1</option><option>C2</option><option>C3</option>
+              <option>C4</option><option>C5</option><option>C6</option><option>C7</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Villa No</label>
+            <select id="f-villa" onchange="onVillaChange()">
+              <option value="">— Select Villa —</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>Villa Type</label>
+            <input type="text" id="f-villa-type" readonly>
+          </div>
+          <div class="form-row">
+            <label>Activity</label>
+            <select id="f-activity"><option value="">— Select Activity —</option></select>
+          </div>
+          <div class="form-row">
+            <label>Status</label>
+            <select id="f-status">
+              <option value="not_started">Not Started</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-row">
+              <label>Start Date</label>
+              <input type="date" id="f-start">
+            </div>
+            <div class="form-row">
+              <label>Finish Date</label>
+              <input type="date" id="f-finish">
+            </div>
+          </div>
+          <div class="form-row">
+            <label>Sub-Contractor</label>
+            <select id="f-sub"><option value="">— Select Sub-Contractor —</option></select>
+          </div>
+          <div class="form-row">
+            <label>Remarks</label>
+            <input type="text" id="f-remarks" placeholder="Optional notes…">
+          </div>
+
+          <div id="form-alert"></div>
+
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+            <button class="btn btn-primary btn-full" id="btn-submit" onclick="submitEntry()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Submit
+            </button>
+            <button class="btn btn-full" onclick="retrieveEntry()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Retrieve Existing
+            </button>
+            <button class="btn btn-subtle btn-full" onclick="clearForm()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+              Clear Form
+            </button>
+          </div>
+
+          <div class="retrieved-box" id="retrieved-box">
+            <div class="rb-title">Current Record</div>
+            <div id="retrieved-content"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Summary + Ready list -->
+    <div>
+      <!-- Summary Dashboard -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+            Summary Dashboard
+          </div>
+          <button class="btn btn-sm" onclick="loadSummary()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Refresh
+          </button>
+        </div>
+        <div class="card-body">
+          <!-- KPI strip -->
+          <div class="kpi-strip">
+            <div class="kpi-box">
+              <div class="kpi-val" style="color:var(--st-approved-tx)" id="kpi-comp">—</div>
+              <div class="kpi-lbl">Completed (Range)</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-val" style="color:var(--st-progress-tx)" id="kpi-prog">—</div>
+              <div class="kpi-lbl">In Progress (Range)</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-val" style="color:var(--st-approved-tx)" id="kpi-7comp">—</div>
+              <div class="kpi-lbl">Completed Last 7d</div>
+            </div>
+            <div class="kpi-box">
+              <div class="kpi-val" style="color:var(--st-progress-tx)" id="kpi-7prog">—</div>
+              <div class="kpi-lbl">In Progress Last 7d</div>
+            </div>
+          </div>
+
+          <!-- Date range -->
+          <div class="date-row">
+            <label>From</label>
+            <input type="date" id="sum-start">
+            <label>To</label>
+            <input type="date" id="sum-end">
+            <button class="btn btn-sm" onclick="loadSummary()">Apply</button>
+            <span style="font-size:10px;color:var(--text-faint);margin-left:4px">Last 7d: <span id="sum-7start"></span> → <span id="sum-7end"></span></span>
+          </div>
+
+          <!-- Tabs: Completed / In Progress -->
+          <div class="sum-tabs">
+            <button class="sum-tab active" id="tab-comp" onclick="switchSumTab('comp')">✅ Completed</button>
+            <button class="sum-tab" id="tab-prog" onclick="switchSumTab('prog')">🔄 In Progress</button>
+          </div>
+
+          <div class="sum-wrap">
+            <div id="sum-comp-pane">
+              <table class="sum-table">
+                <thead><tr><th>Activity</th><th class="num">C1</th><th class="num">C2</th><th class="num">C3</th><th class="num">C4</th><th class="num">C5</th><th class="num">C6</th><th class="num">C7</th><th class="num">Total</th></tr></thead>
+                <tbody id="sum-comp-body"><tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div id="sum-prog-pane" style="display:none">
+              <table class="sum-table">
+                <thead><tr><th>Activity</th><th class="num">C1</th><th class="num">C2</th><th class="num">C3</th><th class="num">C4</th><th class="num">C5</th><th class="num">C6</th><th class="num">C7</th><th class="num">Total</th></tr></thead>
+                <tbody id="sum-prog-body"><tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- Export row -->
+        <div class="export-row">
+          <button class="btn btn-sm" onclick="openMapModal()" style="gap:5px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            Manage Mappings
+            <span class="map-badge" id="map-count-badge">0</span>
+          </button>
+          <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+          <span style="font-size:11px;color:var(--text-dim)">Export all data:</span>
+          <button class="btn btn-sm" onclick="exportCSV('comp')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Completed CSV
+          </button>
+          <button class="btn btn-sm" onclick="exportCSV('prog')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export In Progress CSV
+          </button>
+          <button class="btn btn-sm" onclick="exportCSV('all')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export All CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Ready to Submit WIR -->
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Ready to Submit WIR
+          </div>
+          <button class="btn btn-sm" onclick="loadReadyClearances()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
+            Refresh
+          </button>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:60px 80px 1fr auto;gap:10px;
+            padding:0 0 8px;border-bottom:1px solid var(--border-subtle);
+            font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600">
+            <div>Cluster</div><div>Villa</div><div>Activity</div><div>Status</div>
+          </div>
+          <div class="ready-list" id="ready-list">
+            <div style="color:var(--text-faint);font-size:12px;text-align:center;padding:20px">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB='https://tactslhsxglzcbsteokf.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+const H=null; // replaced by getH() below
+// ── Auth-aware headers ──
+// Uses the session token from main_app.html if available, falls back to anon key.
+// Reads are always allowed (anon SELECT). Writes require the auth token.
+function getH(extra) {
+  const token = window.__MEP_TOKEN__ || KEY;
+  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+token,'Content-Type':'application/json'}, extra||{});
+}
+
+let villasMap={};
+let activitiesMap={};
+let subsMap={};
+let clusterIds={};
+let cachedRows=[];
+let activeSumTab='comp';
+
+// ── Clock ──
+(function(){function tick(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toTimeString().slice(0,8);}tick();setInterval(tick,1000);})();
+
+function setMsg(m){document.getElementById('load-msg').textContent=m;}
+function hideLoad(){document.getElementById('loading').style.display='none';}
+
+async function get(path){
+  let all=[],offset=0;
+  while(true){
+    const r=await fetch(`${SB}/rest/v1/${path}&limit=1000&offset=${offset}`,{headers:{...getH(),'Prefer':'count=none'}});
+    const d=await r.json();
+    if(!Array.isArray(d)||!d.length) break;
+    all=all.concat(d);
+    if(d.length<1000) break;
+    offset+=1000;
+  }
+  return all;
+}
+
+async function post(path,body){
+  const r=await fetch(`${SB}/rest/v1/${path}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});
+  return r.json();
+}
+
+async function init(){
+  try{
+    setMsg('Loading…');
+    const [clusters, villas, acts, subs] = await Promise.all([
+      get('clusters?select=id,code'),
+      get('villas?select=id,villa_no,villa_type,cluster_id'),
+      get('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true&activity_type=eq.wir'),
+      get('subcontractors?select=id,name&is_active=eq.true'),
+    ]);
+
+    clusters.forEach(c=>clusterIds[c.code]=c.id);
+    villas.forEach(v=>{
+      const cl=clusters.find(c=>c.id===v.cluster_id)?.code;
+      if(!cl) return;
+      if(!villasMap[cl]) villasMap[cl]=[];
+      villasMap[cl].push({id:v.id,villa_no:v.villa_no,villa_type:v.villa_type||'—'});
+    });
+    Object.values(villasMap).forEach(arr=>arr.sort((a,b)=>a.villa_no-b.villa_no));
+
+    acts.forEach(a=>activitiesMap[a.id]=a);
+    subs.forEach(s=>subsMap[s.id]=s.name);
+
+    // Populate sub-contractor select
+    const subSel=document.getElementById('f-sub');
+    subs.sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+      const o=document.createElement('option');
+      o.value=s.id; o.textContent=s.name;
+      subSel.appendChild(o);
+    });
+
+    // Populate activity select grouped by discipline
+    const actSel=document.getElementById('f-activity');
+    ['mechanical','electrical'].forEach(disc=>{
+      const grp=document.createElement('optgroup');
+      grp.label=disc.charAt(0).toUpperCase()+disc.slice(1);
+      acts.filter(a=>a.discipline===disc)
+        .sort((a,b)=>a.activity_code.localeCompare(b.activity_code))
+        .forEach(a=>{
+          const o=document.createElement('option');
+          o.value=a.id;
+          o.textContent=a.activity_code+' — '+a.activity_name;
+          grp.appendChild(o);
+        });
+      actSel.appendChild(grp);
+    });
+
+    // Default date range
+    const today=new Date();
+    const fmt=d=>d.toISOString().split('T')[0];
+    document.getElementById('sum-start').value=fmt(new Date(today.getFullYear(),today.getMonth(),1));
+    document.getElementById('sum-end').value=fmt(today);
+    const last7=new Date(today); last7.setDate(today.getDate()-7);
+    document.getElementById('sum-7start').textContent=fmt(last7);
+    document.getElementById('sum-7end').textContent=fmt(today);
+
+    loadMappings();
+    hideLoad();
+    loadSummary();
+    loadReadyClearances();
+  }catch(e){setMsg('Error: '+e.message);}
+}
+
+function onClusterChange(){
+  const cl=document.getElementById('f-cluster').value;
+  const villasSel=document.getElementById('f-villa');
+  villasSel.innerHTML='<option value="">— Select Villa —</option>';
+  document.getElementById('f-villa-type').value='';
+  if(!cl) return;
+  (villasMap[cl]||[]).forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.id; o.textContent=v.villa_no;
+    o.setAttribute('data-type',v.villa_type);
+    villasSel.appendChild(o);
+  });
+}
+
+function onVillaChange(){
+  const sel=document.getElementById('f-villa');
+  const opt=sel.options[sel.selectedIndex];
+  document.getElementById('f-villa-type').value=opt?.getAttribute('data-type')||'';
+}
+
+function showAlert(msg,type='info'){
+  document.getElementById('form-alert').innerHTML=`<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(()=>document.getElementById('form-alert').innerHTML='',4000);
+}
+
+async function submitEntry(){
+  if(!canEditProgress()){showToast('You do not have permission to submit progress','err');return;}
+  const villId=document.getElementById('f-villa').value;
+  const actId=document.getElementById('f-activity').value;
+  const status=document.getElementById('f-status').value;
+  const start=document.getElementById('f-start').value||null;
+  const finish=document.getElementById('f-finish').value||null;
+  const subId=document.getElementById('f-sub').value||null;
+  const remarks=document.getElementById('f-remarks').value||null;
+
+  if(!villId||!actId){showAlert('Please select a villa and activity.','error');return;}
+
+  const btn=document.getElementById('btn-submit');
+  btn.disabled=true; btn.innerHTML='<span style="opacity:.6">Saving…</span>';
+
+  try{
+    await fetch(`${SB}/rest/v1/progress_updates?villa_id=eq.${villId}&activity_id=eq.${actId}&is_current=eq.true&is_deleted=eq.false`,{
+      method:'PATCH',headers:getH(),body:JSON.stringify({is_current:false})
+    });
+    const res=await post('progress_updates',{
+      villa_id:parseInt(villId),
+      activity_id:parseInt(actId),
+      status,start_date:start,finish_date:finish,
+      subcontractor_id:subId?parseInt(subId):null,
+      remarks,is_current:true,is_deleted:false,
+      updated_at:new Date().toISOString()
+    });
+    if(res?.error){showAlert('Error: '+res.error.message,'error');}
+    else{
+      await fetch(`${SB}/rest/v1/progress_updates?villa_id=eq.${villId}&activity_id=eq.${actId}&is_current=eq.false`,{method:'DELETE',headers:getH()});
+      showAlert('✅ Progress saved successfully!','success');
+      loadSummary();
+      loadReadyClearances();
+    }
+  }catch(e){showAlert('Error: '+e.message,'error');}
+  finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Submit';
+  }
+}
+
+async function retrieveEntry(){
+  const villId=document.getElementById('f-villa').value;
+  const actId=document.getElementById('f-activity').value;
+  if(!villId||!actId){showAlert('Please select a villa and activity first.','error');return;}
+  try{
+    const res=await get(`progress_updates?villa_id=eq.${villId}&activity_id=eq.${actId}&is_current=eq.true&is_deleted=eq.false&select=*`);
+    const box=document.getElementById('retrieved-box');
+    const content=document.getElementById('retrieved-content');
+    if(!res.length){
+      box.style.display='block';
+      content.innerHTML='<div style="color:var(--text-dim);font-size:12px">No existing record found for this villa + activity.</div>';
+      return;
+    }
+    const r=res[0];
+    const sub=r.subcontractor_id&&subsMap[r.subcontractor_id]?subsMap[r.subcontractor_id]:'—';
+    content.innerHTML=`
+      <div class="rb-row"><span class="rb-label">Status</span><span class="rb-val"><span class="status-badge s-${r.status}">${r.status.replace('_',' ')}</span></span></div>
+      <div class="rb-row"><span class="rb-label">Start Date</span><span class="rb-val">${r.start_date||'—'}</span></div>
+      <div class="rb-row"><span class="rb-label">Finish Date</span><span class="rb-val">${r.finish_date||'—'}</span></div>
+      <div class="rb-row"><span class="rb-label">Sub-Contractor</span><span class="rb-val">${sub}</span></div>
+      <div class="rb-row"><span class="rb-label">Remarks</span><span class="rb-val">${r.remarks||'—'}</span></div>
+      <div class="rb-row"><span class="rb-label">Last Updated</span><span class="rb-val">${new Date(r.updated_at).toLocaleDateString('en-GB')}</span></div>`;
+    document.getElementById('f-status').value=r.status;
+    if(r.start_date) document.getElementById('f-start').value=r.start_date;
+    if(r.finish_date) document.getElementById('f-finish').value=r.finish_date;
+    if(r.subcontractor_id) document.getElementById('f-sub').value=r.subcontractor_id;
+    if(r.remarks) document.getElementById('f-remarks').value=r.remarks;
+    box.style.display='block';
+  }catch(e){showAlert('Error retrieving: '+e.message,'error');}
+}
+
+function clearForm(){
+  ['f-cluster','f-villa','f-activity','f-sub'].forEach(id=>document.getElementById(id).value='');
+  ['f-villa-type','f-start','f-finish','f-remarks'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-status').value='not_started';
+  document.getElementById('retrieved-box').style.display='none';
+  document.getElementById('form-alert').innerHTML='';
+}
+
+// ── Summary ──
+const CLUSTERS=['C1','C2','C3','C4','C5','C6','C7'];
+
+function switchSumTab(tab){
+  activeSumTab=tab;
+  document.getElementById('tab-comp').classList.toggle('active',tab==='comp');
+  document.getElementById('tab-prog').classList.toggle('active',tab==='prog');
+  document.getElementById('sum-comp-pane').style.display=tab==='comp'?'block':'none';
+  document.getElementById('sum-prog-pane').style.display=tab==='prog'?'block':'none';
+}
+
+async function loadSummary(){
+  const start=document.getElementById('sum-start').value;
+  const end=document.getElementById('sum-end').value;
+  const today=new Date();
+  const fmt=d=>d.toISOString().split('T')[0];
+  const last7=new Date(today); last7.setDate(today.getDate()-7);
+  const s7=fmt(last7), e7=fmt(today);
+  document.getElementById('sum-7start').textContent=s7;
+  document.getElementById('sum-7end').textContent=e7;
+
+  try{
+    const rows=await get(`progress_updates?select=status,finish_date,start_date,updated_at,activity_id,villa_id,villas(villa_no,cluster_id,clusters(code)),activities(activity_name)&is_current=eq.true&is_deleted=eq.false`);
+    cachedRows=rows;
+
+    function filterByDate(rows,s,e,statusVal){
+      return rows.filter(r=>{
+        if(r.status!==statusVal) return false;
+        const d=r.finish_date||r.updated_at?.split('T')[0];
+        if(!d) return false;
+        return (!s||d>=s)&&(!e||d<=e);
+      });
+    }
+
+    function buildSumTable(rows,bodyId,kpiId){
+      const actGroups={};
+      rows.forEach(r=>{
+        const act=resolveActivityName(r);
+        const cl=r.villas?.clusters?.code||'—';
+        if(!actGroups[act]) actGroups[act]={};
+        actGroups[act][cl]=(actGroups[act][cl]||0)+1;
+      });
+      const acts=Object.keys(actGroups).sort();
+      let html='',total=0;
+      acts.forEach(act=>{
+        const rowTotal=CLUSTERS.reduce((s,c)=>s+(actGroups[act][c]||0),0);
+        total+=rowTotal;
+        html+=`<tr><td>${act}</td>${CLUSTERS.map(c=>`<td class="num">${actGroups[act][c]||'—'}</td>`).join('')}<td class="num" style="color:var(--text);font-weight:700">${rowTotal}</td></tr>`;
+      });
+      if(!html) html=`<tr><td colspan="9" style="color:var(--text-faint);text-align:center;padding:16px">No data for this period</td></tr>`;
+      else html+=`<tr class="total-row"><td>Total</td>${CLUSTERS.map(c=>`<td class="num">${acts.reduce((s,a)=>s+(actGroups[a][c]||0),0)||'—'}</td>`).join('')}<td class="num">${total}</td></tr>`;
+      document.getElementById(bodyId).innerHTML=html;
+      document.getElementById(kpiId).textContent=total;
+      return total;
+    }
+
+    buildSumTable(filterByDate(rows,start,end,'completed'),'sum-comp-body','kpi-comp');
+    buildSumTable(filterByDate(rows,start,end,'in_progress'),'sum-prog-body','kpi-prog');
+    document.getElementById('kpi-7comp').textContent=filterByDate(rows,s7,e7,'completed').length;
+    document.getElementById('kpi-7prog').textContent=filterByDate(rows,s7,e7,'in_progress').length;
+  }catch(e){console.error(e);}
+}
+
+// ── Activity Mappings ──
+const MAP_STORAGE_KEY='mep_activity_mappings_v1';
+let activityMappings=[]; // [{id, alias, activityIds:[...]}, ...]
+let draftMappings=[];
+
+// ── SHARED MAPPINGS via Supabase ──
+async function loadMappings(){
+  try{
+    const r=await fetch(`${SB}/rest/v1/activity_mappings?select=id,alias,activity_ids&is_active=eq.true&order=id.asc`,{headers:getH()});
+    if(r.ok){
+      const rows=await r.json();
+      activityMappings=rows.map(row=>({id:row.id,alias:row.alias,activityIds:row.activity_ids||[]}));
+      // Migrate old localStorage mappings to Supabase if present
+      try{
+        const old=localStorage.getItem(MAP_STORAGE_KEY);
+        if(old){
+          const parsed=JSON.parse(old);
+          if(parsed&&parsed.length&&!activityMappings.length){
+            // Migrate: save old ones to Supabase
+            for(const m of parsed){
+              if(m.alias&&m.activityIds?.length){
+                await fetch(`${SB}/rest/v1/activity_mappings`,{
+                  method:'POST',headers:{...getH(),'Prefer':'return=minimal'},
+                  body:JSON.stringify({alias:m.alias,activity_ids:m.activityIds,created_by:'migrated'})
+                });
+              }
+            }
+            localStorage.removeItem(MAP_STORAGE_KEY);
+            // Reload after migration
+            const r2=await fetch(`${SB}/rest/v1/activity_mappings?select=id,alias,activity_ids&is_active=eq.true&order=id.asc`,{headers:getH()});
+            if(r2.ok){const rows2=await r2.json();activityMappings=rows2.map(row=>({id:row.id,alias:row.alias,activityIds:row.activity_ids||[]}));}
+          }
+        }
+      }catch(e){}
+    }
+  }catch(e){
+    // Fallback to localStorage if Supabase fails
+    try{const saved=localStorage.getItem(MAP_STORAGE_KEY);activityMappings=saved?JSON.parse(saved):[];}catch(e2){activityMappings=[];}
+  }
+  updateMapBadge();
+}
+
+async function saveMappings(){
+  // Read all draft entries from DOM
+  const entries=document.querySelectorAll('.map-entry');
+  const result=[];
+  entries.forEach(entry=>{
+    const alias=entry.querySelector('.map-alias-input').value.trim();
+    const ids=JSON.parse(entry.getAttribute('data-ids')||'[]');
+    const existingId=entry.getAttribute('data-db-id')||null;
+    if(alias&&ids.length>0) result.push({alias,activityIds:ids,dbId:existingId?parseInt(existingId):null});
+  });
+
+  const btn=document.querySelector('.btn-primary[onclick="saveMappings()"]');
+  if(btn){btn.disabled=true;btn.textContent='Saving…';}
+
+  try{
+    // Delete all existing mappings and re-insert (simplest approach for small dataset)
+    await fetch(`${SB}/rest/v1/activity_mappings?is_active=eq.true`,{
+      method:'DELETE',headers:{...getH(),'Prefer':'return=minimal'}
+    });
+    for(const m of result){
+      await fetch(`${SB}/rest/v1/activity_mappings`,{
+        method:'POST',headers:{...getH(),'Prefer':'return=minimal'},
+        body:JSON.stringify({alias:m.alias,activity_ids:m.activityIds,created_by:window.__MEP_USER__?.full_name||'user',updated_at:new Date().toISOString()})
+      });
+    }
+    await loadMappings();
+    document.getElementById('map-status').textContent='✅ Saved '+result.length+' mapping'+(result.length!==1?'s':"") +' (shared with all users)';
+    setTimeout(()=>document.getElementById('map-status').textContent='',3500);
+  }catch(e){
+    document.getElementById('map-status').textContent='❌ Save failed: '+e.message;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='💾 Save Mappings';}
+  }
+  activityMappings=result;
+  updateMapBadge();
+}
+
+function updateMapBadge(){
+  document.getElementById('map-count-badge').textContent=activityMappings.length;
+}
+
+function resolveActivityName(r){
+  // Check if this row's activity_id matches any mapping
+  const actId=r.activity_id;
+  for(const m of activityMappings){
+    if(m.activityIds.includes(actId)) return m.alias;
+  }
+  return r.activities?.activity_name||'Unknown';
+}
+
+function openMapModal(){
+  loadMappings();
+  renderMapEntries(activityMappings);
+  document.getElementById('map-overlay').classList.add('open');
+}
+
+function closeMapModal(){
+  document.getElementById('map-overlay').classList.remove('open');
+}
+
+function renderMapEntries(mappings){
+  const list=document.getElementById('map-entries-list');
+  if(!mappings.length){
+    list.innerHTML=`<div style="color:var(--text-faint);font-size:12px;text-align:center;padding:24px">
+      No mappings yet. Click "Add Group" to create one.
+    </div>`;
+    return;
+  }
+  list.innerHTML=mappings.map((m,i)=>buildMapEntryHTML(m.alias,m.activityIds,i,m.id||null)).join('');
+}
+
+function buildMapEntryHTML(alias,actIds,idx,dbId){
+  const pills=actIds.map(id=>{
+    const a=Object.values(activitiesMap).find(x=>x.id===id);
+    const label=a?a.activity_code+' — '+a.activity_name:'ID:'+id;
+    return `<span class="map-pill">${escH(label)}<span class="map-pill-x" onclick="removePillFromEntry(${idx},${id})">×</span></span>`;
+  }).join('');
+
+  // Build activity select options — exclude already-mapped IDs
+  const allMappedIds=new Set(
+    document.querySelectorAll('.map-entry').length>0
+      ? Array.from(document.querySelectorAll('.map-entry')).flatMap(e=>JSON.parse(e.getAttribute('data-ids')||'[]'))
+      : actIds
+  );
+
+  const opts=Object.values(activitiesMap)
+    .sort((a,b)=>a.activity_code.localeCompare(b.activity_code))
+    .filter(a=>!actIds.includes(a.id))
+    .map(a=>`<option value="${a.id}">${escH(a.activity_code+' — '+a.activity_name)}</option>`)
+    .join('');
+
+  return `<div class="map-entry" data-idx="${idx}" data-ids='${JSON.stringify(actIds)}' data-db-id="${dbId||''}">
+    <div class="map-entry-head">
+      <span class="map-badge">${idx+1}</span>
+      <span class="map-entry-label">Export Name</span>
+      <input class="map-alias-input" placeholder="e.g. FCU Installation" value="${escH(alias)}" style="flex:1;margin-left:8px">
+      <div class="map-entry-actions">
+        <button class="btn btn-sm btn-danger" onclick="removeMapEntry(${idx})">Delete</button>
+      </div>
+    </div>
+    <div class="map-codes-area">
+      <div class="map-codes-label">Activity Codes Included</div>
+      <div class="map-code-pills" id="pills-${idx}">${pills||'<span style="color:var(--text-faint);font-size:11px">No codes added yet</span>'}</div>
+      <div class="map-code-add">
+        <select class="map-code-select" id="code-sel-${idx}">
+          <option value="">— Add activity code —</option>
+          ${opts}
+        </select>
+        <button class="btn btn-sm" onclick="addPillToEntry(${idx})">+ Add</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function addMapEntry(){
+  // Save current draft state first, then append new empty entry
+  const drafts=readDraftMappings();
+  drafts.push({alias:'',activityIds:[]});
+  renderMapEntries(drafts);
+  // Scroll to bottom
+  const body=document.getElementById('map-modal-body');
+  body.scrollTop=body.scrollHeight;
+}
+
+function removeMapEntry(idx){
+  const drafts=readDraftMappings();
+  drafts.splice(idx,1);
+  renderMapEntries(drafts);
+}
+
+function readDraftMappings(){
+  const entries=document.querySelectorAll('.map-entry');
+  return Array.from(entries).map(entry=>({
+    alias:entry.querySelector('.map-alias-input').value.trim(),
+    activityIds:JSON.parse(entry.getAttribute('data-ids')||'[]')
+  }));
+}
+
+function addPillToEntry(idx){
+  const sel=document.getElementById('code-sel-'+idx);
+  const id=parseInt(sel.value);
+  if(!id) return;
+  const drafts=readDraftMappings();
+  if(!drafts[idx].activityIds.includes(id)) drafts[idx].activityIds.push(id);
+  renderMapEntries(drafts);
+}
+
+function removePillFromEntry(idx,id){
+  const drafts=readDraftMappings();
+  drafts[idx].activityIds=drafts[idx].activityIds.filter(x=>x!==id);
+  renderMapEntries(drafts);
+}
+
+// ── Export CSV ──
+function exportCSV(mode){
+  // Export ALL data — no date range filter
+  let rows;
+  let filename;
+  if(mode==='comp'){rows=cachedRows.filter(r=>r.status==='completed');filename='completed_progress';}
+  else if(mode==='prog'){rows=cachedRows.filter(r=>r.status==='in_progress');filename='in_progress';}
+  else{rows=[...cachedRows];filename='all_progress';}
+
+  if(!rows.length){alert('No data to export.');return;}
+
+  const headers=['Cluster','Villa No','Activity','Status','Start Date','Finish Date','Updated At'];
+  const csvRows=[headers.join(','),...rows.map(r=>[
+    r.villas?.clusters?.code||'',
+    r.villas?.villa_no||r.villa_id||'',
+    '"'+resolveActivityName(r).replace(/"/g,'""')+'"',
+    r.status||'',
+    r.start_date||'',
+    r.finish_date||'',
+    (r.updated_at||'').split('T')[0]
+  ].join(','))];
+
+  const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(blob),
+    download:`${filename}_${new Date().toISOString().split('T')[0]}.csv`
+  });
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ── Ready to Submit ──
+async function loadReadyClearances(){
+  try{
+    const rows=await get('v_ready_to_submit_wir?select=cluster,villa_no,villa_type,activity_name,progress_status,wir_flag&wir_flag=eq.no_wir_submitted&order=cluster,villa_no');
+    const list=document.getElementById('ready-list');
+    if(!rows.length){
+      list.innerHTML='<div style="color:var(--text-faint);font-size:12px;text-align:center;padding:20px">No villas ready to submit WIR right now.</div>';
+      return;
+    }
+    list.innerHTML=rows.map(r=>`
+      <div class="ready-item">
+        <span class="cl-pill">${r.cluster}</span>
+        <span style="font-weight:600;color:var(--text);font-family:var(--font-mono)">Villa ${r.villa_no}</span>
+        <span style="color:var(--text-muted);font-size:11px">${r.activity_name}</span>
+        <span class="status-badge s-${(r.progress_status||'').replace(' ','_')}" style="font-size:10px;white-space:nowrap">${r.progress_status||'—'}</span>
+      </div>`).join('');
+  }catch(e){console.error(e);}
+}
+
+init();
+
+function hasPerm(p){
+  if(window.__MEP_PERMS__&&window.__MEP_PERMS__.length) return window.__MEP_PERMS__.includes(p);
+  try{
+    const s=localStorage.getItem('mep_session');
+    if(s){const j=JSON.parse(s);return(j.profile?.permissions||j.permissions||[]).includes(p);}
+  }catch(e){}
+  return false;
+}
+function isAdmin(){return hasPerm('manage_users')&&hasPerm('manage_system');}
+function canEditProgress(){return isAdmin()||hasPerm('enter_progress');}
+function canViewProgress(){return canEditProgress()||hasPerm('export_data');}
+
+// Page-level access: enter_progress OR export_data (or admin)
+function checkPageAccess(){
+  if(canViewProgress()) return;
+  document.getElementById('page-access-denied').style.display='flex';
+  document.querySelectorAll('body > *:not(#page-access-denied)').forEach(el=>el.style.visibility='hidden');
+}
+
+function applyEditPerms(){
+  // First check if they can even view the page
+  checkPageAccess();
+  const can = canEditProgress();
+  const btn = document.getElementById('btn-submit');
+  if(btn){
+    btn.disabled = !can;
+    btn.title = can ? '' : 'You need Enter Progress permission to submit';
+    btn.style.opacity = can ? '' : '0.4';
+    btn.style.cursor = can ? '' : 'not-allowed';
+  }
+  // Show read-only banner if they can view but not edit
+  const banner = document.getElementById('no-edit-banner');
+  if(banner) banner.style.display = (!can && canViewProgress()) ? 'flex' : 'none';
+}
+</script>
+
+<!-- Activity Mapping Modal -->
+<div id="map-overlay" onclick="if(event.target===this)closeMapModal()">
+  <div id="map-modal">
+    <div id="map-modal-head">
+      <h2>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+        Activity Mapping
+      </h2>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--text-dim)">Merge WIRs → custom export name</span>
+        <button class="btn btn-sm btn-primary" onclick="addMapEntry()">+ Add Group</button>
+        <button class="btn btn-sm" onclick="closeMapModal()">✕ Close</button>
+      </div>
+    </div>
+    <div id="map-modal-body">
+      <div style="font-size:12px;color:var(--text-muted);padding:8px 0 14px;border-bottom:1px solid var(--border-subtle);margin-bottom:14px">
+        Group multiple activity codes under one export name. When exporting, all matched records will appear under your custom name instead of the individual activity names. Mappings are saved in your browser.
+      </div>
+      <div id="map-entries-list"></div>
+    </div>
+    <div class="map-footer">
+      <span style="font-size:11px;color:var(--text-dim)" id="map-status"></span>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="closeMapModal()">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="saveMappings()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Save Mappings
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── MEP Theme Sync ──
+(function() {
+  // Apply saved theme immediately on load
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  }
+  try { applyTheme(localStorage.getItem('mep_theme')); } catch(e) {}
+
+  // Listen for theme changes from other frames via localStorage storage event
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'mep_theme' && e.newValue) applyTheme(e.newValue);
+  });
+
+  // Also accept postMessage as fallback
+  window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'theme') {
+      applyTheme(e.data.theme);
+      try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {}
+    }
+    if (e.data.type === 'session') {
+      window.__MEP_TOKEN__ = e.data.token;
+      window.__MEP_USER__  = e.data.user;
+      window.__MEP_PERMS__ = e.data.user?.permissions||[];
+      applyEditPerms();
+    }
+  });
+
+  // Hide own topbar when running inside the main shell
+  if (window.self !== window.top) document.body.classList.add('in-shell');
+  // Signal parent ready (for session token delivery)
+  try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
+})();
+</script>
+</body>
+</html>

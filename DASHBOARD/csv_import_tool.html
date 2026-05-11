@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Import Tool · MEP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-cell:#0f1319;
+  --bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --st-approved-bg:#163d28;--st-approved-bd:#1f5a39;--st-approved-tx:#6ee2a3;
+  --st-rejected-bg:#4a1820;--st-rejected-bd:#6b2530;--st-rejected-tx:#ff8a99;
+  --st-progress-bg:#2a2410;--st-progress-bd:#4a3c14;--st-progress-tx:#f4c95a;
+  --st-review-bg:#1c2348;--st-review-bd:#2c3870;--st-review-tx:#a3b3ff;
+  --font:"Inter",-apple-system,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --radius:6px;--radius-lg:10px;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-cell:#fff;--bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
+  --st-approved-bg:#e3f5ea;--st-approved-bd:#b8e0c7;--st-approved-tx:#15803d;
+  --st-rejected-bg:#fde8eb;--st-rejected-bd:#f5b8c1;--st-rejected-tx:#b91c1c;
+  --st-progress-bg:#fef5d8;--st-progress-bd:#f3dca3;--st-progress-tx:#92580a;
+  --st-review-bg:#e8eeff;--st-review-bd:#c0cdf5;--st-review-tx:#2942a8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;margin:0}body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased;overflow:hidden;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-crumb{font-size:11px;color:var(--text-dim);font-weight:500}
+.tb-name{font-size:14px;font-weight:600;color:var(--text)}
+.tb-spacer{flex:1}
+.tb-live{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx);font-size:11px;font-weight:600}
+.tb-live-dot{width:6px;height:6px;border-radius:50%;background:var(--st-approved-tx);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.tb-clock{font-family:var(--font-mono);font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.tb-theme{padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text-muted);font-size:11px}
+.tb-theme:hover{background:var(--bg-hover);color:var(--text)}
+.tabs{display:flex;background:var(--bg-elev);border-bottom:1px solid var(--border);padding:0 20px;gap:2px;height:46px;flex-shrink:0}
+.tab{padding:11px 16px;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-muted);border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:color .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
+.content{flex:1;min-height:0;overflow-y:auto;background:var(--bg)}
+.content::-webkit-scrollbar{width:8px}
+.content::-webkit-scrollbar-track{background:var(--bg)}
+.content::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.container{max-width:900px;margin:0 auto;padding:24px 20px 40px}
+.card{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:14px}
+.card h2{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px;display:flex;align-items:center;gap:7px}
+.card .sub{font-size:11px;color:var(--text-dim);margin-bottom:14px;line-height:1.5}
+.upload-area{border:2px dashed var(--border-strong);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.upload-area:hover,.upload-area.drag{border-color:var(--accent);background:var(--accent-soft)}
+.upload-area input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-area .icon{font-size:26px;margin-bottom:6px}
+.upload-area p{color:var(--text-muted);font-size:12px}
+.upload-area p strong{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:var(--radius);border:1px solid var(--border);background:var(--bg-panel);color:var(--text-muted);font-size:12px;font-weight:500;white-space:nowrap}
+.btn:hover{background:var(--bg-hover);color:var(--text);border-color:var(--border-strong)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-primary:disabled{background:var(--bg-panel);border-color:var(--border);color:var(--text-faint);cursor:not-allowed;filter:none}
+.btn-green{background:var(--st-approved-bg);border-color:var(--st-approved-bd);color:var(--st-approved-tx)}
+.btn-green:hover{filter:brightness(1.1)}
+.btn-secondary{background:var(--bg-panel);border-color:var(--border);color:var(--text-muted)}
+.btn-secondary:hover{background:var(--bg-hover)}
+.file-info{margin-top:8px;font-size:11px;color:var(--text-dim);display:none}
+.field-map{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.field-map label{font-size:10px;color:var(--text-dim);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.field-map select{width:100%;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:var(--radius);font-size:11px;outline:none}
+.field-map select:focus{border-color:var(--accent)}
+.preview-wrap{overflow-x:auto;margin-top:12px;border-radius:var(--radius);border:1px solid var(--border)}
+.preview-table{width:100%;border-collapse:collapse;font-size:11px}
+.preview-table th{background:var(--bg-cell);color:var(--text-dim);padding:7px 9px;text-align:left;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.preview-table td{padding:6px 9px;border-bottom:1px solid var(--border-subtle);color:var(--text-muted);white-space:nowrap}
+.preview-table tr:last-child td{border-bottom:none}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.stat-box{background:var(--bg-cell);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center}
+.stat-val{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat-label{font-size:9px;color:var(--text-dim);margin-top:3px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.prog-bar{height:4px;background:var(--bg-hover);border-radius:2px;overflow:hidden;margin:8px 0;display:none}
+.prog-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s}
+.log{background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:10px;max-height:200px;overflow-y:auto;font-size:11px;font-family:var(--font-mono);margin-top:10px}
+.log::-webkit-scrollbar{width:4px}
+.log::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
+.log-line{padding:2px 0;border-bottom:1px solid var(--border-subtle)}
+.log-line:last-child{border:none}
+.log-ok{color:var(--st-approved-tx)}.log-err{color:var(--st-rejected-tx)}.log-warn{color:var(--st-progress-tx)}.log-info{color:var(--accent-text)}
+.unmatched-box{background:var(--st-progress-bg);border:1px solid var(--st-progress-bd);border-radius:var(--radius);padding:12px;margin-top:10px}
+.unmatched-box h4{font-size:11px;color:var(--st-progress-tx);margin-bottom:8px;font-weight:600}
+.um-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06);font-size:11px}
+[data-theme="light"] .um-row{border-bottom-color:rgba(0,0,0,.06)}
+.um-row:last-child{border:none}
+.um-name{flex:1;color:var(--st-progress-tx)}
+.um-sel{background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:5px;font-size:10px;outline:none}
+.alert{padding:9px 13px;border-radius:var(--radius);font-size:12px;margin-bottom:12px;line-height:1.5}
+.alert-info{background:var(--st-review-bg);border:1px solid var(--st-review-bd);color:var(--st-review-tx)}
+.alert-success{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx)}
+.alert-warn{background:var(--st-progress-bg);border:1px solid var(--st-progress-bd);color:var(--st-progress-tx)}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);margin-bottom:8px}
+.hidden{display:none}
+
+/* Hide inner topbar when loaded inside main_app.html shell */
+body.in-shell .topbar,
+body.in-shell header { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="tb-crumb">Data / Import</div>
+    <div class="tb-name">Import Tool</div>
+  </div>
+  <div class="tb-spacer"></div>
+  <span class="tb-clock" id="clock">--:--:--</span>
+  <div class="tb-live"><span class="tb-live-dot"></span>Live</div>
+  <button class="tb-theme" onclick="(function(){var t=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',t);try{localStorage.setItem('mep_theme',t);}catch(e){}try{window.parent.postMessage({type:'theme',theme:t},'*');}catch(e){}})()" >&#9728; / &#9685;</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" id="tab-btn-wir" onclick="switchTab('wir')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    WIR Import
+  </div>
+  <div class="tab" id="tab-btn-clr" onclick="switchTab('clr')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    Clearance Import
+  </div>
+  <div class="tab" id="tab-btn-prog" onclick="switchTab('prog')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Site Progress
+  </div>
+  <div class="tab" id="tab-btn-acts" onclick="switchTab('acts')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+    Activities
+  </div>
+</div>
+
+<div class="content">
+
+<div id="tab-wir">
+<div class="container">
+  <div class="alert alert-info">Upload your daily WIR log CSV from Document Control. File is read as-is — no editing required.</div>
+
+  <div class="card">
+    <h2>1. Upload WIR CSV File</h2>
+    <div class="sub">Supports: Activity Code, Activity, Location, Villa No, Villas Type, Sub-Contractor Name, Status, Discipline, Submitted Date, Response Date, Revision</div>
+    <div class="upload-area" id="wir-drop">
+      <input type="file" accept=".csv" id="wir-file" onchange="handleFile('wir')">
+      <div class="icon">📂</div>
+      <p><strong>Click to upload</strong> or drag and drop</p>
+      <p>CSV file from Document Control (WIR log)</p>
+    </div>
+    <div class="file-info" id="wir-file-info"></div>
+  </div>
+
+  <div class="card hidden" id="wir-map-card">
+    <h2>2. Column Mapping</h2>
+    <div class="sub">Auto-detected from your file. Adjust if needed.</div>
+    <div class="field-map" id="wir-field-map"></div>
+    <div style="margin-top:10px"><button class="btn btn-secondary" onclick="buildPreview('wir')">🔄 Refresh Preview</button></div>
+  </div>
+
+  <div class="card hidden" id="wir-preview-card">
+    <h2>3. Preview (first 5 rows)</h2>
+    <div class="preview-wrap" id="wir-preview"></div>
+  </div>
+
+  <div class="card hidden" id="wir-import-card">
+    <h2>4. Import</h2>
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="ws-total">0</div><div class="stat-label">Total Rows</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#34d399" id="ws-matched">0</div><div class="stat-label">Matched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#f87171" id="ws-unmatched">0</div><div class="stat-label">Unmatched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#fcd34d" id="ws-skipped">0</div><div class="stat-label">Skipped</div></div>
+    </div>
+    <div class="prog-bar" id="wir-prog-bar"><div class="prog-fill" id="wir-prog-fill" style="width:0%"></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" id="wir-import-btn" onclick="startImport('wir')">⬆ Start WIR Import</button>
+      <button class="btn btn-secondary" onclick="resetImport('wir')">↺ Reset</button>
+    </div>
+    <div class="log" id="wir-log"></div>
+    <div id="ws-unmatched-summary"></div>
+  </div>
+</div>
+</div>
+
+<div id="tab-clr" class="hidden">
+<div class="container">
+  <div class="alert alert-info">Upload your clearance log CSV from Document Control. File is read as-is — no editing required.</div>
+
+  <div class="card">
+    <h2>1. Upload Clearance CSV File</h2>
+    <div class="sub">Supports: Reference Number, MEP Clearance Code, Activity, Sector/Cluster/Zone, Villa No, Building Type, Clearance Received Date, Clearance Released Date, Remarks, Status</div>
+    <div class="upload-area" id="clr-drop">
+      <input type="file" accept=".csv" id="clr-file" onchange="handleFile('clr')">
+      <div class="icon">📂</div>
+      <p><strong>Click to upload</strong> or drag and drop</p>
+      <p>CSV file from Document Control (Clearance log)</p>
+    </div>
+    <div class="file-info" id="clr-file-info"></div>
+  </div>
+
+  <div class="card hidden" id="clr-map-card">
+    <h2>2. Column Mapping</h2>
+    <div class="sub">Auto-detected from your file. Adjust if needed.</div>
+    <div class="field-map" id="clr-field-map"></div>
+    <div style="margin-top:10px"><button class="btn btn-secondary" onclick="buildPreview('clr')">🔄 Refresh Preview</button></div>
+  </div>
+
+  <div class="card hidden" id="clr-preview-card">
+    <h2>3. Preview (first 5 rows)</h2>
+    <div class="preview-wrap" id="clr-preview"></div>
+  </div>
+
+  <div class="card hidden" id="clr-import-card">
+    <h2>4. Import</h2>
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="cs-total">0</div><div class="stat-label">Total Rows</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#34d399" id="cs-matched">0</div><div class="stat-label">Matched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#f87171" id="cs-unmatched">0</div><div class="stat-label">Unmatched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#fcd34d" id="cs-skipped">0</div><div class="stat-label">Skipped</div></div>
+    </div>
+    <div class="prog-bar" id="clr-prog-bar"><div class="prog-fill" id="clr-prog-fill" style="width:0%"></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" id="clr-import-btn" onclick="startImport('clr')">⬆ Start Clearance Import</button>
+      <button class="btn btn-secondary" onclick="resetImport('clr')">↺ Reset</button>
+    </div>
+    <div class="log" id="clr-log"></div>
+    <div id="cs-unmatched-summary"></div>
+  </div>
+</div>
+</div>
+
+<div id="tab-prog" class="hidden">
+<div class="container">
+  <div class="alert alert-info">Upload your site progress CSV. Supports your existing format with Activity names — no activity codes needed.</div>
+
+  <div class="card">
+    <h2>1. Upload Site Progress CSV</h2>
+    <div class="sub">
+      Supported columns: <strong>Timestamp, Cluster, Villa No, Activity, Start Date, Finish Date, Status, Sub-Contractor</strong><br>
+      Cluster accepts: 3 or C3 &nbsp;·&nbsp; Status accepts: Completed, In Progress, Not Started<br>
+      Dates accept: 16-Apr-2026 or 2026-04-16
+    </div>
+    <div style="margin-bottom:10px">
+      <button class="btn btn-green" onclick="downloadProgTemplate()">⬇ Download Template</button>
+    </div>
+    <div class="upload-area" id="prog-drop">
+      <input type="file" accept=".csv" id="prog-file" onchange="handleProgFile()">
+      <div class="icon">📂</div>
+      <p><strong>Click to upload</strong> or drag and drop</p>
+      <p>Site progress CSV file</p>
+    </div>
+    <div class="file-info" id="prog-file-info"></div>
+  </div>
+
+  <div class="card hidden" id="prog-unmatched-card">
+    <h2>⚠ Unmatched Activities — Manual Mapping</h2>
+    <div class="sub">These activity names could not be matched automatically. Select the correct activity for each:</div>
+    <div id="prog-unmatched-list"></div>
+  </div>
+
+  <div class="card hidden" id="prog-import-card">
+    <h2>2. Preview &amp; Import</h2>
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="ps-total">0</div><div class="stat-label">Total Rows</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#34d399" id="ps-matched">0</div><div class="stat-label">Matched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#f87171" id="ps-unmatched">0</div><div class="stat-label">Unmatched</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#fcd34d" id="ps-skipped">0</div><div class="stat-label">Skipped</div></div>
+    </div>
+    <div class="prog-bar" id="prog-prog-bar"><div class="prog-fill" id="prog-prog-fill" style="width:0%"></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" id="prog-import-btn" onclick="startProgImport()">⬆ Start Progress Import</button>
+      <button class="btn btn-secondary" onclick="resetProgImport()">↺ Reset</button>
+    </div>
+    <div class="log" id="prog-log"></div>
+  </div>
+</div>
+</div>
+
+<div id="tab-acts" class="hidden">
+<div class="container">
+  <div class="alert alert-info">Upload a CSV with your activity codes and names to populate the activities catalogue. Existing activities are updated (upsert by code), new ones are added.</div>
+
+  <div class="card">
+    <h2>1. Prepare Your CSV File</h2>
+    <div class="sub">
+      Required column: <strong>Activity Code</strong> &amp; <strong>Activity Name</strong><br>
+      Optional columns: <strong>Discipline</strong> (mechanical / electrical) &nbsp;·&nbsp; <strong>Activity Type</strong> (wir / clearance)<br>
+      If Discipline is omitted, it defaults to <em>mechanical</em>. If Activity Type is omitted, it defaults to <em>wir</em>.
+    </div>
+    <div style="margin-bottom:10px">
+      <button class="btn btn-green" onclick="downloadActsTemplate()">⬇ Download Template</button>
+    </div>
+    <div class="upload-area" id="acts-drop">
+      <input type="file" accept=".csv" id="acts-file" onchange="handleActsFile()">
+      <div class="icon">📂</div>
+      <p><strong>Click to upload</strong> or drag and drop</p>
+      <p>Activities CSV file</p>
+    </div>
+    <div class="file-info" id="acts-file-info"></div>
+  </div>
+
+  <div class="card hidden" id="acts-preview-card">
+    <h2>2. Preview (first 10 rows)</h2>
+    <div class="preview-wrap" id="acts-preview"></div>
+  </div>
+
+  <div class="card hidden" id="acts-import-card">
+    <h2>3. Import</h2>
+    <div class="stats">
+      <div class="stat-box"><div class="stat-val" id="as-total">0</div><div class="stat-label">Total Rows</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#34d399" id="as-valid">0</div><div class="stat-label">Valid</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#f87171" id="as-invalid">0</div><div class="stat-label">Skipped</div></div>
+      <div class="stat-box"><div class="stat-val" style="color:#fcd34d" id="as-upserted">0</div><div class="stat-label">Saved</div></div>
+    </div>
+    <div class="prog-bar" id="acts-prog-bar"><div class="prog-fill" id="acts-prog-fill" style="width:0%"></div></div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-primary" id="acts-import-btn" onclick="startActsImport()">⬆ Start Activities Import</button>
+      <button class="btn btn-secondary" onclick="resetActsImport()">↺ Reset</button>
+    </div>
+    <div class="log" id="acts-log"></div>
+  </div>
+</div>
+</div>
+
+</div>
+
+<script>
+
+
+const SB='https://tactslhsxglzcbsteokf.supabase.co';
+const KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+const H=null; // replaced by getH() below
+// ── Auth-aware headers ──
+// Uses the session token from main_app.html if available, falls back to anon key.
+// Reads are always allowed (anon SELECT). Writes require the auth token.
+function getH(extra) {
+  // Priority: postMessage token → localStorage session → anon key (read-only)
+  let token = window.__MEP_TOKEN__;
+  if (!token) {
+    try {
+      const s = localStorage.getItem('mep_session');
+      if (s) { const j = JSON.parse(s); token = j.access_token || null; }
+    } catch(e) {}
+  }
+  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(token||KEY),'Content-Type':'application/json'}, extra||{});
+}
+
+// ─── STATE ───────────────────────────────────────────────
+let state={
+  wir:{rows:[],headers:[],file:null,villaMap:{},activityMap:{},batchId:null,unmatchedRows:[]},
+  clr:{rows:[],headers:[],file:null,villaMap:{},clearanceMap:{},batchId:null,unmatchedRows:[]},
+};
+let progRows=[], progActOverrides={}, actCI={}, clrCI={}, vKeyMap={};
+
+// ─── ACTIVITY NAME ALIASES ────────────────────────────────
+const ACT_ALIASES={
+  'ppr installation':'3100','ppr install':'3100','ppr water supply':'3100','high level ppr':'3100',
+  'hl drainage installation':'3060','hl drainage install':'3060','high level drainage':'3060','drainage installation':'3060','drainage':'3060',
+  'leak test drainage h/l':'3070','leak test drainage hl':'3070','drainage leak test':'3070','gravity leak test':'3070','leak test':'3070',
+  'acoustic':'3170','acoustic lagging':'3170','acoustic wir':'3170',
+  'ppr pressure test':'3110','pressure test water supply':'3110','ppr press test':'3110',
+  'ppr insulation':'3180','hot water insulation':'3180','insulation':'3180',
+  'copper installation':'3210','ac copper installation':'3210','refrigerant pipe installation':'3210','hl ac refrigerant':'3210',
+  'copper pressure test':'3220','ac copper pressure':'3220','refrigerant pressure test':'3220',
+  'duct dry area':'3190','pi duct dry':'3190','dry area duct':'3190','duct dry':'3190',
+  'duct wet area':'3200','pi duct wet':'3200','wet area duct':'3200','duct wet':'3200',
+  'exhaust fan':'3290','exhaust fan installation':'3290','exhaust':'3290',
+  'fcu installation':'3300','fcu install':'3300','vrf indoor':'3300','fcu':'3300',
+  'shaft closing':'3150','shaft closing villa':'3150','shaft':'3150',
+  'cdp installation':'3270','cdp':'3270','cdp wir':'3270',
+  'rain water':'3000','underground drainage':'3000','ugd':'3000',
+  'pex pipes':'3050','pex installation':'3050','gf pex':'3050','pex':'3050',
+  'drain pipe in wall':'3060','drain pipe wall':'3060',
+  'suspension dry':'3190G','suspension dry area':'3190G','gf suspension dry':'3190G',
+  'suspension wet':'3200G','suspension wet area':'3200G','gf suspension wet':'3200G',
+  'board closing dry':'3520','fc closing dry':'3520','false ceiling dry':'3520',
+  'board closing wet':'3530','false ceiling wet':'3530','false ceiling wet area':'3530',
+  'bathtub':'3590','bathtub installation':'3590','bathtub leak test':'3590',
+  'wc':'3140','wc flush tank':'3140','wc stand':'3140','water closet':'3140',
+  'roof foundation':'3540','roof water supply':'3540',
+  'vrf outdoor':'3560','vrf outdoor unit':'3560','outdoor unit':'3560',
+  'solar panel':'3301','solar water heater':'3301',
+  'balcony drain':'3080','rain water outlet':'3080',
+};
+
+// ─── INIT ─────────────────────────────────────────────────
+async function init(){
+  const [clusters,villas,acts,clrs]=await Promise.all([
+    sbGet('clusters?select=id,code'),
+    sbGetAll('villas?select=id,villa_no,cluster_id'),
+    sbGetAll('activities?select=id,activity_code&is_active=eq.true'),
+    sbGetAll('clearance_activities?select=id,clearance_code&is_active=eq.true'),
+  ]);
+  const clMap={};clusters.forEach(c=>clMap[c.id]=c.code);
+  villas.forEach(v=>{
+    const cl=clMap[v.cluster_id]||'';
+    state.wir.villaMap[cl+'_'+v.villa_no]=v.id;
+    state.clr.villaMap[cl+'_'+v.villa_no]=v.id;
+    vKeyMap[cl+'_'+v.villa_no]=v.id;
+    // Also map without C prefix
+    const num=cl.replace('C','');
+    vKeyMap[num+'_'+v.villa_no]=v.id;
+  });
+  acts.forEach(a=>{state.wir.activityMap[a.activity_code.trim()]=a.id;actCI[a.activity_code.trim()]=a.id;});
+  clrs.forEach(c=>{state.clr.clearanceMap[c.clearance_code.trim()]=c.id;clrCI[c.clearance_code.trim()]=c.id;});
+}
+
+async function sbGet(p){const r=await fetch(SB+'/rest/v1/'+p,{headers:getH()});return r.json();}
+async function sbGetAll(p){let a=[],o=0;while(true){const r=await fetch(`${SB}/rest/v1/${p}&limit=1000&offset=${o}`,{headers:{...getH(),'Prefer':'count=none'}});const d=await r.json();if(!Array.isArray(d)||!d.length)break;a=a.concat(d);if(d.length<1000)break;o+=1000;}return a;}
+async function sbPost(p,body){const r=await fetch(SB+'/rest/v1/'+p,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});return r.json();}
+
+// ─── TAB SWITCHING ────────────────────────────────────────
+function switchTab(tab){
+  ['wir','clr','prog','acts'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.toggle('hidden',t!==tab);
+    document.getElementById('tab-btn-'+t).classList.toggle('active',t===tab);
+  });
+}
+
+// ─── HELPERS ─────────────────────────────────────────────
+function normaliseHdr(s){
+  // lowercase, trim, remove trailing dots, collapse spaces around slashes and within
+  return (s||'').toLowerCase().trim()
+    .replace(/\.+$/g,'')          // remove trailing dots: "Villa No." → "villa no"
+    .replace(/\s*\/\s*/g,'/')    // "Sector/ Cluster/ Zone" → "sector/cluster/zone"
+    .replace(/\s+/g,' ')           // collapse multiple spaces
+    .trim();
+}
+function findCol(headers,keywords,exact=false){
+  const h=headers.map(x=>normaliseHdr(x));
+  const normKw=keywords.map(k=>normaliseHdr(k));
+  // 1. Exact match first
+  for(const kw of normKw){
+    const ei=h.findIndex(x=>x===kw);if(ei>=0) return headers[ei];
+  }
+  // 2. Substring match
+  if(!exact){
+    for(const kw of normKw){
+      const ii=h.findIndex(x=>x.includes(kw)||kw.includes(x));if(ii>=0) return headers[ii];
+    }
+  }
+  return '';
+}
+function safeDate(val){
+  // Guard against blank/null
+  if(!val) return null;
+  const s=String(val).trim();
+  if(!s) return null;
+
+  // If it looks like an Excel serial number (pure integer, no dashes/slashes)
+  // Excel dates: 1 = 1900-01-01, 45000 ≈ 2023. Anything > 60000 is bogus.
+  if(/^\d+$/.test(s)){
+    const n=parseInt(s,10);
+    if(n<1||n>60000) return null;  // reject out-of-range serials
+    // Convert Excel serial to JS date (Excel epoch = 1899-12-30)
+    const d=new Date(Date.UTC(1899,11,30)+n*86400000);
+    if(isNaN(d)) return null;
+    return d.toISOString().split('T')[0];
+  }
+
+  // Try parsing as a normal date string
+  const d=new Date(s);
+  if(isNaN(d)) return null;
+  const yr=d.getFullYear();
+  // Reject anything outside a sane construction window (2000–2040)
+  if(yr<2000||yr>2040) return null;
+  return d.toISOString().split('T')[0];
+}
+
+function normaliseWir(s){s=(s||'').toUpperCase().trim();if(s==='A'||s==='B')return 'approved';if(s==='C'||s==='D')return 'rejected';if(s==='UR')return 'under_review';return 'not_submitted';}
+function normaliseClr(s){s=(s||'').toLowerCase().trim();if(s.includes('fully approved'))return 'fully_approved';if(s.includes('not approved')||s.includes('rejected'))return 'not_approved';if(s.includes('pending'))return 'pending';return 'not_approved';}
+function addLog(type,msg,cls='info'){const el=document.getElementById(type+'-log');if(!el)return;const d=document.createElement('div');d.className='log-line log-'+cls;d.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+
+// ─── WIR & CLEARANCE IMPORT ──────────────────────────────
+function handleFile(type){
+  const input=document.getElementById(type+'-file');
+  const file=input.files[0];if(!file)return;
+  state[type].file=file;
+  const info=document.getElementById(type+'-file-info');
+  info.style.display='block';info.textContent='📄 '+file.name+' ('+Math.round(file.size/1024)+' KB)';
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{
+    state[type].rows=res.data;state[type].headers=res.meta.fields||[];
+    buildMapping(type);
+  }});
+}
+
+function buildMapping(type){
+  const hdrs=state[type].headers;
+  document.getElementById(type+'-map-card').classList.remove('hidden');
+  const mapDiv=document.getElementById(type+'-field-map');mapDiv.innerHTML='';
+  let fields=[];
+  if(type==='wir'){fields=[
+    {id:'col_code',label:'Activity Code',guess:findCol(hdrs,['activity code'])},
+    {id:'col_activity',label:'Activity Name',guess:findCol(hdrs,['activity'],true)},
+    {id:'col_cluster',label:'Cluster/Location',guess:findCol(hdrs,['location','cluster','zone'])},
+    {id:'col_villa',label:'Villa No',guess:findCol(hdrs,['villa no','villa_no'])},
+    {id:'col_type',label:'Villa Type',guess:findCol(hdrs,['villas type','villa type','type'])},
+    {id:'col_sub',label:'Sub-Contractor',guess:findCol(hdrs,['sub','contractor'])},
+    {id:'col_status',label:'Status',guess:findCol(hdrs,['status'],true)},
+    {id:'col_discipline',label:'Discipline',guess:findCol(hdrs,['discipline'],true)},
+    {id:'col_submitted',label:'Submitted Date',guess:findCol(hdrs,['submitted date','submitted'])},
+    {id:'col_response',label:'Response Date',guess:findCol(hdrs,['response date','response'])},
+    {id:'col_revision',label:'Revision',guess:findCol(hdrs,['revision'],true)},
+  ];}
+  else{fields=[
+    {id:'col_ref',label:'Reference Number',guess:findCol(hdrs,['reference number','reference no','ref no','reference'])},
+    {id:'col_code',label:'Clearance Code',guess:findCol(hdrs,['mep clearance code','clearance code','clearance no','clr code','code'])},
+    {id:'col_activity',label:'Activity Name',guess:findCol(hdrs,['activity name','activity'],true)},
+    {id:'col_cluster',label:'Cluster/Zone',guess:findCol(hdrs,['sector/cluster/zone','sector/cluster','cluster/zone','cluster','zone','sector','location'])},
+    {id:'col_villa',label:'Villa No',guess:findCol(hdrs,['villa no','villa number','villa_no','villa','unit no','unit number','unit'])},
+    {id:'col_type',label:'Villa Type',guess:findCol(hdrs,['building type','villas type','villa type','building','type'])},
+    {id:'col_received',label:'Received Date',guess:findCol(hdrs,['clearance received date','received date','date received','received'])},
+    {id:'col_released',label:'Released Date',guess:findCol(hdrs,['clearance released date','released date','date released','released'])},
+    {id:'col_remarks',label:'Remarks',guess:findCol(hdrs,['remarks','comment','notes','note'])},
+    {id:'col_status',label:'Status',guess:findCol(hdrs,['status'],true)},
+  ];}
+  fields.forEach(f=>{
+    const w=document.createElement('div');
+    w.innerHTML=`<label>${f.label}</label><select id="${type}_${f.id}"><option value="">-- not mapped --</option>${hdrs.map(h=>`<option value="${h}"${h===f.guess?' selected':''}>${h}</option>`).join('')}</select>`;
+    mapDiv.appendChild(w);
+  });
+  buildPreview(type);
+}
+
+function getMap(type){
+  const g=id=>{const el=document.getElementById(type+'_'+id);return el?el.value:'';};
+  if(type==='wir') return {code:g('col_code'),activity:g('col_activity'),cluster:g('col_cluster'),villa:g('col_villa'),type:g('col_type'),sub:g('col_sub'),status:g('col_status'),discipline:g('col_discipline'),submitted:g('col_submitted'),response:g('col_response'),revision:g('col_revision')};
+  return {ref:g('col_ref'),code:g('col_code'),activity:g('col_activity'),cluster:g('col_cluster'),villa:g('col_villa'),type:g('col_type'),received:g('col_received'),released:g('col_released'),remarks:g('col_remarks'),status:g('col_status')};
+}
+
+function buildPreview(type){
+  const rows=state[type].rows.slice(0,5);
+  const m=getMap(type);
+  document.getElementById(type+'-preview-card').classList.remove('hidden');
+  document.getElementById(type+'-import-card').classList.remove('hidden');
+  const labels={wir:{code:'Activity Code',activity:'Activity Name',cluster:'Cluster',villa:'Villa No',type:'Villa Type',sub:'Sub-Contractor',status:'Status',discipline:'Discipline',submitted:'Submitted',response:'Response',revision:'Revision'},
+    clr:{ref:'Reference',code:'Clearance Code',activity:'Activity Name',cluster:'Cluster',villa:'Villa No',type:'Villa Type',received:'Received',released:'Released',remarks:'Remarks',status:'Status'}};
+  const lbl=labels[type];
+  const mapped=Object.entries(m).filter(([k,v])=>v);
+  let html=`<table class="preview-table"><thead><tr>${mapped.map(([k])=>`<th>${lbl[k]||k}</th>`).join('')}</tr></thead><tbody>`;
+  rows.forEach(r=>{html+=`<tr>${mapped.map(([k,v])=>`<td>${r[v]||'—'}</td>`).join('')}</tr>`;});
+  html+=`</tbody></table>`;
+  document.getElementById(type+'-preview').innerHTML=html;
+}
+
+// ── Check if a real auth token is available ──
+function hasAuthToken(){
+  if(window.__MEP_TOKEN__) return true;
+  try{
+    const s=localStorage.getItem('mep_session');
+    if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)return true;}
+  }catch(e){}
+  return false;
+}
+function waitForToken(timeoutMs){
+  timeoutMs=timeoutMs||3000;
+  if(hasAuthToken()) return Promise.resolve(true);
+  return new Promise(function(resolve){
+    var deadline=Date.now()+timeoutMs;
+    function check(){
+      if(hasAuthToken()){resolve(true);return;}
+      if(Date.now()>deadline){resolve(false);return;}
+      setTimeout(check,150);
+    }
+    check();
+  });
+}
+
+async function startImport(type){
+  const btn=document.getElementById(type+'-import-btn');btn.disabled=true;
+  document.getElementById(type+'-prog-bar').style.display='block';
+  document.getElementById(type+'-log').innerHTML='';
+  addLog(type,'🔐 Checking authentication...','info');
+
+  // Guard: must have a real auth token — anon key cannot write (RLS blocks inserts)
+  const hasToken=await waitForToken(5000);
+  if(!hasToken){
+    addLog(type,'❌ Authentication token not received. Please log out and log back in, then try again.','err');
+    btn.disabled=false;
+    return;
+  }
+  addLog(type,'✅ Auth OK — starting import...','ok');
+  addLog(type,'Loading villas and activities...','info');
+
+  const rows=state[type].rows;
+  const m=getMap(type);
+  const fileName=state[type].file?.name||'unknown.csv';
+  const table=type==='wir'?'dc_import_log':'clearance_import_log';
+
+  // Delete all existing records first (replace mode — DC file always has full data)
+  addLog(type,'🗑 Clearing existing '+table+' records...','info');
+  const delH=getH({'Prefer':'return=minimal'});
+  const delRes=await fetch(`${SB}/rest/v1/${table}?id=gte.0`,{method:'DELETE',headers:delH});
+  if(!delRes.ok){
+    addLog(type,'⚠ Delete failed ('+delRes.status+'): '+await delRes.text(),'err');
+    btn.disabled=false;return;
+  }
+  addLog(type,'✅ Old records cleared. Starting fresh import...','ok');
+
+  // Create batch — must use auth token (RLS). Check for failure explicitly.
+  let batchId=null;
+  try{
+    const batchResp=await fetch(SB+'/rest/v1/import_batches',{
+      method:'POST',
+      headers:{...getH(),'Prefer':'return=representation'},
+      body:JSON.stringify({file_name:fileName,record_type:type==='wir'?'wir':'clearance',total_rows:rows.length,status:'processing'})
+    });
+    if(!batchResp.ok){
+      const errTxt=await batchResp.text();
+      addLog(type,'⚠ Could not create import batch ('+batchResp.status+'): '+errTxt.slice(0,120)+' — continuing without batch ID','warn');
+    } else {
+      const batchData=await batchResp.json();
+      batchId=Array.isArray(batchData)?batchData[0]?.id:batchData?.id;
+      addLog(type,'Import batch created — ID: '+batchId,'info');
+    }
+  }catch(e){
+    addLog(type,'⚠ Batch creation error: '+e.message+' — continuing anyway','warn');
+  }
+  state[type].unmatchedRows=[];
+
+  let matched=0,unmatched=0,skipped=0,chunksFailed=0;
+  const CHUNK=50;const records=[];
+  const failedSourceRows=[];  // track any rows that failed to upload
+
+  // Debug: log first row's raw field values so we can spot mapping issues
+  if(rows.length>0){
+    const r0=rows[0];
+    addLog(type,'🔍 Row 1 raw — villa col "'+m.villa+'"='+JSON.stringify(r0[m.villa])+' | cluster col "'+m.cluster+'"='+JSON.stringify(r0[m.cluster])+' | code col "'+m.code+'"='+JSON.stringify(r0[m.code]),'info');
+    addLog(type,'🔍 All CSV headers: '+Object.keys(r0).join(' | '),'info');
+  }
+  // Skip-reason sample: track first 3 skip reasons for diagnosis
+  const skipSamples=[];
+
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const rawVilla=parseInt(r[m.villa]);
+    const rawCluster=(r[m.cluster]||'').trim().toUpperCase();
+    const rawCode=(r[m.code]||'').trim();
+    const rawStatus=(r[m.status]||'').trim();
+    if(!rawVilla||isNaN(rawVilla)||!rawCluster||!rawCode){
+      skipped++;
+      if(skipSamples.length<3){
+        const reason=(!rawVilla||isNaN(rawVilla))?'villa="'+r[m.villa]+'"':(!rawCluster)?'cluster="'+r[m.cluster]+'"':'code="'+r[m.code]+'"';
+        skipSamples.push('Row '+(i+2)+': '+reason);
+      }
+      continue;
+    }
+    const villaId=state[type].villaMap[rawCluster+'_'+rawVilla];
+    let actId=null,matchStatus='matched';
+    if(type==='wir') actId=state[type].activityMap[rawCode];
+    else actId=state[type].clearanceMap[rawCode];
+    if(!villaId){matchStatus='unmatched_villa';unmatched++;state[type].unmatchedRows.push({row:i+2,villa:rawVilla,cluster:rawCluster,code:rawCode,name:r[m.activity]||'',status:rawStatus,reason:'Villa not found'});}
+    else if(!actId){matchStatus=type==='wir'?'unmatched_activity':'unmatched_clearance';unmatched++;state[type].unmatchedRows.push({row:i+2,villa:rawVilla,cluster:rawCluster,code:rawCode,name:r[m.activity]||'',status:rawStatus,reason:'Activity code not in system'});}
+    else matched++;
+
+    if(type==='wir'){
+      const rawRev=r[m.revision]||null;
+      const revNo=rawRev?parseInt(rawRev.replace(/[^0-9]/g,''))||0:null;
+      const rawDisc=(r[m.discipline]||'').trim().toUpperCase();
+      const discNorm=rawDisc==='PL'||rawDisc==='MECH'||rawDisc==='M'?'mechanical':rawDisc==='EL'||rawDisc==='ELEC'||rawDisc==='E'?'electrical':null;
+      const sd=safeDate(r[m.submitted]);
+      const rd=safeDate(r[m.response]);
+      records.push({import_batch_id:batchId,villa_id:villaId||null,activity_id:actId||null,record_type:'wir',raw_activity_code:rawCode,raw_villa_no:rawVilla,raw_cluster:rawCluster,raw_activity_name:r[m.activity]||null,raw_villa_type:r[m.type]||null,raw_subcontractor:r[m.sub]||null,raw_status:rawStatus,normalised_status:normaliseWir(rawStatus),discipline:discNorm,discipline_raw:rawDisc||null,submitted_date:sd,response_date:rd,revision:rawRev,revision_no:revNo,source_row_no:i+2,match_status:matchStatus});
+    } else {
+      const rd=safeDate(r[m.received]);
+      const rld=safeDate(r[m.released]);
+      records.push({import_batch_id:batchId,villa_id:villaId||null,clearance_activity_id:actId||null,reference_number:r[m.ref]||null,raw_clearance_code:rawCode,raw_activity_name:r[m.activity]||null,raw_cluster:rawCluster,raw_villa_no:rawVilla,raw_villa_type:r[m.type]||null,raw_status:rawStatus,normalised_status:normaliseClr(rawStatus),clearance_received_date:rd,clearance_released_date:rld,remarks:r[m.remarks]||null,source_row_no:i+2,match_status:matchStatus});
+    }
+
+    document.getElementById(type+'-prog-fill').style.width=Math.round((i+1)/rows.length*100)+'%';
+
+    if(records.length>=CHUNK||(i===rows.length-1&&records.length>0)){
+      const chunk=records.splice(0,records.length);
+      const chunkSourceRows=chunk.map(c=>c.source_row_no);
+      // Retry up to 3 times on failure
+      let ok=false;
+      for(let attempt=1;attempt<=3;attempt++){
+        try{
+          const resp=await fetch(SB+'/rest/v1/'+table,{
+            method:'POST',
+            headers:{...getH(),'Prefer':'return=minimal'},
+            body:JSON.stringify(chunk)
+          });
+          if(resp.ok){ok=true;break;}
+          const errText=await resp.text();
+          addLog(type,`⚠ Chunk (rows ${chunkSourceRows[0]}–${chunkSourceRows[chunkSourceRows.length-1]}) attempt ${attempt} failed: ${resp.status} ${errText.slice(0,120)}`,'warn');
+        }catch(e){
+          addLog(type,`⚠ Chunk (rows ${chunkSourceRows[0]}–${chunkSourceRows[chunkSourceRows.length-1]}) attempt ${attempt} network error: ${e.message}`,'warn');
+        }
+        if(attempt<3) await new Promise(res=>setTimeout(res,600*attempt)); // back-off: 600ms, 1200ms
+      }
+      if(!ok){
+        chunksFailed++;
+        failedSourceRows.push(...chunkSourceRows);
+        addLog(type,`❌ Chunk FAILED after 3 attempts — rows ${chunkSourceRows[0]}–${chunkSourceRows[chunkSourceRows.length-1]} NOT saved`,'err');
+      }
+    }
+  }
+
+  // Update batch status
+  const finalStatus=chunksFailed>0?'completed_with_errors':'completed';
+  await fetch(SB+'/rest/v1/import_batches?id=eq.'+batchId,{method:'PATCH',headers:getH(),body:JSON.stringify({matched_rows:matched,skipped_rows:unmatched+skipped,status:finalStatus})});
+
+  const pfx=type==='wir'?'ws':'cs';
+  document.getElementById(pfx+'-total').textContent=rows.length;
+  document.getElementById(pfx+'-matched').textContent=matched;
+  document.getElementById(pfx+'-unmatched').textContent=unmatched;
+  document.getElementById(pfx+'-skipped').textContent=skipped;
+
+  if(skipSamples.length>0) addLog(type,'⚠ Skip samples (first 3 skipped rows): '+skipSamples.join(' || '),'warn');
+  // Show cluster breakdown of matched rows
+  const clrBreakdown={};
+  state[type].unmatchedRows.concat([]).forEach(()=>{});
+  // Count matched by cluster from records already sent
+  addLog(type,'ℹ Skipped rows typically have no villa number (other projects in DC file) — this is expected.','info');
+  if(chunksFailed===0){
+    addLog(type,'✅ Import complete — all rows saved successfully','ok');
+    addLog(type,`Matched: ${matched} | Unmatched: ${unmatched} | Skipped (blank/invalid): ${skipped}`,'ok');
+  } else {
+    addLog(type,`⚠ Import finished with ${chunksFailed} failed chunk(s)`,'warn');
+    addLog(type,`Matched: ${matched} | Unmatched: ${unmatched} | Skipped: ${skipped} | Lost to failures: ${failedSourceRows.length}`,'warn');
+    addLog(type,`❌ Failed source rows: ${failedSourceRows.join(', ')}`,'err');
+    addLog(type,'👉 Re-import the file to retry — already-saved rows will be overwritten safely','warn');
+  }
+  if(unmatched>0){
+    addLog(type,`⚠ ${unmatched} rows had unmatched villa or activity code — see summary below`,'warn');
+    showUnmatchedSummary(type);
+  }
+  btn.disabled=false;
+}
+
+function showUnmatchedSummary(type){
+  const rows=state[type].unmatchedRows;
+  if(!rows||!rows.length) return;
+
+  // Group by activity code + reason
+  const groups={};
+  rows.forEach(r=>{
+    const key=r.code+'|||'+r.reason;
+    if(!groups[key]) groups[key]={code:r.code,name:r.name,reason:r.reason,count:0,villas:new Set(),clusters:new Set()};
+    groups[key].count++;
+    groups[key].villas.add(r.cluster+'-'+r.villa);
+    groups[key].clusters.add(r.cluster);
+  });
+
+  const pfx=type==='wir'?'ws':'cs';
+  const container=document.getElementById(pfx+'-unmatched-summary');
+  if(!container) return;
+
+  const sorted=Object.values(groups).sort((a,b)=>b.count-a.count);
+  let html='<div style="margin-top:14px">';
+  html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">';
+  html+='<div style="font-size:12px;font-weight:600;color:#f59e0b">⚠ '+rows.length+' Unmatched Rows — '+sorted.length+' unique activity codes</div>';
+  html+='<button onclick="exportUnmatched(\''+type+'\')" style="padding:5px 12px;background:var(--accent-soft,rgba(79,140,255,.15));color:#60a5fa;border:1px solid #2563eb;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600">⬇ Export CSV</button>';
+  html+='</div>';
+  html+='<table style="width:100%;border-collapse:collapse;font-size:11px">';
+  html+='<thead><tr style="background:#0f1117">';
+  html+='<th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Activity Code</th>';
+  html+='<th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Activity Name</th>';
+  html+='<th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Reason</th>';
+  html+='<th style="padding:6px 8px;text-align:right;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Rows</th>';
+  html+='<th style="padding:6px 8px;text-align:right;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Villas</th>';
+  html+='<th style="padding:6px 8px;text-align:left;color:#64748b;border-bottom:1px solid #2d3748;font-weight:500">Clusters</th>';
+  html+='</tr></thead><tbody>';
+  sorted.forEach((g,i)=>{
+    const bg=i%2===0?'#111827':'#0f1520';
+    const reasonColor=g.reason==='Villa not found'?'#f87171':'#fcd34d';
+    html+='<tr style="background:'+bg+'">';
+    html+='<td style="padding:5px 8px;color:#60a5fa;font-family:monospace;border-bottom:1px solid #1a2030">'+escHtml(g.code)+'</td>';
+    html+='<td style="padding:5px 8px;color:#cbd5e1;border-bottom:1px solid #1a2030">'+escHtml(g.name)+'</td>';
+    html+='<td style="padding:5px 8px;color:'+reasonColor+';border-bottom:1px solid #1a2030;font-size:10px">'+escHtml(g.reason)+'</td>';
+    html+='<td style="padding:5px 8px;text-align:right;color:#e2e8f0;font-weight:600;border-bottom:1px solid #1a2030;font-family:monospace">'+g.count+'</td>';
+    html+='<td style="padding:5px 8px;text-align:right;color:#94a3b8;border-bottom:1px solid #1a2030;font-family:monospace">'+g.villas.size+'</td>';
+    html+='<td style="padding:5px 8px;color:#94a3b8;border-bottom:1px solid #1a2030;font-size:10px">'+ [...g.clusters].sort().join(', ')+'</td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  container.innerHTML=html;
+}
+
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function exportUnmatched(type){
+  const rows=state[type].unmatchedRows;
+  if(!rows||!rows.length){alert('No unmatched rows to export.');return;}
+  const headers=['Source Row','Cluster','Villa No','Activity Code','Activity Name','Status','Reason'];
+  const csv=[headers.join(','),...rows.map(r=>[
+    r.row, r.cluster, r.villa,
+    '"'+String(r.code||'').replace(/"/g,'""')+'"',
+    '"'+String(r.name||'').replace(/"/g,'""')+'"',
+    r.status,
+    '"'+String(r.reason||'').replace(/"/g,'""')+'"'
+  ].join(','))].join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(blob),
+    download:'unmatched_'+type+'_'+new Date().toISOString().split('T')[0]+'.csv'
+  });
+  a.click();URL.revokeObjectURL(a.href);
+}
+
+function resetImport(type){
+  state[type]={...state[type],rows:[],headers:[],file:null,batchId:null};
+  document.getElementById(type+'-file').value='';
+  document.getElementById(type+'-file-info').style.display='none';
+  [type+'-map-card',type+'-preview-card',type+'-import-card'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  document.getElementById(type+'-log').innerHTML='';
+  document.getElementById(type+'-prog-bar').style.display='none';
+}
+
+// ─── SITE PROGRESS IMPORT ────────────────────────────────
+function normaliseActName(n){return(n||'').toLowerCase().trim().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();}
+function findActCode(name){
+  if(!name) return null;
+  const norm=normaliseActName(name);
+  if(progActOverrides[norm]) return progActOverrides[norm];
+  if(ACT_ALIASES[norm]) return ACT_ALIASES[norm];
+  for(const[alias,code] of Object.entries(ACT_ALIASES)){if(norm.includes(alias)||alias.includes(norm))return code;}
+  if(actCI[name.trim()]) return name.trim();
+  return null;
+}
+function normaliseStatus(s){const v=(s||'').toLowerCase().trim();if(v==='completed'||v==='complete'||v==='done')return 'completed';if(v==='in progress'||v==='in_progress'||v==='ongoing')return 'in_progress';return 'not_started';}
+function normaliseCluster(c){if(!c)return null;const s=String(c).trim().toUpperCase();return s.startsWith('C')?s:'C'+s;}
+function parseDate(d){
+  if(!d) return null;
+  const dmy=d.match(/(\d{1,2})[-\/]([A-Za-z]+)[-\/](\d{4})/);
+  if(dmy){const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};const m=months[dmy[2].toLowerCase().substring(0,3)];if(m)return `${dmy[3]}-${String(m).padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;}
+  const dt=new Date(d);if(!isNaN(dt))return dt.toISOString().split('T')[0];
+  return null;
+}
+
+function downloadProgTemplate(){
+  const csv='Timestamp,Cluster,Villa No,Activity,Start Date,Finish Date,Status,Key,Sub-Contractor\n16-Apr-2026 13:08,6,36,PPR Installation,01-Apr-2026,01-Apr-2026,Completed,6|36|PPR Installation,RA\n31-Mar-2026 16:48,6,36,HL Drainage Installation,01-Mar-2026,01-Mar-2026,Completed,6|36|HL Drainage Installation,RA\n';
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='progress_template.csv';a.click();
+}
+
+function handleProgFile(){
+  const file=document.getElementById('prog-file').files[0];if(!file)return;
+  const info=document.getElementById('prog-file-info');info.style.display='block';info.textContent='📄 '+file.name+' ('+Math.round(file.size/1024)+' KB)';
+  Papa.parse(file,{header:true,skipEmptyLines:true,complete:res=>{progRows=res.data;progActOverrides={};previewProg(res.data);}});
+}
+
+function getProgRow(r){
+  const villaNo=parseInt(r['Villa No']||r['villa_no']||r['Villa no']||'');
+  const cluster=normaliseCluster(r['Cluster']||r['cluster']||'');
+  const actName=(r['Activity']||r['activity']||r['Activity Name']||'').trim();
+  const actCodeDirect=(r['Activity Code']||r['activity_code']||'').trim();
+  const status=normaliseStatus(r['Status']||r['status']||'');
+  const start=parseDate(r['Start Date']||r['start_date']||r['StartDate']||'');
+  const finish=parseDate(r['Finish Date']||r['finish_date']||r['FinishDate']||'');
+  const subcontractor=r['Sub-Contractor']||r['sub_contractor']||r['Subcontractor']||r['SUB-CONTRACTOR']||null;
+  return{villaNo,cluster,actName,actCodeDirect,status,start,finish,subcontractor};
+}
+
+function previewProg(rows){
+  let matched=0,unmatched=0,skipped=0;
+  const unmatchedActs=new Map();
+  rows.forEach((r,i)=>{
+    const{villaNo,cluster,actName,actCodeDirect,status}=getProgRow(r);
+    if(!villaNo||!cluster||(!actName&&!actCodeDirect)||!status){skipped++;return;}
+    const vid=vKeyMap[cluster+'_'+villaNo];
+    if(!vid){unmatched++;return;}
+    const actCode=actCodeDirect||findActCode(actName);
+    const actId=actCode?actCI[actCode]:null;
+    if(!actId){const norm=normaliseActName(actName||actCodeDirect);unmatchedActs.set(norm,(unmatchedActs.get(norm)||0)+1);unmatched++;return;}
+    matched++;
+  });
+  document.getElementById('ps-total').textContent=rows.length;
+  document.getElementById('ps-matched').textContent=matched;
+  document.getElementById('ps-unmatched').textContent=unmatched;
+  document.getElementById('ps-skipped').textContent=skipped;
+  document.getElementById('prog-import-card').classList.remove('hidden');
+
+  // Unmatched activity mapping UI
+  const unmCard=document.getElementById('prog-unmatched-card');
+  const unmList=document.getElementById('prog-unmatched-list');
+  if(unmatchedActs.size>0){
+    unmCard.classList.remove('hidden');
+    const actOpts=Object.entries(actCI).sort((a,b)=>a[0].localeCompare(b[0])).map(([code])=>`<option value="${code}">${code}</option>`).join('');
+    unmList.innerHTML=[...unmatchedActs.entries()].map(([norm,cnt])=>`
+      <div class="um-row">
+        <span class="um-name">"${norm}" <span style="color:#64748b">(${cnt} rows)</span></span>
+        <span style="color:#64748b">→</span>
+        <select class="um-sel" onchange="progActOverrides['${norm}']=this.value;previewProg(progRows)">
+          <option value="">— Select activity code —</option>${actOpts}
+        </select>
+      </div>`).join('');
+  } else {unmCard.classList.add('hidden');}
+}
+
+async function startProgImport(){
+  const btn=document.getElementById('prog-import-btn');btn.disabled=true;btn.textContent='Importing...';
+  const logEl=document.getElementById('prog-log');logEl.innerHTML='';
+  const bar=document.getElementById('prog-prog-bar');bar.style.display='block';
+  const fill=document.getElementById('prog-prog-fill');
+  const log=(m,cls)=>{const d=document.createElement('div');d.className=cls;d.textContent=m;logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;};
+
+  // Auth guard
+  const hasToken=await waitForToken(5000);
+  if(!hasToken){log('['+new Date().toLocaleTimeString()+'] ❌ Not authenticated — please log in and try again.','log-err');btn.disabled=false;btn.textContent='⬆ Start Progress Import';return;}
+
+  // Step 1 — build all valid records, deduplicate by villa+activity
+  log('Preparing records...','log-info');
+  const records=[];
+  const seen=new Set();
+  for(const r of progRows){
+    const{villaNo,cluster,actName,actCodeDirect,status,start,finish,subcontractor}=getProgRow(r);
+    if(!villaNo||!cluster||(!actName&&!actCodeDirect)||!status) continue;
+    const vid=vKeyMap[cluster+'_'+villaNo];
+    const actCode=actCodeDirect||findActCode(actName);
+    const actId=actCode?actCI[actCode]:null;
+    if(!vid||!actId) continue;
+    const key=vid+'_'+actId;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    records.push({villa_id:vid,activity_id:actId,status,start_date:start||null,finish_date:finish||null,subcontractor:subcontractor||null,is_current:true,is_deleted:false,updated_at:new Date().toISOString()});
+  }
+  log(`${records.length} unique records prepared`,'log-info');
+  fill.style.width='10%';
+
+  // Step 2 — archive all existing current records in one call
+  log('Archiving existing records...','log-info');
+  try{
+    await fetch(`${SB}/rest/v1/progress_updates?is_current=eq.true&is_deleted=eq.false`,{
+      method:'PATCH',headers:getH(),body:JSON.stringify({is_current:false})
+    });
+  }catch(e){log('Warning archiving: '+e.message,'log-warn');}
+  fill.style.width='20%';
+
+  // Step 3 — insert in chunks of 500
+  const CHUNK=500;
+  let ok=0,fail=0;
+  for(let i=0;i<records.length;i+=CHUNK){
+    const chunk=records.slice(i,i+CHUNK);
+    try{
+      const res=await fetch(`${SB}/rest/v1/progress_updates`,{
+        method:'POST',headers:{...getH(),'Prefer':'return=minimal'},
+        body:JSON.stringify(chunk)
+      });
+      if(res.ok) ok+=chunk.length;
+      else{const err=await res.text();log(`❌ Chunk ${Math.floor(i/CHUNK)+1}: ${err}`,'log-err');fail+=chunk.length;}
+    }catch(e){log(`❌ Error: ${e.message}`,'log-err');fail+=chunk.length;}
+    fill.style.width=Math.round(20+(i/records.length)*80)+'%';
+  }
+  fill.style.width='100%';
+  log(`✅ Imported ${ok} records${fail>0?` · ${fail} failed`:'`'}`,'log-ok');
+  btn.disabled=false;btn.textContent='⬆ Import to Database';
+}
+
+function resetProgImport(){
+  document.getElementById('prog-file').value='';
+  document.getElementById('prog-file-info').style.display='none';
+  ['prog-unmatched-card','prog-import-card'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+  document.getElementById('prog-log').innerHTML='';
+  document.getElementById('prog-prog-bar').style.display='none';
+  progRows=[];progActOverrides={};
+}
+
+// ─── BOOT ────────────────────────────────────────────────
+init().catch(e=>console.error('Init error:',e));
+
+// ─── ACTIVITIES IMPORT ───────────────────────────────────
+let actsRows = [];
+
+function downloadActsTemplate(){
+  const csv = 'Activity Code,Activity Name,Discipline,Activity Type\n3000,Underground Drainage Pipe,mechanical,wir\n3050,GF PEX Pipes,mechanical,wir\n4010,Conduit Installation,electrical,wir\n';
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = 'activities_template.csv';
+  a.click();
+}
+
+function handleActsFile(){
+  const file = document.getElementById('acts-file').files[0];
+  if(!file) return;
+  const info = document.getElementById('acts-file-info');
+  info.style.display = 'block';
+  info.textContent = '📄 ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)';
+  Papa.parse(file, {header:true, skipEmptyLines:true, complete: res => {
+    const rows = res.data;
+    const headers = res.meta.fields || [];
+    // Find columns flexibly
+    const h = headers.map(x=>(x||'').toLowerCase().trim());
+    const codeIdx = h.findIndex(x=>x.includes('code'));
+    const nameIdx = h.findIndex(x=>x.includes('name')||x.includes('activity')&&!x.includes('code'));
+    const discIdx = h.findIndex(x=>x.includes('disc'));
+    const typeIdx = h.findIndex(x=>x.includes('type'));
+
+    if(codeIdx<0 || nameIdx<0){
+      alert('Could not find Activity Code and Activity Name columns. Please check your CSV headers.');
+      return;
+    }
+
+    const codeCol = headers[codeIdx];
+    const nameCol = headers[nameIdx];
+    const discCol = discIdx>=0 ? headers[discIdx] : null;
+    const typeCol = typeIdx>=0 ? headers[typeIdx] : null;
+
+    actsRows = [];
+    rows.forEach(r=>{
+      const code = (r[codeCol]||'').toString().trim();
+      const name = (r[nameCol]||'').toString().trim();
+      if(!code || !name) return;
+      const raw_disc = discCol ? (r[discCol]||'').toString().toLowerCase().trim() : '';
+      const disc = raw_disc.includes('elec') ? 'electrical' : 'mechanical';
+      const raw_type = typeCol ? (r[typeCol]||'').toString().toLowerCase().trim() : '';
+      const atype = raw_type.includes('clr') || raw_type.includes('clear') ? 'clearance' : 'wir';
+      actsRows.push({activity_code:code, activity_name:name, discipline:disc, activity_type:atype, is_active:true});
+    });
+
+    // Preview
+    document.getElementById('acts-preview-card').classList.remove('hidden');
+    const cols = ['activity_code','activity_name','discipline','activity_type'];
+    let html = '<table class="preview-table"><thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>';
+    actsRows.slice(0,10).forEach(r=>{
+      html += '<tr>'+cols.map(c=>`<td>${r[c]||''}</td>`).join('')+'</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('acts-preview').innerHTML = html;
+
+    // Stats
+    document.getElementById('as-total').textContent = rows.length;
+    document.getElementById('as-valid').textContent = actsRows.length;
+    document.getElementById('as-invalid').textContent = rows.length - actsRows.length;
+    document.getElementById('as-upserted').textContent = 0;
+    document.getElementById('acts-import-card').classList.remove('hidden');
+  }});
+}
+
+async function startActsImport(){
+  const btn = document.getElementById('acts-import-btn');
+  btn.disabled = true; btn.textContent = '⏳ Importing...';
+  const bar = document.getElementById('acts-prog-bar');
+  const fill = document.getElementById('acts-prog-fill');
+  bar.style.display='block'; fill.style.width='0%';
+
+  addLog('acts', `Starting import of ${actsRows.length} activities...`, 'info');
+
+  const BATCH = 50;
+  let saved = 0, errors = 0;
+  for(let i=0; i<actsRows.length; i+=BATCH){
+    const chunk = actsRows.slice(i, i+BATCH);
+    try{
+      const r = await fetch(SB+'/rest/v1/activities', {
+        method: 'POST',
+        headers: {...getH(), 'Prefer': 'resolution=merge-duplicates,return=minimal'},
+        body: JSON.stringify(chunk)
+      });
+      if(!r.ok){
+        const txt = await r.text();
+        addLog('acts', `Batch ${Math.floor(i/BATCH)+1} error: ${txt}`, 'err');
+        errors += chunk.length;
+      } else {
+        saved += chunk.length;
+        addLog('acts', `Saved ${Math.min(i+BATCH, actsRows.length)} / ${actsRows.length}`, 'ok');
+      }
+    } catch(e){
+      addLog('acts', 'Network error: '+e.message, 'err');
+      errors += chunk.length;
+    }
+    fill.style.width = Math.round((i+BATCH)/actsRows.length*100)+'%';
+  }
+
+  fill.style.width='100%';
+  document.getElementById('as-upserted').textContent = saved;
+  document.getElementById('as-invalid').textContent = (actsRows.length - saved) + (parseInt(document.getElementById('as-invalid').textContent)||0);
+  addLog('acts', `✅ Done — ${saved} activities saved, ${errors} errors.`, saved>0&&errors===0?'ok':'warn');
+  btn.disabled=false; btn.textContent='⬆ Start Activities Import';
+}
+
+function resetActsImport(){
+  actsRows=[];
+  document.getElementById('acts-file').value='';
+  document.getElementById('acts-file-info').style.display='none';
+  document.getElementById('acts-preview-card').classList.add('hidden');
+  document.getElementById('acts-import-card').classList.add('hidden');
+  document.getElementById('acts-log').innerHTML='';
+  ['as-total','as-valid','as-invalid','as-upserted'].forEach(id=>document.getElementById(id).textContent='0');
+}
+
+
+(function(){function tick(){var el=document.getElementById('clock');if(el)el.textContent=new Date().toTimeString().slice(0,8);}tick();setInterval(tick,1000);})();
+
+(function(){function tick(){var el=document.getElementById('clock');if(el)el.textContent=new Date().toTimeString().slice(0,8);}tick();setInterval(tick,1000);})();
+</script>
+<script>
+// ── MEP Theme Sync ──
+(function() {
+  // Apply saved theme immediately on load
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute('data-theme', t);
+  }
+  try { applyTheme(localStorage.getItem('mep_theme')); } catch(e) {}
+
+  // Listen for theme changes from other frames via localStorage storage event
+  window.addEventListener('storage', function(e) {
+    if (e.key === 'mep_theme' && e.newValue) applyTheme(e.newValue);
+  });
+
+  // Also accept postMessage as fallback
+  window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'theme') {
+      applyTheme(e.data.theme);
+      try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {}
+    }
+    if (e.data.type === 'session') {
+      window.__MEP_TOKEN__ = e.data.token;
+      window.__MEP_USER__  = e.data.user;
+    }
+  });
+
+  // Hide own topbar when running inside the main shell
+  if (window.self !== window.top) document.body.classList.add('in-shell');
+  // Signal parent ready (for session token delivery)
+  try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
+})();
+</script>
+</body>
+</html>
