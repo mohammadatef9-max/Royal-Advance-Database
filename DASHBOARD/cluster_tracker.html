@@ -358,9 +358,7 @@ body.in-shell header { display: none !important; }
     <svg width="10" height="6" viewBox="0 0 10 6" style="flex-shrink:0;opacity:.5"><path fill="currentColor" d="M5 6L0 0h10z"/></svg>
   </button>
   <!-- Villa type -->
-  <select id="fvtype" multiple style="min-height:32px" onchange="applyFilters()">
-    <option value="">All Villa Types</option>
-  </select>
+  <button id="fvtype-btn" onclick="openVtypeFilter(event)" style="padding:6px 12px;border:1px solid var(--border);border-radius:7px;background:var(--bg-panel);color:var(--text-muted);font-size:12px;cursor:pointer;white-space:nowrap">All Villa Types ▾</button>
   <!-- Villa search -->
   <div style="display:flex;align-items:center;gap:6px;background:var(--bg-panel);border:1px solid var(--border);border-radius:7px;padding:0 10px;height:32px;min-width:170px">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--text-faint);flex-shrink:0"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -458,12 +456,12 @@ body.in-shell header { display: none !important; }
 
 <div class="popup" id="pop">
   <div class="pop-hdr"><span id="pop-title">Filter</span><span class="pop-x" onclick="closePop()">×</span></div>
-  <div id="pop-opts"></div>
-  <div class="pop-div"></div>
-  <div class="pop-footer">
+  <div class="pop-footer" style="margin-top:0;margin-bottom:5px">
     <button class="pop-btn pop-apply" onclick="applyPop()">✓ Apply</button>
     <button class="pop-btn pop-clear" onclick="clearPop()">✕ Clear</button>
   </div>
+  <div class="pop-div"></div>
+  <div id="pop-opts"></div>
 </div>
 
 <div id="cmgr">
@@ -765,6 +763,7 @@ let subAliases={};
 let wirCodeAliases={};
 // Multi-select sub-contractor filter (Set of CANONICAL names)
 let subFilter=new Set();
+let vtFilter=new Set();
 // Sub-contractor merge UI selection
 let subSel=new Set();
 let progRows=[],progActOverrides={};
@@ -871,8 +870,7 @@ async function init(){
     // Villa type dropdown
     const allTypes=new Set();
     villas.forEach(v=>{if(v.villa_type)allTypes.add(v.villa_type);});
-    const fvtype=document.getElementById('fvtype');
-    [...allTypes].sort().forEach(t=>{const o=document.createElement('option');o.value=t;o.textContent=t;fvtype.appendChild(o);});
+    // villa types collected into vMap — populated via openVtypeFilter popup
 
     document.getElementById('loading').style.display='none';
     // Load sub-contractor aliases from DB
@@ -1064,18 +1062,19 @@ function mkCell(vid,col){
   const codes=col.actCodes||[];
   const wir=colWir(vid,col);
   const sub=gSub(vid,codes);
+  const subDisp=sub?canonSub(sub):null;
   const da=`data-clickable="1" data-vid="${vid}" data-code="${codes[0]||''}" data-codes="${codes.join(',')}" data-label="${col.label.replace('\n',' ').replace(/"/g,'')}"`;
   if(col.type==='wir-only'){
     return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
       <div class="ct ${sc(wir)}" style="min-height:20px;display:flex;align-items:center;justify-content:center">${sl(wir)}</div>
-      <div class="csb">${sub?sub.substring(0,14):'—'}</div>
+      <div class="csb">${subDisp?subDisp.substring(0,16):'—'}</div>
     </div></td>`;
   }
   const prog=colProg(vid,col);
   return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
     <div class="ct ${sc(prog)}">${sl(prog)}</div>
     <div class="cm ${sc(wir)}">${sl(wir)}</div>
-    <div class="csb">${sub?sub.substring(0,14):'—'}</div>
+    <div class="csb">${subDisp?subDisp.substring(0,16):'—'}</div>
   </div></td>`;
 }
 
@@ -1107,6 +1106,8 @@ function applyPop(){
   document.querySelectorAll('#pop-opts .pop-opt.sel span[data-val]').forEach(el=>sel.add(el.getAttribute('data-val')));
   if(popKey==='__sub__'){
     subFilter=sel;closePop();updateSubFilterBtn();updateChips();applyFilters();
+  } else if(popKey==='__vtype__'){
+    vtFilter=sel;closePop();updateVtypeBtn();updateChips();applyFilters();
   } else {
     if(sel.size)colF[popKey]=sel;else delete colF[popKey];
     closePop();buildHeader();updateChips();applyFilters();
@@ -1114,6 +1115,7 @@ function applyPop(){
 }
 function clearPop(){
   if(popKey==='__sub__'){subFilter=new Set();closePop();updateSubFilterBtn();updateChips();applyFilters();}
+  else if(popKey==='__vtype__'){vtFilter=new Set();closePop();updateVtypeBtn();updateChips();applyFilters();}
   else{if(popKey)delete colF[popKey];closePop();buildHeader();updateChips();applyFilters();}
 }
 function closePop(){document.getElementById('pop').classList.remove('open');popKey=null;}
@@ -1122,7 +1124,6 @@ let _afTimer=null;
 function applyFiltersDebounced(){clearTimeout(_afTimer);_afTimer=setTimeout(applyFilters,120);}
 function applyFilters(){
   const fc=document.getElementById('fcl').value;
-  const fvtype=document.getElementById('fvtype').value;
   const fvRaw=(document.getElementById('fv').value||'').trim();
   const fvList=fvRaw?fvRaw.split(/[\s,]+/).map(s=>s.trim()).filter(Boolean):[];
   let cnt=0;
@@ -1131,21 +1132,32 @@ function applyFilters(){
     if(!v){row.classList.add('rh');return;}
     let show=true;
     if(fc&&v.cluster!==fc)show=false;
-    const vtEl2=document.getElementById('fvtype');
-    const selectedVT=vtEl2&&vtEl2.multiple?Array.from(vtEl2.selectedOptions).map(o=>o.value).filter(v=>v):(fvtype?[fvtype]:[]);
-    if(selectedVT.length>0&&show)show=selectedVT.includes(v.villa_type||'');
+    if(vtFilter.size>0&&show)show=v.villa_type?vtFilter.has(v.villa_type):false;
     if(fvList.length>0&&show)show=fvList.some(n=>{
       const vStr=String(v.villa_no);
       if(n.startsWith('0'))return vStr===String(parseInt(n)); // 015 → exact match 15
       return vStr===n||vStr.includes(n); // 15 → substring (15,115,215...)
     });
     if(subFilter.size>0&&show){
-      // Only check subcontractors in VISIBLE columns — ignore hidden column data
       const visCols=COLS.filter(c=>c.visible&&(c.type==='pair'||c.type==='wir-only'));
       const visibleCodes=new Set();
-      visCols.forEach(col=>{(col.ac||[col.key]).forEach(code=>visibleCodes.add(resolveWirCode(code)));});
+      visCols.forEach(col=>{
+        // actCodes is the correct property (not col.ac which is for target_list)
+        const codes=col.actCodes||col.prereqCodes||[];
+        codes.forEach(code=>{
+          visibleCodes.add(code);
+          visibleCodes.add(resolveWirCode(code));
+          Object.keys(wirCodeAliases).forEach(oldC=>{
+            if(resolveWirCode(oldC)===code||resolveWirCode(oldC)===resolveWirCode(code))visibleCodes.add(oldC);
+          });
+        });
+      });
       const subMap=wirSubD[vid]||{};
-      show=Object.entries(subMap).some(([code,s])=>visibleCodes.has(resolveWirCode(code))&&subFilter.has(canonSub(s)));
+      show=Object.entries(subMap).some(([code,rawSub])=>{
+        if(!rawSub)return false;
+        const codeVisible=visibleCodes.has(code)||visibleCodes.has(resolveWirCode(code));
+        return codeVisible&&subFilter.has(canonSub(rawSub));
+      });
     }
     if(rejOnly&&show){
       const wirCols=COLS.filter(c=>c.visible&&(c.type==='pair'||c.type==='wir-only'));
@@ -1188,10 +1200,13 @@ function updateChips(){
   if(subFilter.size>0){
     chips.push(`<div class="af-chip" onclick="clearSubFilter()">Sub-Contractor: <b>${[...subFilter].join(', ')}</b> ×</div>`);
   }
+  if(vtFilter.size>0){
+    chips.push(`<div class="af-chip" onclick="clearVtypeFilter()">Villa Type: <b>${[...vtFilter].join(', ')}</b> ×</div>`);
+  }
   document.getElementById('chips').innerHTML=chips.join('');
 }
 function removeF(key){delete colF[key];buildHeader();updateChips();applyFilters();}
-function clearAll(){colF={};subFilter=new Set();rejOnly=false;document.getElementById('fcl').value='';document.getElementById('fvtype').value='';document.getElementById('fv').value='';const rb=document.getElementById('btn-rej-only');if(rb){rb.style.background='#1f2937';rb.style.color='#f87171';rb.style.borderColor='#7f1d1d';}updateSubFilterBtn();buildHeader();updateChips();applyFilters();}
+function clearAll(){colF={};subFilter=new Set();vtFilter=new Set();updateVtypeBtn();rejOnly=false;document.getElementById('fcl').value='';document.getElementById('fvtype').value='';document.getElementById('fv').value='';const rb=document.getElementById('btn-rej-only');if(rb){rb.style.background='#1f2937';rb.style.color='#f87171';rb.style.borderColor='#7f1d1d';}updateSubFilterBtn();buildHeader();updateChips();applyFilters();}
 
 // COLUMN MANAGER
 let activeMgrTab='cols';
@@ -1418,6 +1433,38 @@ function openSubFilter(e){
   pop.style.overflowY='auto';
   pop.classList.add('open');
 }
+// ── VILLA TYPE FILTER POPUP ──
+function openVtypeFilter(e){
+  e.stopPropagation();
+  // Collect all villa types from current data
+  const allTypes=new Set();
+  Object.values(vMap).forEach(v=>{if(v.villa_type)allTypes.add(v.villa_type);});
+  const sorted=[...allTypes].sort();
+  popKey='__vtype__';
+  document.getElementById('pop-title').textContent='Villa Types';
+  let h='';
+  sorted.forEach(t=>{
+    const sel=vtFilter.has(t);
+    h+=`<div class="pop-opt${sel?' sel':''}" onclick="togOpt(this)"><div class="pop-cb">${sel?'✓':''}</div><span data-val="${t}">${t}</span></div>`;
+  });
+  if(!sorted.length)h='<div style="font-size:11px;color:#64748b;padding:6px">No villa types found.</div>';
+  document.getElementById('pop-opts').innerHTML=h;
+  const btn=document.getElementById('fvtype-btn').getBoundingClientRect();
+  const pop=document.getElementById('pop');
+  pop.style.left=Math.min(btn.left,window.innerWidth-260)+'px';
+  pop.style.top=(btn.bottom+4)+'px';
+  pop.style.maxHeight='300px';
+  pop.style.overflowY='auto';
+  pop.classList.add('open');
+}
+function clearVtypeFilter(){vtFilter=new Set();updateVtypeBtn();updateChips();applyFilters();}
+function updateVtypeBtn(){
+  const btn=document.getElementById('fvtype-btn');if(!btn)return;
+  if(vtFilter.size===0)btn.textContent='All Villa Types ▾';
+  else if(vtFilter.size===1)btn.textContent=[...vtFilter][0]+' ▾';
+  else btn.textContent=vtFilter.size+' Types ▾';
+}
+
 function clearSubFilter(){subFilter=new Set();updateSubFilterBtn();updateChips();applyFilters();}
 function updateSubFilterBtn(){
   const btn=document.getElementById('fwsub-btn');if(!btn)return;
@@ -1631,7 +1678,7 @@ function openMod(vid,actCode,actLabel,codes){
     const prog=progD[vid]?.[actCode]||{};
     mCtx={vid,actCode,codes:codesArr,actLabel};
     const sb=document.getElementById('sub-box');
-    if(sub){document.getElementById('sub-val').textContent=sub;sb.style.display='block';}else sb.style.display='none';
+    if(sub){document.getElementById('sub-val').textContent=canonSub(sub);sb.style.display='block';}else sb.style.display='none';
     document.getElementById('m-v').value=`Villa ${v.villa_no} — ${v.cluster} (${v.villa_type||'—'})`;
     document.getElementById('m-a').value=actLabel+(codesArr.length>1?` [${codesArr.join(', ')}]`:'');
     document.getElementById('m-w').value=sl(wir);
