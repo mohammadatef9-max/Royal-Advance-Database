@@ -249,7 +249,15 @@ body.in-shell .page-wrap{height:100vh}
     <button class="tab-btn" id="tab-alias" onclick="switchTab('alias')">
       Clearance Aliases <span class="tab-badge" id="badge-alias">—</span>
     </button>
-    <button class="tab-btn" id="tab-maint" onclick="switchTab('maint')" style="color:var(--rejected,#ff8a99)">
+    <button class="tab-btn" id="tab-subs" onclick="switchTab('subs')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Sub-Contractors
+    </button>
+    <button class="tab-btn" id="tab-wiralias" onclick="switchTab('wiralias')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+      WIR Code Aliases
+    </button>
+        <button class="tab-btn" id="tab-maint" onclick="switchTab('maint')" style="color:var(--rejected,#ff8a99)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
       Maintenance
     </button>
@@ -453,6 +461,68 @@ body.in-shell .page-wrap{height:100vh}
 
 </div>
 
+  <!-- ══ SUB-CONTRACTORS TAB ══ -->
+  <div class="tab-content" id="content-subs" style="flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">Sub-Contractor Aliases</div>
+      <div style="font-size:11px;color:var(--text-dim)">Map misspelled or alternate names to a canonical name</div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <input id="subs-search" type="text" placeholder="Search…" oninput="renderSubsTable()"
+          style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:180px">
+        <button class="btn btn-primary" onclick="openAddSubModal()">+ Add Alias</button>
+      </div>
+    </div>
+    <!-- Merge bar -->
+    <div id="subs-merge-bar" style="display:none;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--accent-soft);flex-shrink:0;align-items:center;gap:10px">
+      <span style="font-size:12px;font-weight:600;color:var(--accent-text)"><span id="subs-sel-count">0</span> selected</span>
+      <input id="subs-canon-input" type="text" placeholder="Canonical name (merge target)"
+        style="flex:1;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px">
+      <button class="btn btn-primary" onclick="mergeSubsSelected()">Merge Selected</button>
+      <button class="btn btn-ghost" onclick="clearSubsSel()">Clear</button>
+      <span id="subs-merge-msg" style="font-size:11px"></span>
+    </div>
+    <div style="overflow:auto;flex:1">
+      <table style="border-collapse:collapse;width:100%;font-size:12px">
+        <thead>
+          <tr>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:36px">
+              <input type="checkbox" id="subs-chk-all" onchange="toggleAllSubs(this)" style="accent-color:var(--accent)">
+            </th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Raw / Alias Name</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Canonical Name</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:80px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="subs-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══ WIR CODE ALIASES TAB ══ -->
+  <div class="tab-content" id="content-wiralias" style="flex-direction:column;overflow:hidden">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">WIR Code Aliases</div>
+      <div style="font-size:11px;color:var(--text-dim)">Map old/replaced WIR codes → new codes. Old approvals count toward the new code.</div>
+      <div style="margin-left:auto">
+        <button class="btn btn-primary" onclick="openAddWirAliasModal()">+ Add Alias</button>
+      </div>
+    </div>
+    <div style="overflow:auto;flex:1">
+      <table style="border-collapse:collapse;width:100%;font-size:12px">
+        <thead>
+          <tr>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Old Code (replaced)</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">New Code (use this)</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Note</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Active</th>
+            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:80px">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="wiralias-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- ══ MAINTENANCE TAB ══ -->
   <div class="tab-content" id="content-maint" style="flex-direction:column;overflow-y:auto;padding:24px 20px">
     <div style="max-width:580px;display:flex;flex-direction:column;gap:14px">
@@ -626,7 +696,7 @@ let editingWirId = null, editingClrId = null;
 // ── TAB SWITCH ──
 function switchTab(tab) {
   currentTab = tab;
-  ['wir','clr','map','alias','maint'].forEach(t => {
+  ['wir','clr','map','alias','subs','wiralias','maint'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t === tab);
     document.getElementById('content-'+t)?.classList.toggle('active', t === tab);
   });
@@ -647,6 +717,8 @@ function switchTab(tab) {
     }
   }
   if(tab==='maint') loadMaintCounts();
+  if(tab==='subs') loadSubsTab();
+  if(tab==='wiralias') loadWirAliasTab();
 }
 
 // ── TOAST ──
@@ -1437,6 +1509,181 @@ async function deleteAllRequests(){
   if(!r.ok) throw new Error('Delete failed: '+(await r.text()));
   toast('All release requests deleted','ok');
 }
+
+// ══ SUB-CONTRACTORS TAB ══
+var subAliasData = []; // [{id, alias, canonical_name}]
+var subsSel = new Set();
+
+async function loadSubsTab(){
+  const rows = await sbFetch('subcontractor_aliases?select=id,alias,canonical_name&order=canonical_name,alias');
+  subAliasData = Array.isArray(rows) ? rows : [];
+  renderSubsTable();
+}
+
+function renderSubsTable(){
+  const q = (document.getElementById('subs-search')?.value||'').toLowerCase();
+  const filtered = subAliasData.filter(r =>
+    !q || r.alias.toLowerCase().includes(q) || r.canonical_name.toLowerCase().includes(q)
+  );
+  const tb = document.getElementById('subs-tbody');
+  if(!tb) return;
+  tb.innerHTML = filtered.map(r => `
+    <tr>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;text-align:center">
+        <input type="checkbox" ${subsSel.has(r.alias)?'checked':''} onchange="toggleSubsSel('${esc2(r.alias)}',this)"
+          style="accent-color:var(--accent)">
+      </td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;color:var(--text);font-family:var(--mono,monospace);font-size:11px">${esc2(r.alias)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
+        <span style="background:var(--accent-soft);color:var(--accent-text);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${esc2(r.canonical_name)}</span>
+      </td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
+        <button onclick="deleteSubAlias(${r.id},'${esc2(r.alias)}')"
+          style="padding:3px 8px;border:1px solid var(--rejected-bd,#6b2530);border-radius:5px;background:var(--rejected-bg,#4a1820);color:var(--rejected,#ff8a99);font-size:10px;cursor:pointer">Delete</button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text-dim)">No aliases found</td></tr>`;
+  updateSubsMergeBar();
+}
+
+function toggleSubsSel(alias, chk){
+  if(chk.checked) subsSel.add(alias); else subsSel.delete(alias);
+  updateSubsMergeBar();
+}
+function toggleAllSubs(chk){
+  const q=(document.getElementById('subs-search')?.value||'').toLowerCase();
+  const filtered=subAliasData.filter(r=>!q||r.alias.toLowerCase().includes(q)||r.canonical_name.toLowerCase().includes(q));
+  if(chk.checked) filtered.forEach(r=>subsSel.add(r.alias));
+  else subsSel.clear();
+  renderSubsTable();
+}
+function clearSubsSel(){subsSel.clear();document.getElementById('subs-canon-input').value='';document.getElementById('subs-merge-msg').textContent='';renderSubsTable();}
+function updateSubsMergeBar(){
+  const bar=document.getElementById('subs-merge-bar');
+  if(bar) bar.style.display=subsSel.size>0?'flex':'none';
+  const cnt=document.getElementById('subs-sel-count');
+  if(cnt) cnt.textContent=subsSel.size;
+  if(subsSel.size>0&&document.getElementById('subs-canon-input')&&!document.getElementById('subs-canon-input').value){
+    document.getElementById('subs-canon-input').value=[...subsSel].sort()[0];
+  }
+}
+
+function openAddSubModal(){
+  const alias=prompt('Raw / alias name (as it appears in WIR data):');
+  if(!alias?.trim()) return;
+  const canon=prompt('Canonical name to map it to:');
+  if(!canon?.trim()) return;
+  saveSubAlias(alias.trim(), canon.trim());
+}
+
+async function saveSubAlias(alias, canon){
+  const res=await fetch(`${SB}/rest/v1/subcontractor_aliases?on_conflict=alias`,{
+    method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify({alias,canonical_name:canon})
+  });
+  if(!res.ok){toast('Error: '+(await res.text()),'err');return;}
+  toast('Alias saved','ok');
+  loadSubsTab();
+}
+
+async function mergeSubsSelected(){
+  const canon=(document.getElementById('subs-canon-input').value||'').trim();
+  const msg=document.getElementById('subs-merge-msg');
+  if(!canon){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Enter a canonical name</span>';return;}
+  const rows=[...subsSel].filter(a=>a!==canon).map(alias=>({alias,canonical_name:canon}));
+  // Also save the canonical as its own entry pointing to itself (so it shows in the list)
+  if(rows.length===0){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Nothing to merge</span>';return;}
+  if(msg)msg.innerHTML='<span style="color:var(--accent-text)">Saving…</span>';
+  const res=await fetch(`${SB}/rest/v1/subcontractor_aliases?on_conflict=alias`,{
+    method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+    body:JSON.stringify(rows)
+  });
+  if(!res.ok){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Error: '+(await res.text())+'</span>';return;}
+  if(msg)msg.innerHTML='<span style="color:var(--approved)">✅ Merged '+rows.length+' aliases → "'+canon+'"</span>';
+  subsSel.clear();document.getElementById('subs-canon-input').value='';
+  loadSubsTab();
+  setTimeout(()=>{if(msg)msg.textContent='';},3000);
+}
+
+async function deleteSubAlias(id, alias){
+  if(!confirm('Remove alias for "'+alias+'"?')) return;
+  await fetch(SB+'/rest/v1/subcontractor_aliases?id=eq.'+id,{method:'DELETE',headers:getH()});
+  subAliasData=subAliasData.filter(r=>r.id!==id);
+  subsSel.delete(alias);
+  renderSubsTable();
+  toast('Alias removed','ok');
+}
+
+
+// ══ WIR CODE ALIASES TAB ══
+var wirAliasData = [];
+
+async function loadWirAliasTab(){
+  const rows = await sbFetch('wir_code_aliases?select=id,old_code,new_code,note,is_active&order=new_code,old_code');
+  wirAliasData = Array.isArray(rows) ? rows : [];
+  renderWirAliasTable();
+}
+
+function renderWirAliasTable(){
+  const tb = document.getElementById('wiralias-tbody');
+  if(!tb) return;
+  tb.innerHTML = wirAliasData.map(r => `
+    <tr>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;font-family:var(--mono,monospace);font-size:12px;font-weight:600;color:var(--rejected,#ff8a99)">${esc2(r.old_code)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;font-family:var(--mono,monospace);font-size:12px;font-weight:600;color:var(--approved,#6ee2a3)">${esc2(r.new_code)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;color:var(--text-muted);font-size:11px">${esc2(r.note||'—')}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;text-align:center">
+        <input type="checkbox" ${r.is_active?'checked':''} onchange="toggleWirAliasActive(${r.id},this.checked)"
+          style="accent-color:var(--accent)">
+      </td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
+        <button onclick="deleteWirAlias(${r.id},'${esc2(r.old_code)}')"
+          style="padding:3px 8px;border:1px solid var(--rejected-bd,#6b2530);border-radius:5px;background:var(--rejected-bg,#4a1820);color:var(--rejected,#ff8a99);font-size:10px;cursor:pointer">Delete</button>
+      </td>
+    </tr>`).join('') || `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text-dim)">No WIR code aliases yet</td></tr>`;
+}
+
+function openAddWirAliasModal(){
+  const old_code=prompt('Old code (being replaced, e.g. 3080):');
+  if(!old_code?.trim()) return;
+  const new_code=prompt('New code (replacement, e.g. 3162):');
+  if(!new_code?.trim()) return;
+  const note=prompt('Note (optional):');
+  saveWirAlias(old_code.trim(), new_code.trim(), note?.trim()||null);
+}
+
+async function saveWirAlias(old_code, new_code, note){
+  const res=await fetch(SB+'/rest/v1/wir_code_aliases',{
+    method:'POST',headers:{...getH(),'Prefer':'return=minimal'},
+    body:JSON.stringify({old_code,new_code,note,is_active:true,updated_at:new Date().toISOString()})
+  });
+  if(!res.ok){toast('Error: '+(await res.text()),'err');return;}
+  toast('WIR alias saved','ok');
+  loadWirAliasTab();
+}
+
+async function toggleWirAliasActive(id, active){
+  await fetch(SB+'/rest/v1/wir_code_aliases?id=eq.'+id,{
+    method:'PATCH',headers:getH(),
+    body:JSON.stringify({is_active:active,updated_at:new Date().toISOString()})
+  });
+  const r=wirAliasData.find(x=>x.id===id);
+  if(r)r.is_active=active;
+  toast(active?'Alias activated':'Alias deactivated','ok');
+}
+
+async function deleteWirAlias(id, old_code){
+  if(!confirm('Delete alias for "'+old_code+'"?')) return;
+  await fetch(SB+'/rest/v1/wir_code_aliases?id=eq.'+id,{method:'DELETE',headers:getH()});
+  wirAliasData=wirAliasData.filter(r=>r.id!==id);
+  renderWirAliasTable();
+  toast('Deleted','ok');
+}
+
+// ── Shared fetch helper ──
+async function sbFetch(path){
+  try{const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()});return r.json();}catch(e){return [];}
+}
+function esc2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 </script>
 <div id="access-denied" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none">
   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--rejected)" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>

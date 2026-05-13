@@ -6,6 +6,7 @@
 <title>Weekly Target List · MEP</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -91,7 +92,7 @@ input,select,textarea{font:inherit;color:inherit}
 .wi.on .wc{color:var(--accent-text)}
 
 /* Main content */
-.mn{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.mn{flex:1;display:flex;flex-direction:column;overflow-y:hidden;overflow-x:auto;min-width:0}
 
 /* Page head inside main */
 .mn-head{padding:14px 16px 10px;border-bottom:1px solid var(--border-subtle);flex-shrink:0;
@@ -152,7 +153,7 @@ input,select,textarea{font:inherit;color:inherit}
 .sr-div{width:1px;background:var(--border);margin:4px 0;align-self:stretch}
 
 /* Table */
-.tw{flex:1;overflow:auto}
+.tw{flex:1;overflow:auto;min-width:0;position:relative}
 .tw::-webkit-scrollbar{width:10px;height:10px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
 .tw::-webkit-scrollbar-thumb{background:var(--border-strong);border:2px solid var(--bg);border-radius:5px}
@@ -601,6 +602,7 @@ var AK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR
 function getH(extra){let token=window.__MEP_TOKEN__;if(!token){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)token=j.access_token;}}catch(e){}}return Object.assign({'apikey':AK,'Authorization':'Bearer '+(token||AK),'Content-Type':'application/json'},extra||{});}
 function hdr(extra){return getH(extra);}
 
+const resolveWirCode=code=>{let c=code,seen=new Set(),hops=0;while(wirCodeAliases[c]&&!seen.has(c)&&hops<5){seen.add(c);c=wirCodeAliases[c];hops++;}return c;};
 function dbGet(path){
   return fetch(SB+'/rest/v1/'+path,{headers:hdr()}).then(function(r){
     if(!r.ok)return r.text().then(function(t){throw new Error(t);});
@@ -668,7 +670,7 @@ var LK='mep_tgt_v4';
 
 var actCI={},clrCI={},clrIC={};
 var vByNo={},vByKey={},vById={};
-var weeks=[],actWk=null,tVillas=[],actDisc=null;
+var weeks=[],actWk=null,tVillas=[],actDisc=null,wirCodeAliases={};
 var wirD={},wirSD={},progD={},clrD2={},flagsD={};
 var colF={},popKey=null,editKey=null,dragSrc=null;
 
@@ -680,12 +682,23 @@ var SL={approved:'Approved',rejected:'Rejected',under_review:'UR',not_submitted:
   completed:'Completed',in_progress:'In Prog.',not_started:'Not Started'};
 
 function sl(s){return SL[s]||s||'\u2014';}
-function sc(s){var m={approved:'ca',under_review:'cu',rejected:'cj',not_submitted:'cn',completed:'cc',in_progress:'ci',not_started:'cn'};return m[s]||'cn';}
+function sc(s){var m={approved:'ca',under_review:'cu',rejected:'cj',not_submitted:'cn',completed:'cc',in_progress:'ci',not_started:'cn',fully_approved:'ca',not_approved:'cj',pending:'ci'};return m[s]||'cn';}
 function bW(a){return a.reduce(function(b,s){return WPR.indexOf(s)<WPR.indexOf(b)?s:b;},'not_submitted');}
 function bP(a){return a.reduce(function(b,s){return PPR.indexOf(s)<PPR.indexOf(b)?s:b;},'not_started');}
 function gW(v,c){return wirD[v]&&wirD[v][c]||'not_submitted';}
 function gP(v,c){return progD[v]&&progD[v][c]||'not_started';}
-function gC(v,codes){if(!Array.isArray(codes))codes=[codes];return codes.map(function(c){return clrD2[v]&&clrD2[v][c]||'not_submitted';}).reduce(function(b,s){return CLRP.indexOf(s)>CLRP.indexOf(b)?s:b;},'not_submitted');}
+function gC(v,codes){
+  if(!Array.isArray(codes))codes=[codes];
+  return codes.map(function(c){
+    if(!clrD2[v])return 'not_submitted';
+    // Try direct code lookup first
+    if(clrD2[v][c])return clrD2[v][c];
+    // Try by activity_id (numeric)
+    var id=clrCI[c];
+    if(id&&clrD2[v]['__id_'+id])return clrD2[v]['__id_'+id];
+    return 'not_submitted';
+  }).reduce(function(b,s){return CLRP.indexOf(s)>CLRP.indexOf(b)?s:b;},'not_submitted');
+}
 function cW(v,col){return bW((col.ac||[]).map(function(c){return gW(v,c);}));}
 function cP(v,col){return bP((col.ac||[]).map(function(c){return gP(v,c);}));}
 function gSub(v,codes){for(var i=0;i<codes.length;i++){var s=wirSD[v]&&wirSD[v][codes[i]];if(s)return s;}return null;}
@@ -710,7 +723,11 @@ function init(){
       vById[v.id]=o;
     });
     try{var ls=localStorage.getItem(LK);if(ls)applyLayout(JSON.parse(ls));}catch(e){}// quick local cache while DB loads
-    return loadWeeks(); // layout loaded inside selWeek based on week discipline
+    return fetch(SB+'/rest/v1/wir_code_aliases?select=old_code,new_code&is_active=eq.true',{headers:getH()})
+    .then(function(r){return r.json();}).then(function(rows){
+      if(Array.isArray(rows))rows.forEach(function(r){wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
+    }).catch(function(){}).then(function(){initFlagsRealtime();
+  return loadWeeks();});
   }).then(function(){
     document.getElementById('ld').style.display='none';
   }).catch(function(e){
@@ -720,6 +737,7 @@ function init(){
 }
 
 function applyLayout(saved){
+  if(typeof saved==='string'){try{saved=JSON.parse(saved);}catch(e){return;}}
   if(!Array.isArray(saved)||!saved.length)return;
   var byKey={};DCOLS.forEach(function(c){byKey[c.key]=c;});
   var result=[],seen={};
@@ -739,21 +757,31 @@ function getLayoutKey(disc){
 }
 
 function saveLayout(disc){
-  if(!canManageTargets())return;
   var lk=getLayoutKey(disc);
   var d=COLS.map(function(c){
     var o={key:c.key,type:c.type,label:c.label,visible:c.visible!==false};
     if(c.ac)o.ac=c.ac;if(c.cc)o.cc=c.cc;if(c.ccs)o.ccs=c.ccs;return o;
   });
-  try{localStorage.setItem('tgt_layout_'+lk.user_key,JSON.stringify(d));}catch(e){}
-  fetch(SB+'/rest/v1/user_column_layouts?user_key=eq.'+lk.user_key+'&discipline=eq.'+lk.disc_tag,{
-    method:'GET',headers:hdr()
-  }).then(function(r){return r.json();}).then(function(rows){
-    var method=rows&&rows.length?'PATCH':'POST';
-    var url=SB+'/rest/v1/user_column_layouts'+(method==='PATCH'?'?user_key=eq.'+lk.user_key+'&discipline=eq.'+lk.disc_tag:'');
-    return fetch(url,{method:method,headers:Object.assign({},hdr(),method==='POST'?{'Prefer':'return=minimal'}:{}),
-      body:JSON.stringify({user_key:lk.user_key,discipline:lk.disc_tag,layout:d,updated_at:new Date().toISOString()})});
-  }).catch(function(){});
+  var layoutStr=JSON.stringify(d);
+  try{localStorage.setItem('tgt_layout_'+lk.user_key,layoutStr);}catch(e){}
+  console.log('[saveLayout] saving',d.length,'cols to',lk.user_key,lk.disc_tag);
+  // Use upsert — simplest and most reliable approach
+  // Use explicit on_conflict param so Supabase knows which unique key to merge on
+  fetch(SB+'/rest/v1/user_column_layouts?on_conflict=user_key,discipline',{
+    method:'POST',
+    headers:Object.assign({},getH(),{
+      'Prefer':'resolution=merge-duplicates,return=minimal'
+    }),
+    body:JSON.stringify({
+      user_key:lk.user_key,
+      discipline:lk.disc_tag,
+      layout:layoutStr,
+      updated_at:new Date().toISOString()
+    })
+  }).then(function(r){
+    if(!r.ok)return r.text().then(function(t){console.error('[saveLayout] failed:',r.status,t);});
+    console.log('[saveLayout] saved OK');
+  }).catch(function(e){console.error('[saveLayout] error:',e);});
 }
 
 function loadLayoutDB(disc){
@@ -763,19 +791,21 @@ function loadLayoutDB(disc){
     headers:getH()
   }).then(function(r){return r.ok?r.json():[];}).then(function(rows){
     if(rows&&rows.length&&rows[0].layout){
-      applyLayout(rows[0].layout);
-      try{localStorage.setItem('tgt_layout_'+lk.user_key,JSON.stringify(rows[0].layout));}catch(e){}
+      // DB is always authoritative — overrides any local cache
+      var layoutData=rows[0].layout;
+      // layout may be a string (JSON) or already parsed object depending on Supabase
+      if(typeof layoutData==='string'){
+        try{layoutData=JSON.parse(layoutData);}catch(e){layoutData=null;}
+      }
+      if(layoutData){
+        applyLayout(layoutData);
+        try{localStorage.setItem('tgt_layout_'+lk.user_key,JSON.stringify(layoutData));}catch(e){}
+      }
     } else {
-      // No saved layout — check localStorage
-      var ls=null;
-      try{ls=localStorage.getItem('tgt_layout_'+lk.user_key);}catch(e){}
-      if(ls){applyLayout(JSON.parse(ls));}
-      else if(isElec){
-        // Electrical has no default columns — start empty
+      // No DB layout yet — start fresh (ignore stale localStorage)
+      if(isElec){
         COLS=[];
-        render();
       } else {
-        // Mechanical: use DCOLS defaults
         COLS=DCOLS.map(function(c){return Object.assign({},c);});
       }
     }
@@ -855,11 +885,19 @@ function loadVillaData(vids){
   }).then(function(prog){
     var i2c={};Object.keys(actCI).forEach(function(c){i2c[actCI[c]]=c;});
     prog.forEach(function(r){var c=i2c[r.activity_id];if(!c)return;if(!progD[r.villa_id])progD[r.villa_id]={};progD[r.villa_id][c]=r.status;});
-    var hasClr=COLS.some(function(c){return c.visible&&c.type==='clr';});
+    var hasClr=COLS.some(function(c){return c.type==='clr';}); // load for ALL clr cols, visible or hidden
     if(!hasClr){setS2('');return;}
     setS2('Loading clearances...');
     return dbGetAll('v_latest_clearance_status?select=villa_id,clearance_activity_id,normalised_status&match_status=eq.matched&villa_id=in.('+ids+')').then(function(cr){
-      cr.forEach(function(r){var c=clrIC[r.clearance_activity_id];if(!c)return;if(!clrD2[r.villa_id])clrD2[r.villa_id]={};clrD2[r.villa_id][c]=r.normalised_status;});
+      cr.forEach(function(r){
+        var code=clrIC[r.clearance_activity_id];
+        if(!code)return;
+        if(!clrD2[r.villa_id])clrD2[r.villa_id]={};
+        clrD2[r.villa_id][code]=r.normalised_status;
+        // Also store under clearance_activity_id as fallback
+        if(!clrD2[r.villa_id]['__id_'+r.clearance_activity_id])
+          clrD2[r.villa_id]['__id_'+r.clearance_activity_id]=r.normalised_status;
+      });
       setS2('');
     });
   });
@@ -1645,6 +1683,46 @@ async function printSelectedWeeks(){
   win.document.open();
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weekly Targets</title><style>'+CSS+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},500);},400);};<\/script></body></html>');
   win.document.close();
+}
+
+// ── Supabase Realtime for target_villa_flags (tick boxes sync across users) ──
+var _rtClient=null,_rtChannel=null;
+function initFlagsRealtime(){
+  if(_rtClient)return;
+  try{
+    var token=window.__MEP_TOKEN__;
+    if(!token){try{var s=localStorage.getItem('mep_session');if(s){var j=JSON.parse(s);token=j.access_token;}}catch(e){}}
+    _rtClient=supabase.createClient(SB,AK,{global:{headers:{Authorization:'Bearer '+(token||AK)}},realtime:{params:{eventsPerSecond:2}}});
+    _rtChannel=_rtClient.channel('target-flags')
+      .on('postgres_changes',{event:'*',schema:'public',table:'target_villa_flags'},function(payload){
+        var r=payload.new||payload.old;
+        if(!r||r.week_name!==actWk)return; // ignore other weeks
+        if(payload.eventType==='DELETE'){
+          if(flagsD[r.villa_id])delete flagsD[r.villa_id][r.col_key];
+        } else {
+          if(!flagsD[r.villa_id])flagsD[r.villa_id]={};
+          flagsD[r.villa_id][r.col_key]=r.checked;
+        }
+        // Update just that cell without full re-render
+        var rows=document.querySelectorAll('#tb2 tr[data-vid="'+r.villa_id+'"]');
+        rows.forEach(function(row){
+          var col=COLS.find(function(c){return c.key===r.col_key;});
+          if(!col)return;
+          var idx=COLS.filter(function(c){return c.visible;}).indexOf(col);
+          if(idx<0)return;
+          var tks=row.querySelectorAll('.tk');
+          var tkIdx=0;
+          COLS.filter(function(c){return c.visible;}).forEach(function(c,i){
+            if(c.key===r.col_key&&c.type==='tick'){
+              var tk=tks[tkIdx];
+              if(tk){tk.classList.toggle('on',!!r.checked);tk.querySelector('.tkb').textContent=r.checked?'✓':'';}
+            }
+            if(c.type==='tick')tkIdx++;
+          });
+        });
+      })
+      .subscribe();
+  }catch(e){console.warn('[Realtime flags]',e.message);}
 }
 </script>
 

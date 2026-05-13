@@ -358,7 +358,7 @@ body.in-shell header { display: none !important; }
     <svg width="10" height="6" viewBox="0 0 10 6" style="flex-shrink:0;opacity:.5"><path fill="currentColor" d="M5 6L0 0h10z"/></svg>
   </button>
   <!-- Villa type -->
-  <select id="fvtype" onchange="applyFilters()">
+  <select id="fvtype" multiple style="min-height:32px" onchange="applyFilters()">
     <option value="">All Villa Types</option>
   </select>
   <!-- Villa search -->
@@ -762,6 +762,7 @@ let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
 let rejOnly=false;
 // Sub-contractor aliases: { 'raw spelling': 'Canonical Name' }
 let subAliases={};
+let wirCodeAliases={};
 // Multi-select sub-contractor filter (Set of CANONICAL names)
 let subFilter=new Set();
 // Sub-contractor merge UI selection
@@ -771,6 +772,7 @@ let progRows=[],progActOverrides={};
 const sl=s=>({approved:'Approved',rejected:'Rejected',under_review:'UR',not_submitted:'Not Sub.',fully_approved:'FA ✓',not_approved:'Not Appr.',pending:'Pending',completed:'Completed',in_progress:'In Prog.',not_started:'Not Started',ready:'✅ Ready',not_ready:'❌ Not Ready'}[s]||s);
 const sc=s=>'c-'+(s||'not_submitted').replace(/ /g,'_');
 // Apply alias: return canonical name for a raw sub-contractor string
+const resolveWirCode=code=>{let c=code,seen=new Set(),hops=0;while(wirCodeAliases[c]&&!seen.has(c)&&hops<5){seen.add(c);c=wirCodeAliases[c];hops++;}return c;};
 const canonSub=s=>{if(!s)return null;const t=String(s).trim();return subAliases[t]||t;};
 
 const gW=(vid,code)=>wirD[vid]?.[code]||'not_submitted';
@@ -843,7 +845,23 @@ async function init(){
       fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
     ]);
 
-    wir.forEach(r=>{ wirD[r.villa_id]=r.wir_statuses||{}; wirSubD[r.villa_id]=r.wir_subcontractors||{}; });
+    wir.forEach(r=>{
+      wirD[r.villa_id]=r.wir_statuses||{};
+      wirSubD[r.villa_id]=r.wir_subcontractors||{};
+      // Apply WIR code aliases — old approvals count toward new code
+      const st=wirD[r.villa_id],sb=wirSubD[r.villa_id];
+      const ord=['approved','under_review','rejected','not_submitted'];
+      Object.keys(st).forEach(code=>{
+        const resolved=resolveWirCode(code);
+        if(resolved!==code){
+          const existing=st[resolved]||'not_submitted',incoming=st[code]||'not_submitted';
+          if(ord.indexOf(incoming)<ord.indexOf(existing)){
+            st[resolved]=incoming;
+            if(sb[code]&&!sb[resolved])sb[resolved]=sb[code];
+          }
+        }
+      });
+    });
     clr.forEach(r=>{ clrD[r.villa_id]=r.clr_statuses||{}; });
     const i2c={};Object.entries(actCI).forEach(([c,id])=>i2c[id]=c);
     prog.forEach(r=>{const code=i2c[r.activity_id];if(!code)return;if(!progD[r.villa_id])progD[r.villa_id]={};progD[r.villa_id][code]={status:r.status,start_date:r.start_date,finish_date:r.finish_date,subcontractor:r.subcontractor,activity_id:r.activity_id};});
@@ -861,7 +879,15 @@ async function init(){
     document.getElementById('lm').textContent='Loading sub-contractor aliases...';
     try{
       const al=await fa('subcontractor_aliases?select=alias,canonical_name');
+      // Load WIR code aliases (old code → new code)
+      const wirCodeAliasRows=await fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true');
+      wirCodeAliases={};
+      wirCodeAliasRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
       al.forEach(r=>{subAliases[r.alias]=r.canonical_name;});
+      // Load WIR code aliases
+      const wcaRows=await fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true');
+      wirCodeAliases={};
+      if(Array.isArray(wcaRows))wcaRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
     }catch(e){console.warn('Could not load sub aliases:',e);}
     await loadLayout(disc);
     render();
@@ -1105,9 +1131,22 @@ function applyFilters(){
     if(!v){row.classList.add('rh');return;}
     let show=true;
     if(fc&&v.cluster!==fc)show=false;
-    if(fvtype&&show)show=(v.villa_type||'')=== fvtype;
-    if(fvList.length>0&&show)show=fvList.some(n=>String(v.villa_no)===n||String(v.villa_no).startsWith(n));
-    if(subFilter.size>0&&show)show=Object.values(wirSubD[vid]||{}).some(s=>subFilter.has(canonSub(s)));
+    const vtEl2=document.getElementById('fvtype');
+    const selectedVT=vtEl2&&vtEl2.multiple?Array.from(vtEl2.selectedOptions).map(o=>o.value).filter(v=>v):(fvtype?[fvtype]:[]);
+    if(selectedVT.length>0&&show)show=selectedVT.includes(v.villa_type||'');
+    if(fvList.length>0&&show)show=fvList.some(n=>{
+      const vStr=String(v.villa_no);
+      if(n.startsWith('0'))return vStr===String(parseInt(n)); // 015 → exact match 15
+      return vStr===n||vStr.includes(n); // 15 → substring (15,115,215...)
+    });
+    if(subFilter.size>0&&show){
+      // Only check subcontractors in VISIBLE columns — ignore hidden column data
+      const visCols=COLS.filter(c=>c.visible&&(c.type==='pair'||c.type==='wir-only'));
+      const visibleCodes=new Set();
+      visCols.forEach(col=>{(col.ac||[col.key]).forEach(code=>visibleCodes.add(resolveWirCode(code)));});
+      const subMap=wirSubD[vid]||{};
+      show=Object.entries(subMap).some(([code,s])=>visibleCodes.has(resolveWirCode(code))&&subFilter.has(canonSub(s)));
+    }
     if(rejOnly&&show){
       const wirCols=COLS.filter(c=>c.visible&&(c.type==='pair'||c.type==='wir-only'));
       show=wirCols.some(col=>colWir(vid,col)==='rejected');

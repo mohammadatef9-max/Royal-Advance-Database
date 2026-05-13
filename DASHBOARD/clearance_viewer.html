@@ -275,7 +275,10 @@ input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:po
     <option value="not_approved">Not Approved</option>
     <option value="pending">Pending</option>
   </select>
-  <select id="f-vtype" onchange="onFilterChange()"><option value="">All Villa Types</option></select>
+  <select id="f-vtype" onchange="onFilterChange()" multiple size="1"
+    style="appearance:none;background:var(--bg-panel) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%238a93a3' d='M5 6L0 0h10z'/></svg>") no-repeat right 9px center;border:1px solid var(--border);border-radius:7px;padding:6px 26px 6px 10px;color:var(--text);font-size:12px;min-width:130px;cursor:pointer">
+    <option value="">All Villa Types</option>
+  </select>
   <input id="f-villa" type="text" placeholder="Villa No" style="width:90px" oninput="onFilterChange()">
   <input id="f-ref" type="text" placeholder="Ref No" style="width:110px" oninput="onFilterChange()">
   <div class="fbar-sep"></div>
@@ -502,8 +505,14 @@ function buildQuery(forExport=false){
   if(fc) q+=`&raw_cluster=eq.${encodeURIComponent(fc)}`;
   if(fco) q+=`&raw_clearance_code=eq.${encodeURIComponent(fco)}`;
   if(fs) q+=`&normalised_status=eq.${encodeURIComponent(fs)}`;
-  if(fv) q+=`&raw_villa_type=eq.${encodeURIComponent(fv)}`;
-  if(fvn&&!isNaN(parseInt(fvn))) q+=`&raw_villa_no=eq.${parseInt(fvn)}`;
+  const vtSel=document.getElementById('f-vtype');
+  const selectedTypes=vtSel?Array.from(vtSel.selectedOptions).map(o=>o.value).filter(v=>v):[];
+  if(selectedTypes.length===1) q+=`&raw_villa_type=eq.${encodeURIComponent(selectedTypes[0])}`;
+  else if(selectedTypes.length>1) q+=`&raw_villa_type=in.(${selectedTypes.map(v=>encodeURIComponent(v)).join(',')})`;
+  if(fvn){
+    if(fvn.startsWith('0')){q+=`&raw_villa_no=eq.${parseInt(fvn)}`;}  // 015 → exact match villa 15
+    else if(!isNaN(parseInt(fvn))) q+=`&raw_villa_no=ilike.*${encodeURIComponent(fvn)}*`; // 15 → substring (15,115,215...)
+  }
   if(fr) q+=`&reference_number=ilike.*${encodeURIComponent(fr)}*`;
   q+=`&order=${sortCol}.${sortDir}`;
   return q;
@@ -511,7 +520,9 @@ function buildQuery(forExport=false){
 
 function onFilterChange(){clearTimeout(filterTimer);filterTimer=setTimeout(()=>{selectedKeys.clear();updateBulkBar();loadData();},400);}
 function clearFilters(){
-  ['f-cluster','f-code','f-status','f-vtype'].forEach(id=>document.getElementById(id).value='');
+  ['f-cluster','f-code','f-status'].forEach(id=>document.getElementById(id).value='');
+  const vtEl=document.getElementById('f-vtype');
+  if(vtEl) Array.from(vtEl.options).forEach(o=>o.selected=o.value==='');
   ['f-villa','f-ref'].forEach(id=>document.getElementById(id).value='');
   selectedKeys.clear();updateBulkBar();loadData();
 }
