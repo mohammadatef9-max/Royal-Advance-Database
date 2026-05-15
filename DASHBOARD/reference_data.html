@@ -462,7 +462,7 @@ body.in-shell .page-wrap{height:100vh}
 </div>
 
   <!-- ══ SUB-CONTRACTORS TAB ══ -->
-  <div class="tab-content" id="content-subs" style="flex-direction:column;overflow:hidden">
+  <div class="tab-content" id="content-subs" style="flex-direction:column;overflow-y:auto;min-height:0">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
       <div style="font-size:13px;font-weight:600;color:var(--text)">Sub-Contractor Aliases</div>
       <div style="font-size:11px;color:var(--text-dim)">Map misspelled or alternate names to a canonical name</div>
@@ -481,8 +481,7 @@ body.in-shell .page-wrap{height:100vh}
       <button class="btn btn-ghost" onclick="clearSubsSel()">Clear</button>
       <span id="subs-merge-msg" style="font-size:11px"></span>
     </div>
-    <div style="overflow:auto;flex:1">
-      <table style="border-collapse:collapse;width:100%;font-size:12px">
+    <table style="border-collapse:collapse;width:100%;font-size:12px">
         <thead>
           <tr>
             <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:36px">
@@ -495,20 +494,25 @@ body.in-shell .page-wrap{height:100vh}
         </thead>
         <tbody id="subs-tbody"></tbody>
       </table>
-    </div>
   </div>
 
   <!-- ══ WIR CODE ALIASES TAB ══ -->
-  <div class="tab-content" id="content-wiralias" style="flex-direction:column;overflow:hidden">
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+  <div class="tab-content" id="content-wiralias" style="flex-direction:column;overflow-y:auto;min-height:0">
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap">
       <div style="font-size:13px;font-weight:600;color:var(--text)">WIR Code Aliases</div>
       <div style="font-size:11px;color:var(--text-dim)">Map old/replaced WIR codes → new codes. Old approvals count toward the new code.</div>
-      <div style="margin-left:auto">
-        <button class="btn btn-primary" onclick="openAddWirAliasModal()">+ Add Alias</button>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+        <input id="wiralias-old" type="text" placeholder="Old code e.g. 3080"
+          style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:140px;font-family:var(--mono,monospace)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-text)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        <input id="wiralias-new" type="text" placeholder="New code e.g. 3162"
+          style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:140px;font-family:var(--mono,monospace)">
+        <input id="wiralias-note" type="text" placeholder="Note (optional)"
+          style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:160px">
+        <button class="btn btn-primary" onclick="addWirAliasInline()">+ Add</button>
       </div>
     </div>
-    <div style="overflow:auto;flex:1">
-      <table style="border-collapse:collapse;width:100%;font-size:12px">
+    <table style="border-collapse:collapse;width:100%;font-size:12px">
         <thead>
           <tr>
             <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Old Code (replaced)</th>
@@ -1642,13 +1646,19 @@ function renderWirAliasTable(){
     </tr>`).join('') || `<tr><td colspan="5" style="padding:24px;text-align:center;color:var(--text-dim)">No WIR code aliases yet</td></tr>`;
 }
 
-function openAddWirAliasModal(){
-  const old_code=prompt('Old code (being replaced, e.g. 3080):');
-  if(!old_code?.trim()) return;
-  const new_code=prompt('New code (replacement, e.g. 3162):');
-  if(!new_code?.trim()) return;
-  const note=prompt('Note (optional):');
-  saveWirAlias(old_code.trim(), new_code.trim(), note?.trim()||null);
+function openAddWirAliasModal(){ addWirAliasInline(); } // kept for compat
+async function addWirAliasInline(){
+  const old_code=(document.getElementById('wiralias-old').value||'').trim();
+  const new_code=(document.getElementById('wiralias-new').value||'').trim();
+  const note=(document.getElementById('wiralias-note').value||'').trim();
+  if(!old_code){toast('Enter the old code','err');document.getElementById('wiralias-old').focus();return;}
+  if(!new_code){toast('Enter the new code','err');document.getElementById('wiralias-new').focus();return;}
+  if(old_code===new_code){toast('Old and new codes must be different','err');return;}
+  await saveWirAlias(old_code, new_code, note||null);
+  document.getElementById('wiralias-old').value='';
+  document.getElementById('wiralias-new').value='';
+  document.getElementById('wiralias-note').value='';
+  document.getElementById('wiralias-old').focus();
 }
 
 async function saveWirAlias(old_code, new_code, note){

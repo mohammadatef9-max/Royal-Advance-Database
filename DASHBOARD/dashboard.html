@@ -151,6 +151,7 @@ body.in-shell .topbar{display:none!important}
     </div>
   </div>
   <div class="kpi-strip" id="kpi-strip"></div>
+  <div id="disc-kpi-row" style="display:none;gap:12px;padding:0 16px 12px;flex-shrink:0"></div>
 
   <div class="sec">By Cluster</div>
   <div class="charts-row">
@@ -174,6 +175,11 @@ body.in-shell .topbar{display:none!important}
       <span class="tbl-hdr-r" id="tbl-count"></span>
     </div>
     <div class="filters">
+      <select class="fsel" id="f-disc" onchange="applyF()" style="display:none">
+        <option value="">All Disciplines</option>
+        <option value="mechanical">⚙ Mechanical</option>
+        <option value="electrical">⚡ Electrical</option>
+      </select>
       <select class="fsel" id="f-cl" onchange="applyF()"><option value="">All Clusters</option></select>
       <select class="fsel" id="f-st" onchange="applyF()"><option value="">All Statuses</option></select>
       <select class="fsel" id="f-sb" onchange="applyF()"><option value="">All Sub-Contractors</option></select>
@@ -217,7 +223,7 @@ async function fetchAll(p){
 async function init(){
   try{
     msg('Loading WIR data…');
-    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status');
+    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline');
     msg('Loading clearance data…');
     clrD=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
     msg('Rendering…');renderAll();hideLoad();
@@ -230,6 +236,7 @@ function setMode(m){
   mode=m;actCl='';
   document.getElementById('tab-wir').classList.toggle('active',m==='wir');
   document.getElementById('tab-clr').classList.toggle('active',m==='clr');
+  const ds=document.getElementById('f-disc');if(ds)ds.style.display=m==='wir'?'':'none';
   renderAll();
 }
 function D(){return mode==='wir'?wirD:clrD;}
@@ -244,6 +251,8 @@ const SL={approved:'Approved',rejected:'Rejected',under_review:'Under Review',no
 function renderAll(){
   const data=D();
   document.getElementById('sec-kpi').textContent='Overall · '+(mode==='wir'?'WIR':'Clearance');
+  const discSel=document.getElementById('f-disc');
+  if(discSel) discSel.style.display=mode==='wir'?'':'none';
   renderKPIs(data);renderCharts(data);renderClusters(data);populateF(data);applyF();
 }
 
@@ -263,6 +272,54 @@ function renderKPIs(data){
   document.getElementById('kpi-strip').innerHTML=kpis.map(k=>`
     <div class="kpi ${k.c}"><div class="kpi-v">${k.v}</div><div class="kpi-l">${k.l}</div><div class="kpi-s">${k.s}</div><div class="kpi-bar"></div></div>
   `).join('');
+
+  // Discipline KPIs — WIR mode only
+  const discKpiEl=document.getElementById('disc-kpi-row');
+  if(discKpiEl){
+    if(mode==='wir'){
+      const discs=['mechanical','electrical'];
+      const discLabels={mechanical:'⚙ Mechanical',electrical:'⚡ Electrical'};
+      const discColors={mechanical:'var(--accent-text)',electrical:'var(--progress)'};
+      discKpiEl.innerHTML=discs.map(disc=>{
+        const dr=data.filter(r=>(r.discipline||'').toLowerCase()===disc);
+        const dt=dr.length,dap=dr.filter(r=>r.normalised_status==='approved').length;
+        const drj=dr.filter(r=>r.normalised_status==='rejected').length;
+        const dur=dr.filter(r=>r.normalised_status==='under_review').length;
+        const dpct=dt?Math.round(dap/dt*100):0;
+        return`<div style="flex:1;background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:${discColors[disc]};text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">${discLabels[disc]}</div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--approved)">${dap.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">Approved</div>
+            </div>
+            <div style="width:1px;height:32px;background:var(--border);flex-shrink:0"></div>
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--rejected)">${drj.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">Rejected</div>
+            </div>
+            <div style="width:1px;height:32px;background:var(--border);flex-shrink:0"></div>
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--review)">${dur.toLocaleString()}</div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">Under Review</div>
+            </div>
+            <div style="width:1px;height:32px;background:var(--border);flex-shrink:0"></div>
+            <div style="display:flex;flex-direction:column;gap:1px">
+              <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--accent-text)">${dpct}%</div>
+              <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">Approval Rate</div>
+            </div>
+            <div style="margin-left:auto;font-size:11px;color:var(--text-dim)">${dt.toLocaleString()} records</div>
+          </div>
+          <div style="margin-top:10px;background:var(--border);border-radius:3px;height:4px;overflow:hidden">
+            <div style="width:${dpct}%;height:100%;background:var(--approved);border-radius:3px;transition:width .4s"></div>
+          </div>
+        </div>`;
+      }).join('');
+      discKpiEl.style.display='flex';
+    } else {
+      discKpiEl.style.display='none';
+    }
+  }
 }
 
 function renderCharts(data){
@@ -345,8 +402,10 @@ function applyF(){
   const fsb=document.getElementById('f-sb').value;
   const q=(document.getElementById('f-q').value||'').toLowerCase().trim();
   actCl=fc;renderClusters(D());updBadge();
+  const fd=document.getElementById('f-disc')?.value||'';
   let rows=D();
   if(fc)rows=rows.filter(r=>r.raw_cluster===fc);
+  if(fd)rows=rows.filter(r=>(r.discipline||'').toLowerCase()===fd);
   if(fs)rows=rows.filter(r=>r.normalised_status===fs);
   if(fsb)rows=rows.filter(r=>r.raw_subcontractor===fsb);
   if(q)rows=rows.filter(r=>(r.raw_activity_name||'').toLowerCase().includes(q)||(r.raw_activity_code||r.raw_clearance_code||'').toLowerCase().includes(q));
