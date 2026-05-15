@@ -836,31 +836,43 @@ async function init(){
     acts.forEach(a=>actCI[a.activity_code]=a.id);
     clrs.forEach(c=>clrCI[c.clearance_code]=c.id);
 
-    // ── Batch 2: status data (WIR + clearance + progress) all in parallel ──
+    // ── Batch 2: aliases + status data in parallel ──
     lm('Loading status data…');
-    const [wir, clr, prog] = await Promise.all([
-      fa('v_villa_wir_summary?select=villa_id,wir_statuses,wir_subcontractors'),
+    const [wirRaw, clr, prog, alRows, wcaRows] = await Promise.all([
+      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor&match_status=eq.matched'),
       fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
       fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
+      fa('subcontractor_aliases?select=alias,canonical_name'),
+      fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true'),
     ]);
 
-    wir.forEach(r=>{
-      wirD[r.villa_id]=r.wir_statuses||{};
-      wirSubD[r.villa_id]=r.wir_subcontractors||{};
-      // Apply WIR code aliases — old approvals count toward new code
-      const st=wirD[r.villa_id],sb=wirSubD[r.villa_id];
+    // Load aliases first so resolveWirCode works during WIR processing
+    wirCodeAliases={};
+    if(Array.isArray(wcaRows))wcaRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
+    alRows.forEach(r=>{subAliases[r.alias]=r.canonical_name;});
+
+    // Build wirD keyed by raw_activity_code (same as dashboard/target_list)
+    wirRaw.forEach(r=>{
+      if(!wirD[r.villa_id])wirD[r.villa_id]={};
+      if(!wirSubD[r.villa_id])wirSubD[r.villa_id]={};
+      const code=r.raw_activity_code;
+      const st=wirD[r.villa_id];
       const ord=['approved','under_review','rejected','not_submitted'];
-      Object.keys(st).forEach(code=>{
-        const resolved=resolveWirCode(code);
-        if(resolved!==code){
-          const existing=st[resolved]||'not_submitted',incoming=st[code]||'not_submitted';
-          if(ord.indexOf(incoming)<ord.indexOf(existing)){
-            st[resolved]=incoming;
-            if(sb[code]&&!sb[resolved])sb[resolved]=sb[code];
-          }
+      // Store raw code status
+      const existing=st[code]||'not_submitted',incoming=r.normalised_status||'not_submitted';
+      if(ord.indexOf(incoming)<ord.indexOf(existing))st[code]=incoming;
+      if(r.raw_subcontractor&&!wirSubD[r.villa_id][code])wirSubD[r.villa_id][code]=r.raw_subcontractor;
+      // Apply WIR code alias — promote old code status to new code if better
+      const resolved=resolveWirCode(code);
+      if(resolved!==code){
+        const existingR=st[resolved]||'not_submitted';
+        if(ord.indexOf(incoming)<ord.indexOf(existingR)){
+          st[resolved]=incoming;
+          if(r.raw_subcontractor&&!wirSubD[r.villa_id][resolved])wirSubD[r.villa_id][resolved]=r.raw_subcontractor;
         }
-      });
+      }
     });
+
     clr.forEach(r=>{ clrD[r.villa_id]=r.clr_statuses||{}; });
     const i2c={};Object.entries(actCI).forEach(([c,id])=>i2c[id]=c);
     prog.forEach(r=>{const code=i2c[r.activity_id];if(!code)return;if(!progD[r.villa_id])progD[r.villa_id]={};progD[r.villa_id][code]={status:r.status,start_date:r.start_date,finish_date:r.finish_date,subcontractor:r.subcontractor,activity_id:r.activity_id};});
@@ -873,20 +885,6 @@ async function init(){
     // villa types collected into vMap — populated via openVtypeFilter popup
 
     document.getElementById('loading').style.display='none';
-    // Load sub-contractor aliases from DB
-    document.getElementById('lm').textContent='Loading sub-contractor aliases...';
-    try{
-      const al=await fa('subcontractor_aliases?select=alias,canonical_name');
-      // Load WIR code aliases (old code → new code)
-      const wirCodeAliasRows=await fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true');
-      wirCodeAliases={};
-      wirCodeAliasRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
-      al.forEach(r=>{subAliases[r.alias]=r.canonical_name;});
-      // Load WIR code aliases
-      const wcaRows=await fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true');
-      wirCodeAliases={};
-      if(Array.isArray(wcaRows))wcaRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
-    }catch(e){console.warn('Could not load sub aliases:',e);}
     await loadLayout(disc);
     render();
 
@@ -971,11 +969,11 @@ function buildStats(){if(!villas.length)return;
   const total=visVillas.length||1;
 
   // Identify active columns once
-  const activeCols=COLS.filter(c=>c.visible&&c.type!=='divider'&&c.type!=='calc');
+  const activeCols=COLS.filter(c=>c.visible&&c.type!=='divider');
 
   // Single pass over villas — accumulate counts for ALL columns at once
   const counts={};
-  activeCols.forEach(col=>{counts[col.key]={ap:0,rj:0,ur:0,fa:0,na:0,pe:0};});
+  activeCols.forEach(col=>{counts[col.key]={ap:0,rj:0,ur:0,fa:0,na:0,pe:0,rd:0,nr:0};});
 
   visVillas.forEach(v=>{
     activeCols.forEach(col=>{
@@ -984,7 +982,10 @@ function buildStats(){if(!villas.length)return;
         const s=colClr(v.id,col);
         if(s==='fully_approved')c.fa++;
         else if(s==='not_approved')c.na++;
-        else c.pe++;
+        else if(s==='pending')c.pe++;
+        // not_submitted is intentionally not counted in the progress bar
+      } else if(col.type==='calc'){
+        if(calcReady(v.id,col)==='ready')c.rd++;else c.nr++;
       } else {
         const s=colWir(v.id,col);
         if(s==='approved')c.ap++;
@@ -1012,6 +1013,18 @@ function buildStats(){if(!villas.length)return;
             ${c.fa>0?`<span class="stat-pill fa">✓${c.fa}</span>`:''}
             ${c.na>0?`<span class="stat-pill na">✗${c.na}</span>`:''}
             ${c.pe>0?`<span class="stat-pill pe">~${c.pe}</span>`:''}
+          </div>
+        </div>`;
+      } else if(col.type==='calc'){
+        const prd=Math.round(c.rd/total*100),pnr=Math.round(c.nr/total*100);
+        cell.innerHTML=`<div class="th-stats">
+          <div class="stat-bar">
+            <div class="stat-seg ap" style="width:${prd}%"></div>
+            <div class="stat-seg rj" style="width:${pnr}%"></div>
+          </div>
+          <div class="stat-counts">
+            ${c.rd>0?`<span class="stat-pill ap">✓${c.rd}</span>`:''}
+            ${c.nr>0?`<span class="stat-pill rj">✗${c.nr}</span>`:''}
           </div>
         </div>`;
       } else {
@@ -1083,7 +1096,7 @@ function hideCol(key){const col=COLS.find(c=>c.key===key);if(!col)return;col.vis
 function openPop(e,key){
   e.stopPropagation();
   const col=COLS.find(c=>c.key===key);
-  if(!col||col.type==='divider'||col.type==='calc')return;
+  if(!col||col.type==='divider')return;
   popKey=key;
   document.getElementById('pop-title').textContent=col.label.replace('\n',' ');
   const cur=colF[key]||new Set();
@@ -1091,6 +1104,7 @@ function openPop(e,key){
   const mkOpts=(opts,sec)=>{if(sec)html+=`<div class="pop-sec">${sec}</div>`;opts.forEach(o=>{html+=`<div class="pop-opt${cur.has(o.v)?' sel':''}" onclick="togOpt(this)"><div class="pop-cb">${cur.has(o.v)?'✓':''}</div><div class="pop-dot" style="background:${o.bg};border:1px solid ${o.c}"></div><span data-val="${o.v}">${o.l}</span></div>`;});};
   if(col.type==='pair'){mkOpts(PS,'Site Progress');html+='<div class="pop-div"></div>';mkOpts(WS,'WIR Status');}
   else if(col.type==='clr')mkOpts(CS);
+  else if(col.type==='calc')mkOpts([{v:'ready',l:'✅ Ready',c:'#34d399',bg:'#064e3b'},{v:'not_ready',l:'❌ Not Ready',c:'#f87171',bg:'#7f1d1d'}]);
   else mkOpts(WS);
   document.getElementById('pop-opts').innerHTML=html;
   const th=document.getElementById('th-'+key).getBoundingClientRect();
@@ -1169,6 +1183,7 @@ function applyFilters(){
         const col=COLS.find(c=>c.key===key);if(!col)continue;
         let m=false;
         if(col.type==='clr')m=fs.has(colClr(vid,col));
+        else if(col.type==='calc')m=fs.has(calcReady(vid,col));
         else if(col.type==='wir-only')m=fs.has(colWir(vid,col));
         else if(col.type==='pair')m=fs.has(colProg(vid,col))||fs.has(colWir(vid,col));
         if(!m){show=false;break;}
