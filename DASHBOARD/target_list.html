@@ -1172,18 +1172,28 @@ function exportCSV(){
     }).join(',');
   }).join('\n');
 
-  // Download — open new window to bypass iframe download restrictions (same approach as print)
+  // Download — open new window, pass CSV via window reference to avoid encoding issues
   var filename='target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv';
   var win=window.open('','_blank');
   if(!win){alert('Pop-up blocked. Please allow pop-ups for this site and try again.');return;}
-  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Exporting CSV...</title></head><body><p>Downloading '+filename+'...</p><script>'+
-    'var csv=decodeURIComponent("'+encodeURIComponent('\uFEFF'+csv)+'");'+
-    'var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});'+
-    'var url=URL.createObjectURL(blob);'+
-    'var a=document.createElement("a");a.href=url;a.download="'+filename+'";'+
-    'document.body.appendChild(a);a.click();'+
-    'setTimeout(function(){URL.revokeObjectURL(url);window.close();},2000);'+
-  '<\/script></body></html>');
+  // Store CSV on the new window object, then have the script read it
+  win.__CSV_DATA__='\uFEFF'+csv;
+  win.__CSV_NAME__=filename;
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Exporting...</title></head><body>'+
+    '<p style="font-family:sans-serif;color:#333">Downloading <b>'+filename+'</b>...</p>'+
+    '<script>'+
+    'try{'+
+      'var blob=new Blob([window.__CSV_DATA__],{type:"text/csv;charset=utf-8;"});'+
+      'var url=URL.createObjectURL(blob);'+
+      'var a=document.createElement("a");'+
+      'a.href=url;a.download=window.__CSV_NAME__;'+
+      'document.body.appendChild(a);a.click();'+
+      'setTimeout(function(){URL.revokeObjectURL(url);window.close();},3000);'+
+    '}catch(e){'+
+      'document.body.innerHTML="<pre style=\\"white-space:pre-wrap;font-size:12px\\">"+window.__CSV_DATA__+"</pre>"+'+
+      '"<p style=\\"font-family:sans-serif;color:#666\\">Auto-download failed. Press Ctrl+S to save this page as a .csv file.</p>";'+
+    '}'+
+    '<\/script></body></html>');
   win.document.close();
 }
 
