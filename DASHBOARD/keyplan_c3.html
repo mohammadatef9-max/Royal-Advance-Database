@@ -86,7 +86,7 @@ input[type=text]{width:68px}
 .villa:hover{filter:brightness(1.7)}
 .villa.hidden-filter{opacity:0.07!important;pointer-events:none}
 .villa.selected-villa{stroke:#fff!important;stroke-width:1.5!important;filter:brightness(1.3)}
-.vlabel{fill:rgba(255,255,255,0.82);dominant-baseline:middle;text-anchor:middle;font-family:'IBM Plex Mono',monospace;font-weight:600;letter-spacing:-0.1px;pointer-events:none}
+.vlabel{fill:rgba(255,255,255,0.88);dominant-baseline:middle;text-anchor:middle;
   font-family:'IBM Plex Mono',monospace;font-weight:700;pointer-events:none}
 
 /* ── LOADING ── */
@@ -3008,8 +3008,8 @@ const VILLA_POLYGONS={
 165:[[131,476.75],[146.5,490.25],[127.25,512.75],[123,509],[112.75,497.75]],
 166:[[162.5,504.25],[146.5,490.25],[127.25,512.75],[143.25,526.5],[162.75,504.25]],
 167:[[162.75,504.25],[178.75,518],[159.25,540.5],[143.25,526.5]],
-168:[[210.75,545.75],[178.75,518],[159.25,540.5],[175.25,554.25],[194.75,531.75]],
-169:[[178.75,518],[210.75,545.75],[191.25,568],[175.25,554.25],[194.75,531.75]],
+168:[[194.75,531.75],[175.25,554.25],[159.25,540.5],[178.75,518]],
+169:[[210.75,545.75],[191.25,568],[175.25,554.25],[194.75,531.75]],
 170:[[214.75,549.25],[230.75,563],[211.5,585.25],[195.25,571.5]],
 171:[[230.75,563],[246.75,576.75],[227.5,599.25],[211.5,585.25]],
 172:[[246.75,576.75],[262.75,590.75],[243.5,613],[227.5,599.25]],
@@ -3168,7 +3168,6 @@ const SUB_COLORS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#818cf8',
 
 window.__MEP_TOKEN__=null;
 let wirData={}, allVillaData={}, activities=[], actIdToCode={};
-
 let hiddenStatuses=new Set(), hiddenSubs=new Set();
 let subColorMap={}, showSubLabels=false, sidebarOpen=true;
 let currentActivity='', selectedVno=null;
@@ -3241,7 +3240,7 @@ async function fetchAll(path){
   while(true){
     const r=await fetch(`${SB}/rest/v1/${path}&limit=1000&offset=${off}`,{headers:{...getH(),'Prefer':'count=none'}});
     const d=await r.json();
-    if(!Array.isArray(d)||!d.length)break;
+    if(!Array.isArray(d)){if(d&&d.code)console.error('[fetchAll] error:',d);break;}if(!d.length)break;
     all=all.concat(d);if(d.length<1000)break;off+=1000;
   }
   return all;
@@ -3261,70 +3260,70 @@ async function loadActivities(){
   });
 }
 
-let villaNoToVno={};  // villa_no → data-vno index (1-based)
-let vnoToMeta={};     // data-vno → {id(uuid), villa_no, villa_type}
+let vnoToMeta={};
 
 async function loadWIR(actCode){
-  // Step 1: load C3 villas sorted by villa_no to build index mapping
+  // Step 1: load C3 villas from DB for labels (villa_no, villa_type)
   const clusterRows=await fetchAll('clusters?select=id,code&code=eq.'+CLUSTER);
   const clusterId=clusterRows[0]?.id;
   const villaRows=clusterId
     ? await fetchAll('villas?select=id,villa_no,villa_type&cluster_id=eq.'+clusterId+'&order=villa_no.asc')
     : [];
 
-  villaNoToVno={};
   vnoToMeta={};
   villaRows.forEach((v,i)=>{
-    const vno=i+1;
-    villaNoToVno[String(v.villa_no)]=vno;
-    vnoToMeta[vno]={id:v.id, villa_no:v.villa_no, villa_type:v.villa_type||''};
+    vnoToMeta[i+1]={id:v.id, villa_no:v.villa_no, villa_type:v.villa_type||''};
   });
-  console.log('[keyplan] cluster_id=',clusterId,'villas=',villaRows.length,'first3=',villaRows.slice(0,3).map(v=>v.villa_no));
 
-  // Step 2: patch SVG polygons and labels with real villa data
+  // Step 2: patch SVG geometry + labels
   patchSVGLabels();
 
-  // Step 3: build C3 villa_no → UUID map for direct lookup
-  const villaNoToId={};
-  Object.values(vnoToMeta).forEach(m=>{ if(m.id&&m.villa_no!=null) villaNoToId[String(m.villa_no)]=m.id; });
-  if(!Object.keys(villaNoToId).length){console.warn('[keyplan] No villa UUIDs for C3');allVillaData={};buildWirData(actCode);return;}
+  // Step 3: fetch from dc_import_log DIRECTLY — same as the working old keyplan
+  // This is the proven pattern: raw_cluster=eq.C3, key by raw_villa_no
+  const allRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,discipline_raw&raw_cluster=eq.'+CLUSTER);
+  console.log('[keyplan] dc_import_log rows=',allRows.length);
 
-  // Fetch ALL WIR rows (no match_status filter — same as dashboard) then resolve UUIDs client-side via raw_villa_no
-  const allRows=await fetchAll('v_latest_wir_status?select=villa_id,activity_id,raw_cluster,raw_villa_no,normalised_status,raw_subcontractor,raw_activity_code,raw_activity_name,updated_at');
-  // Try cluster-tagged rows first, then fall back to villa_no-only match if needed
-  let c3Rows=allRows.filter(r=>{
-    if(r.raw_cluster){
-      const c=String(r.raw_cluster).trim().toUpperCase();
-      if(c!==CLUSTER&&c!==CLUSTER.replace('C','')&&c!=='CLUSTER '+CLUSTER.replace('C','')) return false;
-    }
-    return r.raw_villa_no!=null && villaNoToId[String(r.raw_villa_no)];
-  });
-  console.log('[keyplan] total WIR=',allRows.length,'c3 rows=',c3Rows.length,'distinctClusters=',new Set(allRows.slice(0,500).map(r=>r.raw_cluster)).size,'sampleClusters=',[...new Set(allRows.slice(0,500).map(r=>r.raw_cluster))].slice(0,5),'villaNos=',Object.keys(villaNoToId).length);
+  // Step 4: build activity name map from activities table
+  const actNameMap={};
+  activities.forEach(a=>{actNameMap[a.activity_code]=a.activity_name;});
 
-  // Build allVillaData keyed by UUID (resolved from raw_villa_no → villaNoToId)
-  const byId={};
-  c3Rows.forEach(r=>{
-    const uid=r.villa_id || villaNoToId[String(r.raw_villa_no)];
-    if(!uid)return;
-    if(!byId[uid])byId[uid]={overall:null,activities:[],sub:'',updated_at:''};
-    const canonicalCode=actIdToCode[r.activity_id]||r.raw_activity_code;
-    byId[uid].activities.push({
-      code:canonicalCode,
-      rawCode:r.raw_activity_code,
-      name:r.raw_activity_name,
-      status:r.normalised_status,
-      sub:r.raw_subcontractor||''
+  // Step 5: build allVillaData keyed by villa number string (same as data-vno)
+  // This matches the working pattern: villa key = String(parseInt(raw_villa_no))
+  const byVilla={};
+  allRows.forEach(r=>{
+    const vno=String(parseInt(r.raw_villa_no)||0);
+    if(vno==='0')return;
+    const code=r.raw_activity_code||'';
+    const name=actNameMap[code]||'';
+    const actKey=name?(code+' — '+name):code;
+    const status=normaliseStatus(r.raw_status||'');
+
+    if(!byVilla[vno])byVilla[vno]={overall:null,activities:[],sub:'',updated_at:''};
+    byVilla[vno].activities.push({
+      code:code,
+      actKey:actKey,
+      name:name||code,
+      status:status,
+      sub:r.raw_subcontractor||'',
+      type:r.raw_villa_type||''
     });
-    const cur=byId[uid].overall;
-    if(!cur||PRI.indexOf(r.normalised_status)<PRI.indexOf(cur)){
-      byId[uid].overall=r.normalised_status;
-      byId[uid].sub=r.raw_subcontractor||'';
-      byId[uid].updated_at=r.updated_at||'';
+    const cur=byVilla[vno].overall;
+    if(!cur||PRI.indexOf(status)<PRI.indexOf(cur)){
+      byVilla[vno].overall=status;
+      byVilla[vno].sub=r.raw_subcontractor||'';
     }
   });
-  allVillaData=byId;
-  console.log('[keyplan] allVillaData villas=',Object.keys(byId).length,'sample activities=',Object.values(byId)[0]?.activities?.slice(0,2));
+  allVillaData=byVilla;
+  console.log('[keyplan] villas with WIR=',Object.keys(byVilla).length,'sample keys=',Object.keys(byVilla).slice(0,5));
   buildWirData(actCode);
+}
+
+function normaliseStatus(raw){
+  const s=(raw||'').trim().toUpperCase();
+  if(s==='A'||s==='B'||s==='APPROVED')return 'approved';
+  if(s==='C'||s==='D'||s==='REJECTED')return 'rejected';
+  if(s==='UR'||s==='UNDER REVIEW'||s==='UNDER_REVIEW')return 'under_review';
+  return 'not_submitted';
 }
 
 function patchSVGLabels(){
@@ -3333,7 +3332,7 @@ function patchSVGLabels(){
     const poly=document.getElementById('v'+vno);
     const lbl=document.getElementById('lbl'+vno);
 
-    // Update polygon points from JSON binding data (corrected geometry)
+    // Update polygon geometry from embedded JSON
     const rawPts=VILLA_POLYGONS[vno];
     if(poly&&rawPts){
       poly.setAttribute('points', rawPts.map(p=>p[0]+','+p[1]).join(' '));
@@ -3350,89 +3349,55 @@ function patchSVGLabels(){
       lbl.setAttribute('fill','rgba(255,255,255,0.88)');
       lbl.style.display='';
 
-      // Use VILLA_POLYGONS for label computation (fresh corrected geometry)
-      const rawData=VILLA_POLYGONS[vno];
-      if(!rawData||rawData.length<3){lbl.style.display='none';continue;}
-      const pts=rawData.map(p=>({x:p[0],y:p[1]}));
+      const pts=rawPts?rawPts.map(p=>({x:p[0],y:p[1]})):null;
+      if(!pts||pts.length<3){lbl.style.display='none';continue;}
 
-      // Centroid
       let cx=0,cy=0;
       pts.forEach(p=>{cx+=p.x;cy+=p.y;});
       cx/=pts.length; cy/=pts.length;
 
-      // Longest edge → rotation
       const {angle}=getLongestEdge(pts,cx,cy);
       const rad=angle*Math.PI/180;
 
-      // Project points onto aligned axes
       let minA=Infinity,maxA=-Infinity,minP=Infinity,maxP=-Infinity;
       pts.forEach(p=>{
         const dx=p.x-cx, dy=p.y-cy;
         const a=dx*Math.cos(rad)+dy*Math.sin(rad);
-        const p2=-dx*Math.sin(rad)+dy*Math.cos(rad);
+        const pr=-dx*Math.sin(rad)+dy*Math.cos(rad);
         if(a<minA)minA=a; if(a>maxA)maxA=a;
-        if(p2<minP)minP=p2; if(p2>maxP)maxP=p2;
+        if(pr<minP)minP=pr; if(pr>maxP)maxP=pr;
       });
-      const longLen=(maxA-minA)*0.72;  // 14% inset each side (more conservative)
-      const shortLen=(maxP-minP)*0.50; // 25% inset each side — keep well clear of walls
+      const longLen=(maxA-minA)*0.72;
+      const shortLen=(maxP-minP)*0.50;
 
-      const labelText=lbl.textContent;
-      const chars=labelText.length;
-      // monospace: char width ≈ 0.60 × font-size for IBM Plex Mono
-      const fsByHeight=shortLen;
-      const fsByWidth=longLen/(chars*0.60);
-      const fs=Math.min(fsByHeight, fsByWidth, 5.5);
-      lbl.setAttribute('font-size', Math.max(fs,1.8).toFixed(2)+'px');
+      const chars=lbl.textContent.length;
+      const fsByH=shortLen;
+      const fsByW=longLen/(chars*0.60);
+      const fs=Math.min(fsByH,fsByW,5.5);
+      lbl.setAttribute('font-size',Math.max(fs,1.8).toFixed(2)+'px');
 
-      lbl.setAttribute('x', cx.toFixed(2));
-      lbl.setAttribute('y', cy.toFixed(2));
-      lbl.setAttribute('transform',`rotate(${angle},${cx.toFixed(2)},${cy.toFixed(2)})`);
+      lbl.setAttribute('x',cx.toFixed(2));
+      lbl.setAttribute('y',cy.toFixed(2));
+      lbl.setAttribute('transform','rotate('+angle+','+cx.toFixed(2)+','+cy.toFixed(2)+')');
     }
   }
 }
 
-function inscribedRadius(pts,cx,cy){
-  // Distance from centroid to each edge
-  const dists=[];
-  for(let i=0;i<pts.length;i++){
-    const a=pts[i], b=pts[(i+1)%pts.length];
-    const dx=b.x-a.x, dy=b.y-a.y;
-    const len=Math.sqrt(dx*dx+dy*dy);
-    if(len<0.5) continue;
-    const dist=Math.abs((cy-a.y)*dx-(cx-a.x)*dy)/len;
-    dists.push(dist);
-  }
-  if(!dists.length) return 3;
-  dists.sort((a,b)=>a-b);
-  // Use the median distance — min is too conservative for arc villas with many tiny edges
-  return dists[Math.floor(dists.length*0.35)]||dists[0];
-}
-
-function parsePoints(poly){
-  return (poly.getAttribute('points')||'').trim().split(/\s+/)
-    .map(p=>{const[x,y]=p.split(',');return{x:parseFloat(x),y:parseFloat(y)};})
-    .filter(p=>!isNaN(p.x)&&!isNaN(p.y));
-}
-
 function getLongestEdge(pts,cx,cy){
-  let maxLen=0, bestAngle=0, bestNx=0, bestNy=0;
+  let maxLen=0,bestAngle=0;
   for(let i=0;i<pts.length;i++){
-    const a=pts[i], b=pts[(i+1)%pts.length];
-    const dx=b.x-a.x, dy=b.y-a.y;
+    const a=pts[i],b=pts[(i+1)%pts.length];
+    const dx=b.x-a.x,dy=b.y-a.y;
     const len=Math.sqrt(dx*dx+dy*dy);
     if(len>maxLen){
       maxLen=len;
       let angle=Math.atan2(dy,dx)*180/Math.PI;
-      if(angle>90) angle-=180;
-      if(angle<-90) angle+=180;
+      if(angle>90)angle-=180;
+      if(angle<-90)angle+=180;
       bestAngle=Math.round(angle*10)/10;
-      const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
-      let nx=-dy/len, ny=dx/len;
-      if((cx-mx)*nx+(cy-my)*ny<0){nx=-nx;ny=-ny;}
-      bestNx=nx; bestNy=ny;
     }
   }
-  return {angle:bestAngle, nx:bestNx, ny:bestNy};
+  return{angle:bestAngle};
 }
 
 function buildWirData(actCode){
@@ -3511,10 +3476,10 @@ function render(){
   let tot=0,app=0,rev=0,rej=0;
 
   document.querySelectorAll('.villa').forEach(el=>{
-    const uid=el.getAttribute('data-uid');          // UUID set by patchSVGLabels
-    const villaNo=el.getAttribute('data-villa-no'); // actual villa_no e.g. "301"
+    const uid=String(el.getAttribute('data-vno'));    // use vno string as key — matches dc_import_log raw_villa_no
+    const vno=parseInt(el.getAttribute('data-vno'));
+    const villaNo=el.getAttribute('data-villa-no')||uid;
     const villaType=el.getAttribute('data-villa-type')||'';
-    const vno=parseInt(el.getAttribute('data-vno')); // SVG index for lbl lookup
     const d=wirData[uid]||{status:'not_submitted',sub:'',acts:[]};
     const s=d.status||'not_submitted';
     const sub=d.sub||'';
@@ -3527,19 +3492,18 @@ function render(){
     const villaFilterHidden=fVilla&&villaNo&&!String(villaNo).includes(fVilla);
     const hidden=statusHidden||subHidden||filterHidden||villaFilterHidden;
 
-    // Color
+    // Color from sub if activity selected, else from status
     const actCode=currentActivity;
     let fill=FILL[s]||FILL.not_submitted;
     let stroke=STROKE[s]||STROKE.not_submitted;
+    // Sub-contractor color only on border stroke, never overrides status fill
     if(actCode&&sub&&subColorMap[sub]){
       stroke=subColorMap[sub];
-      const hex=subColorMap[sub].replace('#','');
-      const r=parseInt(hex.slice(0,2),16),g=parseInt(hex.slice(2,4),16),b=parseInt(hex.slice(4,6),16);
-      fill=`rgba(${r},${g},${b},0.55)`;
     }
 
     el.setAttribute('fill',hidden?'rgba(15,25,40,0.2)':fill);
     el.setAttribute('stroke',hidden?'#131e2d':stroke);
+    el.style.opacity=hidden?1:1;
     el.classList.toggle('hidden-filter',hidden);
 
     if(!hidden){
@@ -3550,7 +3514,7 @@ function render(){
       else{counts.not_submitted++;}
     }
 
-    // Label: always show villa_no + type; if sub labels on and sub exists, show sub instead
+    // Label
     const lbl=document.getElementById('lbl'+vno);
     if(lbl){
       if(hidden){
@@ -3562,8 +3526,7 @@ function render(){
       } else if(villaNo){
         lbl.style.display='';
         lbl.textContent=villaNo+(villaType?' /'+villaType:'');
-        lbl.setAttribute('fill','rgba(255,255,255,0.82)');
-        // transform (rotation) is set once by patchSVGLabels — don't overwrite it
+        lbl.setAttribute('fill','rgba(255,255,255,0.88)');
       } else {
         lbl.style.display='none';
       }
@@ -3629,8 +3592,8 @@ async function onActivityChange(){
 document.getElementById('polys-g').addEventListener('click',e=>{
   const el=e.target.closest('.villa');
   if(!el) return;
-  const uid=el.getAttribute('data-uid');
-  const villaNo=el.getAttribute('data-villa-no');
+  const uid=String(el.getAttribute('data-vno'));
+  const villaNo=el.getAttribute('data-villa-no')||uid;
   const villaType=el.getAttribute('data-villa-type')||'';
   openModal(uid, villaNo, villaType, el);
 });
@@ -3787,7 +3750,6 @@ async function init(){
   document.getElementById('lm').textContent='Loading data…';
   if(window.self!==window.top)document.body.classList.add('in-shell');
   try{
-    // Load activities FIRST so actIdToCode is ready before loadWIR uses it
     await loadActivities();
     await loadWIR('');
     buildSubColors('');
@@ -3800,9 +3762,6 @@ async function init(){
   }
 }
 
-// Start: send child_ready so shell sends us the session token.
-// The session message triggers _tryInit(). 
-// Fallback: if no shell or shell doesn't reply in 1s, start anyway (uses localStorage token).
 if(window.self!==window.top){
   document.body.classList.add('in-shell');
   try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
