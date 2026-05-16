@@ -1172,15 +1172,19 @@ function exportCSV(){
     }).join(',');
   }).join('\n');
 
-  // Download — use data URI for maximum iframe/browser compatibility
-  var csvContent='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv);
-  var a=document.createElement('a');
-  a.href=csvContent;
-  a.download='target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv';
-  a.style.display='none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){ document.body.removeChild(a); },500);
+  // Download — open new window to bypass iframe download restrictions (same approach as print)
+  var filename='target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  var win=window.open('','_blank');
+  if(!win){alert('Pop-up blocked. Please allow pop-ups for this site and try again.');return;}
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Exporting CSV...</title></head><body><p>Downloading '+filename+'...</p><script>'+
+    'var csv=decodeURIComponent("'+encodeURIComponent('\uFEFF'+csv)+'");'+
+    'var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});'+
+    'var url=URL.createObjectURL(blob);'+
+    'var a=document.createElement("a");a.href=url;a.download="'+filename+'";'+
+    'document.body.appendChild(a);a.click();'+
+    'setTimeout(function(){URL.revokeObjectURL(url);window.close();},2000);'+
+  '<\/script></body></html>');
+  win.document.close();
 }
 
 function applyF(){
