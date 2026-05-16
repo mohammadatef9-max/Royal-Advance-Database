@@ -1172,16 +1172,20 @@ function exportCSV(){
     }).join(',');
   }).join('\n');
 
-  // Download
+  // Download — with fallback for browsers that block programmatic clicks
   var blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url;
-  a.download='target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  if(navigator.msSaveBlob){
+    navigator.msSaveBlob(blob,'target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv');
+  } else {
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='target_list_'+actWk.replace(/\s+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.csv';
+    a.style.display='none';
+    document.body.appendChild(a);
+    try{ a.click(); }catch(e){ window.open(url); }
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },1000);
+  }
 }
 
 function applyF(){
@@ -1527,7 +1531,7 @@ function printWeek(){
     // Table
     '<table><thead><tr>'+headerHTML+'</tr></thead><tbody>'+tableHTML+'</tbody></table>'+
 
-    '<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},500);},300);};<\/script>'+
+    '<script>window.onload=function(){setTimeout(function(){window.print();},300);window.onafterprint=function(){window.close();};};<\/script>'+
     '</body></html>'
   );
   win.document.close();
@@ -1753,7 +1757,7 @@ async function printSelectedWeeks(){
 
   // win already opened at top — now write the final content
   win.document.open();
-  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weekly Targets</title><style>'+CSS+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print();setTimeout(function(){window.close();},500);},400);};<\/script></body></html>');
+  win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Weekly Targets</title><style>'+CSS+'</style></head><body>'+body+'<script>window.onload=function(){setTimeout(function(){window.print();},400);window.onafterprint=function(){window.close();};};<\/script></body></html>');
   win.document.close();
 }
 
