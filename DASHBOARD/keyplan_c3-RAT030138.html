@@ -181,17 +181,6 @@ body.space-down #map-viewport{cursor:grab}
   <select id="f-clr-act" style="display:none" onchange="onActivityChange(this)"><option value="">— Select Clearance —</option></select>
   <button class="tbtn active" id="btn-compare" onclick="toggleCompare()" style="display:none" title="Compare two WIR activities side-by-side">⊟ Compare</button>
   <select id="f-act2" style="display:none" onchange="onAct2Change(this)"><option value="">— 2nd Activity —</option></select>
-  <div id="cmp-legend" style="display:none;align-items:center;gap:6px;font-size:11px;font-family:'Inter',sans-serif;color:var(--fg-muted)">
-    <div style="display:flex;align-items:center;gap:3px">
-      <div style="width:18px;height:14px;background:linear-gradient(to right,#4f8cff 50%,#334155 50%);border-radius:3px;border:1px solid rgba(255,255,255,0.15)"></div>
-      <span id="cmp-lbl-left" style="color:var(--accent-text);font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-    </div>
-    <span style="color:#475569">vs</span>
-    <div style="display:flex;align-items:center;gap:3px">
-      <div style="width:18px;height:14px;background:linear-gradient(to right,#334155 50%,#f59e0b 50%);border-radius:3px;border:1px solid rgba(255,255,255,0.15)"></div>
-      <span id="cmp-lbl-right" style="color:#f59e0b;font-weight:700;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">— pick 2nd —</span>
-    </div>
-  </div>
   <div class="tb-div"></div>
   <button class="tbtn" id="btn-sub-labels" onclick="toggleSubLabels()">① Sub Labels</button>
   <button class="tbtn" id="btn-toggle-bg">🖼 BG</button>
@@ -206,7 +195,6 @@ body.space-down #map-viewport{cursor:grab}
 
 <div id="app">
   <div id="sidebar">
-    <div id="cmp-leg1-title" style="display:none;font-size:11px;font-weight:800;color:var(--accent-text);margin-bottom:-4px;padding:0 2px">—</div>
     <div class="sb-title">Status</div>
     <div class="leg-item" id="leg-AP" onclick="toggleStatus('AP')">
       <div class="ldot" style="background:var(--approved)"></div>
@@ -240,38 +228,6 @@ body.space-down #map-viewport{cursor:grab}
       <div class="of-row"><span>Open Fronts</span><span class="of-val" id="of-count">0</span></div>
       <div class="of-row" style="font-size:9px;color:var(--muted);margin-top:2px">
         <span id="of-rule">(clearance code 1 + 2)</span>
-      </div>
-    </div>
-    <!-- Compare mode act2 legend -->
-    <div id="cmp-leg2" style="display:none">
-      <div class="sb-title" style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-        <span id="cmp-leg2-title" style="color:#f59e0b">2nd Activity</span>
-      </div>
-      <div class="leg-item">
-        <div class="ldot" style="background:#0d9488"></div>
-        <span id="leg2-label-ap">Approved</span>
-        <span class="leg-count" id="s2-ap">0</span>
-      </div>
-      <div class="leg-item">
-        <div class="ldot" style="background:#e879f9"></div>
-        <span id="leg2-label-ur">Under Review</span>
-        <span class="leg-count" id="s2-ur">0</span>
-      </div>
-      <div class="leg-item">
-        <div class="ldot" style="background:#f97316"></div>
-        <span id="leg2-label-rj">Rejected</span>
-        <span class="leg-count" id="s2-rj">0</span>
-      </div>
-      <div class="leg-item">
-        <div class="ldot" style="background:#475569;border:1px solid var(--muted)"></div>
-        <span>Not Submitted</span>
-        <span class="leg-count" id="s2-ns">0</span>
-      </div>
-      <div class="stats-bar">
-        <div class="stat"><div class="stat-val" style="color:#0d9488" id="s2v-ap">0</div><div class="stat-label">Appr</div></div>
-        <div class="stat"><div class="stat-val" style="color:#e879f9" id="s2v-ur">0</div><div class="stat-label">Review</div></div>
-        <div class="stat"><div class="stat-val" style="color:#f97316" id="s2v-rj">0</div><div class="stat-label">Reject</div></div>
-        <div class="stat"><div class="stat-val" style="color:#f59e0b" id="s2v-pct">—</div><div class="stat-label">%</div></div>
       </div>
     </div>
     <div id="sub-section">
@@ -318,7 +274,7 @@ body.space-down #map-viewport{cursor:grab}
 var VILLAS_DEFAULT={"1":{"x":721,"y":884},"2":{"x":700,"y":908},"3":{"x":678,"y":931},"4":{"x":657,"y":955},"5":{"x":636,"y":979},"6":{"x":614,"y":1002},"7":{"x":593,"y":1026},"8":{"x":542,"y":1067},"9":{"x":568,"y":1088},"10":{"x":596,"y":1111},"11":{"x":625,"y":1132},"12":{"x":656,"y":1148},"13":{"x":690,"y":1161},"14":{"x":725,"y":1172},"15":{"x":761,"y":1179},"16":{"x":795,"y":1182},"17":{"x":825,"y":1182},"18":{"x":855,"y":1182},"19":{"x":885,"y":1182},"20":{"x":915,"y":1182},"21":{"x":944,"y":1182},"22":{"x":974,"y":1182},"23":{"x":1004,"y":1182},"24":{"x":1034,"y":1182},"25":{"x":1064,"y":1182},"26":{"x":1094,"y":1182},"27":{"x":1128,"y":1182},"28":{"x":1162,"y":1179},"29":{"x":1203,"y":1164},"30":{"x":1231,"y":1127},"31":{"x":1227,"y":1091},"32":{"x":1223,"y":1055},"33":{"x":1215,"y":1016},"34":{"x":1184,"y":984},"35":{"x":1145,"y":979},"36":{"x":1114,"y":979},"37":{"x":1083,"y":979},"38":{"x":1051,"y":979},"39":{"x":1020,"y":979},"40":{"x":989,"y":979},"41":{"x":958,"y":979},"42":{"x":926,"y":979},"43":{"x":895,"y":979},"44":{"x":688,"y":1019},"45":{"x":719,"y":1039},"46":{"x":758,"y":1051},"47":{"x":823,"y":1055},"48":{"x":854,"y":1055},"49":{"x":884,"y":1056},"50":{"x":915,"y":1056},"51":{"x":946,"y":1056},"52":{"x":977,"y":1056},"53":{"x":1007,"y":1057},"54":{"x":1038,"y":1057},"55":{"x":1069,"y":1057},"56":{"x":1100,"y":1057},"57":{"x":1130,"y":1058},"58":{"x":1161,"y":1058},"59":{"x":1163,"y":1105},"60":{"x":1132,"y":1105},"61":{"x":1101,"y":1105},"62":{"x":1070,"y":1105},"63":{"x":1039,"y":1105},"64":{"x":1008,"y":1105},"65":{"x":978,"y":1105},"66":{"x":947,"y":1105},"67":{"x":916,"y":1105},"68":{"x":885,"y":1105},"69":{"x":854,"y":1105},"70":{"x":823,"y":1105},"71":{"x":788,"y":1105},"72":{"x":753,"y":1104},"73":{"x":717,"y":1094},"74":{"x":684,"y":1077},"75":{"x":656,"y":1056},"76":{"x":727,"y":990},"77":{"x":746,"y":968},"78":{"x":765,"y":946},"79":{"x":785,"y":924},"80":{"x":804,"y":901},"81":{"x":823,"y":879},"82":{"x":842,"y":857},"83":{"x":861,"y":835},"84":{"x":880,"y":813},"85":{"x":900,"y":791},"86":{"x":919,"y":768},"87":{"x":938,"y":746},"88":{"x":957,"y":724},"89":{"x":986,"y":696},"90":{"x":1006,"y":671},"91":{"x":1026,"y":645},"92":{"x":1082,"y":653},"93":{"x":1062,"y":677},"94":{"x":1042,"y":701},"95":{"x":1022,"y":725},"96":{"x":1002,"y":761},"97":{"x":982,"y":783},"98":{"x":962,"y":805},"99":{"x":942,"y":827},"100":{"x":922,"y":849},"101":{"x":901,"y":871},"102":{"x":881,"y":893},"103":{"x":861,"y":915},"104":{"x":841,"y":937},"105":{"x":821,"y":959},"106":{"x":1001,"y":866},"107":{"x":1023,"y":841},"108":{"x":1045,"y":816},"109":{"x":1067,"y":792},"110":{"x":1088,"y":767},"111":{"x":1110,"y":742},"112":{"x":1132,"y":717},"113":{"x":1127,"y":797},"114":{"x":1107,"y":823},"115":{"x":1086,"y":849},"116":{"x":950,"y":927},"117":{"x":983,"y":927},"118":{"x":1016,"y":927},"119":{"x":1049,"y":927},"120":{"x":1082,"y":927},"121":{"x":1142,"y":898},"122":{"x":1168,"y":870},"123":{"x":1193,"y":842},"124":{"x":1208,"y":805},"125":{"x":1207,"y":768},"126":{"x":1199,"y":733},"127":{"x":1191,"y":697},"128":{"x":1180,"y":662},"129":{"x":1159,"y":629},"130":{"x":1138,"y":600},"131":{"x":1109,"y":572},"132":{"x":1070,"y":556},"133":{"x":1029,"y":554},"134":{"x":995,"y":570},"135":{"x":971,"y":597},"136":{"x":946,"y":623},"137":{"x":927,"y":645},"138":{"x":908,"y":667},"139":{"x":888,"y":688},"140":{"x":869,"y":710},"141":{"x":850,"y":732},"142":{"x":831,"y":754},"143":{"x":812,"y":776},"144":{"x":792,"y":797},"145":{"x":773,"y":819},"146":{"x":754,"y":841},"147":{"x":473,"y":582},"148":{"x":449,"y":561},"149":{"x":425,"y":541},"150":{"x":402,"y":520},"151":{"x":378,"y":500},"152":{"x":354,"y":479},"153":{"x":314,"y":443},"154":{"x":293,"y":467},"155":{"x":272,"y":490},"156":{"x":251,"y":514},"157":{"x":230,"y":538},"158":{"x":209,"y":561},"159":{"x":189,"y":585},"160":{"x":168,"y":608},"161":{"x":147,"y":632},"162":{"x":126,"y":656},"163":{"x":105,"y":679},"164":{"x":84,"y":703},"165":{"x":163,"y":729},"166":{"x":187,"y":751},"167":{"x":211,"y":773},"168":{"x":235,"y":795},"169":{"x":259,"y":817},"170":{"x":283,"y":839},"171":{"x":306,"y":861},"172":{"x":330,"y":883},"173":{"x":354,"y":905},"174":{"x":378,"y":927},"175":{"x":402,"y":949},"176":{"x":433,"y":902},"177":{"x":455,"y":877},"178":{"x":477,"y":851},"179":{"x":499,"y":826},"180":{"x":521,"y":800},"181":{"x":543,"y":775},"182":{"x":565,"y":749},"183":{"x":396,"y":849},"184":{"x":370,"y":827},"185":{"x":345,"y":805},"186":{"x":319,"y":783},"187":{"x":293,"y":761},"188":{"x":267,"y":739},"189":{"x":242,"y":717},"190":{"x":216,"y":695},"191":{"x":190,"y":673},"192":{"x":221,"y":633},"193":{"x":248,"y":656},"194":{"x":275,"y":679},"195":{"x":301,"y":702},"196":{"x":328,"y":725},"197":{"x":355,"y":747},"198":{"x":382,"y":770},"199":{"x":408,"y":793},"200":{"x":435,"y":816},"201":{"x":484,"y":754},"202":{"x":460,"y":734},"203":{"x":437,"y":715},"204":{"x":413,"y":695},"205":{"x":389,"y":675},"206":{"x":366,"y":656},"207":{"x":342,"y":636},"208":{"x":318,"y":616},"209":{"x":295,"y":597},"210":{"x":271,"y":577},"211":{"x":306,"y":540},"212":{"x":329,"y":559},"213":{"x":352,"y":579},"214":{"x":376,"y":598},"215":{"x":399,"y":617},"216":{"x":422,"y":637},"217":{"x":445,"y":656},"218":{"x":469,"y":675},"219":{"x":492,"y":695},"220":{"x":515,"y":714},"221":{"x":759,"y":707},"222":{"x":780,"y":683},"223":{"x":801,"y":660},"224":{"x":822,"y":636},"225":{"x":843,"y":613},"226":{"x":865,"y":589},"227":{"x":886,"y":566},"228":{"x":907,"y":542},"229":{"x":928,"y":519},"230":{"x":949,"y":495},"231":{"x":970,"y":460},"232":{"x":970,"y":410},"233":{"x":940,"y":380},"234":{"x":910,"y":350},"235":{"x":880,"y":330},"236":{"x":840,"y":320},"237":{"x":790,"y":330},"238":{"x":750,"y":300},"239":{"x":740,"y":260},"240":{"x":730,"y":220},"241":{"x":700,"y":190},"242":{"x":670,"y":160},"243":{"x":640,"y":140},"244":{"x":590,"y":140},"245":{"x":560,"y":160},"246":{"x":530,"y":190},"247":{"x":510,"y":213},"248":{"x":490,"y":237},"249":{"x":470,"y":260},"250":{"x":450,"y":283},"251":{"x":430,"y":307},"252":{"x":410,"y":330},"253":{"x":390,"y":353},"254":{"x":370,"y":377},"255":{"x":350,"y":400},"256":{"x":401,"y":436},"257":{"x":426,"y":458},"258":{"x":452,"y":482},"259":{"x":477,"y":504},"260":{"x":504,"y":525},"261":{"x":445,"y":396},"262":{"x":467,"y":370},"263":{"x":490,"y":346},"264":{"x":513,"y":319},"265":{"x":538,"y":294},"266":{"x":562,"y":265},"267":{"x":587,"y":240},"268":{"x":607,"y":215},"269":{"x":646,"y":248},"270":{"x":623,"y":274},"271":{"x":598,"y":300},"272":{"x":574,"y":325},"273":{"x":551,"y":351},"274":{"x":528,"y":377},"275":{"x":504,"y":401},"276":{"x":482,"y":426},"277":{"x":653,"y":322},"278":{"x":679,"y":344},"279":{"x":705,"y":367},"280":{"x":730,"y":389},"281":{"x":756,"y":412},"282":{"x":782,"y":434},"283":{"x":748,"y":471},"284":{"x":722,"y":449},"285":{"x":696,"y":426},"286":{"x":670,"y":404},"287":{"x":644,"y":381},"288":{"x":618,"y":359},"289":{"x":570,"y":420},"290":{"x":596,"y":442},"291":{"x":622,"y":464},"292":{"x":648,"y":486},"293":{"x":674,"y":508},"294":{"x":700,"y":530},"295":{"x":665,"y":565},"296":{"x":640,"y":544},"297":{"x":615,"y":523},"298":{"x":590,"y":502},"299":{"x":565,"y":481},"300":{"x":540,"y":460},"301":{"x":672,"y":636},"302":{"x":693,"y":612},"303":{"x":714,"y":588},"304":{"x":735,"y":564},"305":{"x":756,"y":540},"306":{"x":776,"y":517},"307":{"x":797,"y":493},"308":{"x":818,"y":469},"309":{"x":839,"y":445},"310":{"x":860,"y":421},"311":{"x":902,"y":453},"312":{"x":881,"y":477},"313":{"x":860,"y":500},"314":{"x":839,"y":524},"315":{"x":818,"y":548},"316":{"x":797,"y":571},"317":{"x":776,"y":595},"318":{"x":755,"y":619},"319":{"x":734,"y":642},"320":{"x":713,"y":666}};
 var VILLAS=JSON.parse(JSON.stringify(VILLAS_DEFAULT));
 var VILLA_ANGLES={1:40,2:40,3:40,4:40,5:40,6:40,7:40,8:-49,9:-48,10:-50,11:-58,12:-63,13:-69,14:-77,15:-86,16:90,17:90,18:90,19:90,20:90,21:90,22:90,23:90,24:90,25:90,26:90,27:90,28:86,29:54,30:10,31:0,32:-10,33:-20,34:-74,35:-90,36:-90,37:-90,38:-90,39:-90,40:-90,41:-90,42:-90,43:-90,44:-52,45:-60,46:-81,47:-90,48:-90,49:-90,50:-90,51:-90,52:-90,53:-90,54:-90,55:-90,56:-90,57:-90,58:-90,59:-90,60:-90,61:-90,62:-90,63:-90,64:-90,65:-90,66:-90,67:-90,68:-90,69:-90,70:-90,71:-89,72:-82,73:-70,74:-57,75:-50,76:40,77:40,78:40,79:40,80:40,81:40,82:40,83:40,84:40,85:40,86:40,87:40,88:40,89:40,90:40,91:40,92:40,93:40,94:40,95:40,96:40,97:40,98:40,99:40,100:40,101:40,102:40,103:40,104:40,105:40,106:40,107:40,108:40,109:40,110:40,111:40,112:40,113:40,114:40,115:40,116:-90,117:-90,118:-90,119:-90,120:-90,121:41,122:39,123:35,124:5,125:-2,126:-3,127:-14,128:-24,129:-36,130:-38,131:-60,132:-80,133:81,134:56,135:45,136:40,137:40,138:40,139:40,140:40,141:40,142:40,143:40,144:40,145:40,146:40,147:-50,148:-50,149:-50,150:-50,151:-50,152:-50,153:40,154:40,155:40,156:40,157:40,158:40,159:40,160:40,161:40,162:40,163:40,164:40,165:-50,166:-50,167:-50,168:-50,169:-50,170:-50,171:-50,172:-50,173:-50,174:-50,175:-50,176:40,177:40,178:40,179:40,180:40,181:40,182:40,183:-50,184:-50,185:-50,186:-50,187:-50,188:-50,189:-50,190:-50,191:-50,192:-50,193:-50,194:-50,195:-50,196:-50,197:-50,198:-50,199:-50,200:-50,201:-50,202:-50,203:-50,204:-50,205:-50,206:-50,207:-50,208:-50,209:-50,210:-50,211:-50,212:-50,213:-50,214:-50,215:-50,216:-50,217:-50,218:-50,219:-50,220:-50,221:40,222:40,223:40,224:40,225:40,226:40,227:40,228:40,229:40,230:40,231:34,232:-18,233:-47,234:-54,235:-64,236:-87,237:-79,238:-33,239:-17,240:-27,241:-45,242:-51,243:-71,244:68,245:39,246:40,247:40,248:40,249:40,250:40,251:40,252:40,253:40,254:40,255:40,256:-50,257:-50,258:-50,259:-50,260:-50,261:40,262:40,263:40,264:40,265:40,266:40,267:40,268:40,269:40,270:40,271:40,272:40,273:40,274:40,275:40,276:40,277:-48,278:-48,279:-48,280:-48,281:-48,282:-48,283:-48,284:-48,285:-48,286:-48,287:-48,288:-48,289:-48,290:-48,291:-48,292:-48,293:-48,294:-48,295:-48,296:-48,297:-48,298:-48,299:-48,300:-48,301:40,302:40,303:40,304:40,305:40,306:40,307:40,308:40,309:40,310:40,311:40,312:40,313:40,314:40,315:40,316:40,317:40,318:40,319:40,320:40};
-var OPEN_FRONT_CLR_CODES=[]; // loaded from clearance_activities.is_open_front
+var OPEN_FRONT_CLR_CODES=["1","2","01","02"];
 var SUB_COLORS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#818cf8',
   '#ec4899','#84cc16','#14b8a6','#60a5fa','#c084fc','#fb923c','#f472b6','#34d399','#fbbf24'];
 var SB='https://tactslhsxglzcbsteokf.supabase.co';
@@ -357,8 +313,6 @@ function inArr(a,v){return a.indexOf(v)>=0;}
 function subAbbr(n){if(!n||n==='—')return '';var w=n.trim().split(/\s+/);return w.length===1?n.substring(0,3).toUpperCase():w.map(function(x){return x[0];}).join('').substring(0,3).toUpperCase();}
 
 var ST_BG_COLORS={AP:'#22c55e',RJ:'#ef4444',UR:'#818cf8',PN:'#f59e0b',FA:'#22c55e',NA:'#ef4444',NS:'#334155'};
-// Act2 uses a warm palette: teal=approved, amber=review, rose=rejected, slate=NS
-var ST_BG_COLORS2={AP:'#0d9488',RJ:'#f97316',UR:'#e879f9',PN:'#f59e0b',FA:'#0d9488',NA:'#f97316',NS:'#475569'};
 function renderVillas(dm, dm2){
   var layer=document.getElementById('villa-layer');
   var keys=Object.keys(VILLAS);
@@ -371,19 +325,18 @@ function renderVillas(dm, dm2){
     var baseStyle='left:'+pos.x+'px;top:'+pos.y+'px;transform:translate(-23px,-16px) rotate('+angle+'deg);';
 
     if(isSplit){
-      // Compare mode: background = act1 status color, thick border = act2 status color
       var d1=dm[vNum]||null, d2=dm2[vNum]||null;
       var st1=d1?getWirStatus(d1.status):'NS';
       var st2=d2?getWirStatus(d2.status):'NS';
       var bg1=ST_BG_COLORS[st1]||'#334155';
-      var bg2=ST_BG_COLORS2[st2]||'#475569';
+      var bg2=ST_BG_COLORS[st2]||'#334155';
       var hidden=(inArr(hiddenStatus,st1)&&inArr(hiddenStatus,st2));
-      var cls='villa s-'+st1+(hidden?' filter-hidden':'')+(openFrontVillas.has(vNum)?' is-front':'');
-      var style=baseStyle+'background:linear-gradient(to right,'+bg1+' 50%,'+bg2+' 50%)!important;border-color:transparent!important;';
-      var innerStyle='transform:rotate('+(-(VILLA_ANGLES[parseInt(vNum)]||0))+'deg);';
+      var cls='villa split-mode'+(hidden?' filter-hidden':'')+(openFrontVillas.has(vNum)?' is-front':'');
       var attrs=' data-v="'+vNum+'" data-s="'+st1+'/'+st2+'"';
-      html+='<div class="'+cls+'" style="'+style+'"'+attrs+'>'+
-        '<div class="vinner" style="'+innerStyle+'"><span class="vnum">'+vNum+'</span></div>'+
+      html+='<div class="'+cls+'" style="'+baseStyle+'"'+attrs+'>'+
+        '<div class="vh-left" style="background:'+bg1+'"><span class="vnum">'+vNum+'</span></div>'+
+        '<div class="vh-divider"></div>'+
+        '<div class="vh-right" style="background:'+bg2+'"></div>'+
         '</div>';
     } else {
       var d=dm?dm[vNum]:null;
@@ -567,8 +520,6 @@ function onModeChange(){
   document.getElementById('btn-compare').classList.remove('active');
   document.getElementById('f-act2').style.display='none';
   document.getElementById('f-act2').value='';
-  document.getElementById('cmp-legend').style.display='none';
-  var l2=document.getElementById('cmp-leg2');if(l2)l2.style.display='none';
   document.querySelectorAll('.leg-item,.stat').forEach(function(el){el.classList.remove('hidden-filter');});
   renderVillas(null);updateStats(null);
   document.getElementById('sub-section').style.display='none';
@@ -593,8 +544,6 @@ function onActivityChange(sel){
 }
 function onAct2Change(sel){
   currentActivity2=sel.value;
-  var shortAct2 = currentActivity2 ? currentActivity2.split(' — ')[0] : '— pick 2nd —';
-  if(document.getElementById('cmp-lbl-right')) document.getElementById('cmp-lbl-right').textContent=shortAct2;
   var dm=buildDataMap(currentActivity);
   var dm2=buildDataMap(currentActivity2);
   renderVillas(dm,dm2);
@@ -605,13 +554,10 @@ function toggleCompare(){
   compareMode=!compareMode;
   var btn=document.getElementById('btn-compare');
   var act2=document.getElementById('f-act2');
-  var cmpLeg=document.getElementById('cmp-legend');
   btn.classList.toggle('active',compareMode);
   act2.style.display=compareMode?'':'none';
   if(!compareMode){
     currentActivity2='';act2.value='';
-    if(cmpLeg)cmpLeg.style.display='none';
-    var l2=document.getElementById('cmp-leg2');if(l2)l2.style.display='none';
     var dm=buildDataMap(currentActivity);
     renderVillas(dm);updateStats(dm);
   } else {
@@ -623,16 +569,12 @@ function toggleCompare(){
       var opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;
       act2.appendChild(opt);
     });
-    // Show legend with act1 label
-    var shortAct1 = currentActivity.split(' — ')[0];
-    if(document.getElementById('cmp-lbl-left')) document.getElementById('cmp-lbl-left').textContent=shortAct1;
-    if(document.getElementById('cmp-lbl-right')) document.getElementById('cmp-lbl-right').textContent='— pick 2nd —';
-    if(cmpLeg)cmpLeg.style.display='flex';
     var dm=buildDataMap(currentActivity);
     renderVillas(dm,null);updateStats(dm);
   }
 }
 function updateSplitStats(dm,dm2){
+  // In split mode show combined stats in header cards only
   var labels=['AP','UR','RJ','NS'];
   var c1={},c2={};labels.forEach(function(k){c1[k]=0;c2[k]=0;});
   for(var v=1;v<=320;v++){
@@ -642,26 +584,16 @@ function updateSplitStats(dm,dm2){
     if(c1[st1]!==undefined)c1[st1]++;else c1.NS++;
     if(c2[st2]!==undefined)c2[st2]++;else c2.NS++;
   }
-  function sv(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
-  // Act1 sidebar legend counts + stats bar (left half)
-  sv('s-ap',c1.AP); sv('s-ur',c1.UR); sv('s-rj',c1.RJ); sv('s-ns',c1.NS);
-  sv('sv-ap',c1.AP); sv('sv-ur',c1.UR); sv('sv-rj',c1.RJ);
-  sv('sv-pct', dm ? Math.round(c1.AP/320*100)+'%' : '—');
-  // Show act1 label above STATUS title when in compare mode
-  var act1short = currentActivity ? currentActivity.split(' — ')[0] : '';
-  var t1=document.getElementById('cmp-leg1-title'); if(t1){ t1.textContent=act1short; t1.style.display=dm2?'block':'none'; }
-  // Act2 sidebar (right half colors)
-  if(dm2){
-    sv('s2-ap',c2.AP);sv('s2-ur',c2.UR);sv('s2-rj',c2.RJ);sv('s2-ns',c2.NS);
-    sv('s2v-ap',c2.AP);sv('s2v-ur',c2.UR);sv('s2v-rj',c2.RJ);
-    sv('s2v-pct',Math.round(c2.AP/320*100)+'%');
-    // Update act2 legend title with activity code
-    var act2short = currentActivity2 ? currentActivity2.split(' — ')[0] : '2nd Activity';
-    var t=document.getElementById('cmp-leg2-title');if(t)t.textContent=act2short;
-    var l=document.getElementById('cmp-leg2');if(l)l.style.display='block';
-  } else {
-    var l=document.getElementById('cmp-leg2');if(l)l.style.display='none';
-  }
+  var apV1=c1.AP,apV2=c2?c2.AP:'-';
+  var pct1=dm?Math.round(c1.AP/320*100)+'%':'—';
+  var pct2=dm2?Math.round(c2.AP/320*100)+'%':'—';
+  // Show split values in stat cards as "N1/N2"
+  function sv(id,v1,v2){var el=document.getElementById(id);if(el)el.textContent=v2!==undefined?v1+'/'+v2:v1;}
+  sv('sv-ap',c1.AP,c2.AP);sv('s-ap',c1.AP+c2.AP);
+  sv('sv-ur',c1.UR,c2.UR);
+  sv('sv-rj',c1.RJ,c2.RJ);
+  sv('s-ns',c1.NS+c2.NS);
+  sv('sv-pct',pct1,pct2);
   document.getElementById('sub-section').style.display='none';
 }
 
@@ -772,38 +704,19 @@ function doPrint(){
   var urLbl= currentMode==='clr'?'Pending':'Under Rev.';
   var rjLbl= currentMode==='clr'?'Not Appr.':'Rejected';
 
-  var act1code = compareMode&&currentActivity ? currentActivity.split(' — ')[0] : '';
-  var act2code = compareMode&&currentActivity2 ? currentActivity2.split(' — ')[0] : '';
-  // Act2 stats from sidebar elements
-  var ap2V = document.getElementById('s2v-ap') ? document.getElementById('s2v-ap').textContent : '—';
-  var ur2V = document.getElementById('s2v-ur') ? document.getElementById('s2v-ur').textContent : '—';
-  var rj2V = document.getElementById('s2v-rj') ? document.getElementById('s2v-rj').textContent : '—';
-  var pct2 = document.getElementById('s2v-pct') ? document.getElementById('s2v-pct').textContent : '—';
-  var ns2V = document.getElementById('s2-ns') ? document.getElementById('s2-ns').textContent : '—';
-
   var cardsHtml =
-    (compareMode&&currentActivity2 ? '<div class="pp-card" style="border-color:var(--accent-text,#93b6ff)"><div class="pv" style="font-size:10pt;color:#93b6ff">'+act1code+'</div><div class="pl">LEFT</div></div>' : '')+
     '<div class="pp-card"><div class="pv pv-tt">320</div><div class="pl">Total</div></div>'+
     '<div class="pp-card"><div class="pv pv-ap">'+apV+'</div><div class="pl">'+apLbl+'</div></div>'+
     '<div class="pp-card"><div class="pv pv-ur">'+urV+'</div><div class="pl">'+urLbl+'</div></div>'+
     '<div class="pp-card"><div class="pv pv-rj">'+rjV+'</div><div class="pl">'+rjLbl+'</div></div>'+
     '<div class="pp-card"><div class="pv pv-tt">'+nsV+'</div><div class="pl">Not Subm.</div></div>'+
-    (compareMode&&currentActivity2 ? '' : '<div class="pp-card"><div class="pv pv-of">'+ofV+'</div><div class="pl">Open Front</div></div>')+
-    '<div class="pp-card"><div class="pv pv-pct">'+pct+'</div><div class="pl">Progress</div></div>'+
-    (compareMode&&currentActivity2 ?
-      '<div style="width:1px;background:#444;margin:0 4pt;align-self:stretch"></div>'+
-      '<div class="pp-card" style="border-color:#f59e0b"><div class="pv" style="font-size:10pt;color:#f59e0b">'+act2code+'</div><div class="pl">RIGHT</div></div>'+
-      '<div class="pp-card"><div class="pv" style="color:#0d9488">'+ap2V+'</div><div class="pl">'+apLbl+'</div></div>'+
-      '<div class="pp-card"><div class="pv" style="color:#e879f9">'+ur2V+'</div><div class="pl">'+urLbl+'</div></div>'+
-      '<div class="pp-card"><div class="pv" style="color:#f97316">'+rj2V+'</div><div class="pl">'+rjLbl+'</div></div>'+
-      '<div class="pp-card"><div class="pv pv-tt">'+ns2V+'</div><div class="pl">Not Subm.</div></div>'+
-      '<div class="pp-card"><div class="pv" style="color:#f59e0b">'+pct2+'</div><div class="pl">Progress</div></div>'
-    : '');
+    '<div class="pp-card"><div class="pv pv-of">'+ofV+'</div><div class="pl">Open Front</div></div>'+
+    '<div class="pp-card"><div class="pv pv-pct">'+pct+'</div><div class="pl">Progress</div></div>';
 
   var srcLayer = document.getElementById('villa-layer');
   var villaHtml = srcLayer ? srcLayer.innerHTML : '';
 
-  var imgSrc = ''; // BG intentionally excluded from print
+  var imgSrc = (bgVisible && document.getElementById('map-img')) ? document.getElementById('map-img').src : '';
 
   var legendHtml =
     '<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>Approved / Fully Approved</span></div>'+
@@ -812,21 +725,10 @@ function doPrint(){
     '<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>'+
     (openFrontVillas.size>0 ? '<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>' : '');
   if(compareMode && currentActivity2){
-    var a1code=currentActivity.split(' — ')[0];
-    var a2code=currentActivity2.split(' — ')[0];
-    legendHtml +=
-      '<span style="margin:0 5pt;color:#999;font-size:6pt">|</span>'+
-      '<span style="font-size:7pt;font-weight:800;color:#333">LEFT — '+a1code+':</span> '+
-      '<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>Approved</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#818cf8"></div><span>Under Rev.</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#ef4444"></div><span>Rejected</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#334155;border-color:#475569"></div><span>Not Subm.</span></div>'+
-      '<span style="margin:0 5pt;color:#ccc;font-size:6pt">|</span>'+
-      '<span style="font-size:7pt;font-weight:800;color:#333">RIGHT — '+a2code+':</span> '+
-      '<div class="pl-item"><div class="pl-dot" style="background:#0d9488"></div><span>Approved</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#e879f9"></div><span>Under Rev.</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#f97316"></div><span>Rejected</span></div>'+
-      '<div class="pl-item"><div class="pl-dot" style="background:#475569;border-color:#475569"></div><span>Not Subm.</span></div>';
+    legendHtml += '<span style="margin:0 5pt;color:#999;font-size:6pt">|</span>'+
+      '<span style="font-size:7pt;font-weight:700;color:#000">LEFT:</span> <span style="font-size:7pt;color:#333">'+currentActivity+'</span>'+
+      '<span style="margin:0 4pt;color:#ccc">·</span>'+
+      '<span style="font-size:7pt;font-weight:700;color:#000">RIGHT:</span> <span style="font-size:7pt;color:#333">'+currentActivity2+'</span>';
   } else {
     var subNames = Object.keys(subColorMap).sort();
     if(subNames.length > 0){
@@ -857,34 +759,29 @@ function doPrint(){
   pp.style.display = 'flex';
   document.body.appendChild(pp);
 
-  // The print div is position:fixed;inset:0 and visible on screen.
-  // We wait for the img inside it to fully load, then measure its rendered size.
-  // img CSS: width:100% of pp-map-wrap, height:auto => rendered width = pp-map-wrap width.
-  // Villa layer scale = printImg.offsetWidth / 1800 (naturalWidth).
-
-    // Hardcoded print transform — calibrated values: scale=0.550, X=73px, Y=-57px
-  var PRINT_SCALE = 0.550, PRINT_OX = 73, PRINT_OY = -57;
-  var layer = document.getElementById('pp-layer-inner');
-  if(layer){
-    layer.style.transform = 'translate('+PRINT_OX+'px,'+PRINT_OY+'px) scale('+PRINT_SCALE+')';
-    layer.style.transformOrigin = '0 0';
-  }
-  window.print();
-  setTimeout(function(){
-    var pp2 = document.getElementById('print-page');
-    if(pp2) pp2.parentNode.removeChild(pp2);
-  }, 1500);
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      var wrap  = document.getElementById('pp-map-inner');
+      var layer = document.getElementById('pp-layer-inner');
+      if(wrap && layer){
+        var w = wrap.offsetWidth;
+        var h = wrap.offsetHeight;
+        if(w > 0 && h > 0){
+          var scale = Math.min(w/1800, h/1273);
+          layer.style.transform = 'scale('+scale+')';
+        }
+      }
+      window.print();
+      setTimeout(function(){
+        var pp2 = document.getElementById('print-page');
+        if(pp2) pp2.parentNode.removeChild(pp2);
+      }, 1500);
+    });
+  });
 }
 
 async function loadData(){
   document.getElementById('lm').textContent='Loading activities...';
-  // Load open front clearance codes from DB
-  try{
-    var ofR=await fetch(SB+'/rest/v1/clearance_activities?select=clearance_code&is_open_front=eq.true&is_active=eq.true',{headers:getH()});
-    var ofD=await ofR.json();
-    if(Array.isArray(ofD)) OPEN_FRONT_CLR_CODES=ofD.map(function(r){return r.clearance_code;});
-    console.log('[keyplan] Open Front codes:',OPEN_FRONT_CLR_CODES);
-  }catch(e){console.warn('[keyplan] Could not load open front codes',e);}
   var actsR=await fetchAll('activities?select=activity_code,activity_name&is_active=eq.true');
   var actNameMap={};
   if(Array.isArray(actsR))actsR.forEach(function(a){actNameMap[a.activity_code]=a.activity_name;});
