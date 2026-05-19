@@ -356,19 +356,19 @@ body.in-shell header { display: none !important; }
           <div class="kpi-strip">
             <div class="kpi-box">
               <div class="kpi-val" style="color:var(--st-approved-tx)" id="kpi-comp">—</div>
-              <div class="kpi-lbl">Completed (Range)</div>
+              <div class="kpi-lbl" id="kpi-comp-lbl">Completed (Range)</div>
             </div>
             <div class="kpi-box">
               <div class="kpi-val" style="color:var(--st-progress-tx)" id="kpi-prog">—</div>
-              <div class="kpi-lbl">In Progress (Range)</div>
+              <div class="kpi-lbl" id="kpi-prog-lbl">In Progress (Range)</div>
             </div>
             <div class="kpi-box">
               <div class="kpi-val" style="color:var(--st-approved-tx)" id="kpi-7comp">—</div>
-              <div class="kpi-lbl">Completed Last 7d</div>
+              <div class="kpi-lbl" id="kpi-7comp-lbl">Completed Last 7d</div>
             </div>
             <div class="kpi-box">
               <div class="kpi-val" style="color:var(--st-progress-tx)" id="kpi-7prog">—</div>
-              <div class="kpi-lbl">In Progress Last 7d</div>
+              <div class="kpi-lbl" id="kpi-7prog-lbl">In Progress Last 7d</div>
             </div>
           </div>
 
@@ -386,6 +386,8 @@ body.in-shell header { display: none !important; }
           <div class="sum-tabs">
             <button class="sum-tab active" id="tab-comp" onclick="switchSumTab('comp')">✅ Completed</button>
             <button class="sum-tab" id="tab-prog" onclick="switchSumTab('prog')">🔄 In Progress</button>
+            <button class="sum-tab" id="tab-wir" onclick="switchSumTab('wir')">📋 WIR Submission</button>
+            <button class="sum-tab" id="tab-wirresp" onclick="switchSumTab('wirresp')">✔ WIR Response</button>
           </div>
 
           <div class="sum-wrap">
@@ -399,6 +401,20 @@ body.in-shell header { display: none !important; }
               <table class="sum-table">
                 <thead><tr><th>Activity</th><th class="num">C1</th><th class="num">C2</th><th class="num">C3</th><th class="num">C4</th><th class="num">C5</th><th class="num">C6</th><th class="num">C7</th><th class="num">Total</th></tr></thead>
                 <tbody id="sum-prog-body"><tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div id="sum-wir-pane" style="display:none">
+              <div style="font-size:11px;color:var(--text-muted);padding:6px 2px 8px">WIRs submitted in date range, grouped by activity × cluster.</div>
+              <table class="sum-table">
+                <thead><tr><th>Activity</th><th class="num">C1</th><th class="num">C2</th><th class="num">C3</th><th class="num">C4</th><th class="num">C5</th><th class="num">C6</th><th class="num">C7</th><th class="num">Total</th></tr></thead>
+                <tbody id="sum-wir-body"><tr><td colspan="9" style="text-align:center;color:var(--text-faint);padding:16px">Select date range and click Apply</td></tr></tbody>
+              </table>
+            </div>
+            <div id="sum-wirresp-pane" style="display:none">
+              <div style="font-size:11px;color:var(--text-muted);padding:6px 2px 8px">WIRs with response (approved/rejected) in date range, grouped by activity × cluster.</div>
+              <table class="sum-table">
+                <thead><tr><th>Activity</th><th class="num">Approved</th><th class="num">Under Rev.</th><th class="num">Rejected</th><th class="num">Total</th></tr></thead>
+                <tbody id="sum-wirresp-body"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:16px">Select date range and click Apply</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -669,10 +685,12 @@ const CLUSTERS=['C1','C2','C3','C4','C5','C6','C7'];
 
 function switchSumTab(tab){
   activeSumTab=tab;
-  document.getElementById('tab-comp').classList.toggle('active',tab==='comp');
-  document.getElementById('tab-prog').classList.toggle('active',tab==='prog');
-  document.getElementById('sum-comp-pane').style.display=tab==='comp'?'block':'none';
-  document.getElementById('sum-prog-pane').style.display=tab==='prog'?'block':'none';
+  ['comp','prog','wir','wirresp'].forEach(function(t){
+    document.getElementById('tab-'+t).classList.toggle('active',tab===t);
+    document.getElementById('sum-'+t+'-pane').style.display=tab===t?'block':'none';
+  });
+  if(tab==='wir'||tab==='wirresp') loadWirSummary(tab);
+  else { restoreSiteKpis(); loadSummary(); }
 }
 
 async function loadSummary(){
@@ -725,6 +743,114 @@ async function loadSummary(){
     document.getElementById('kpi-7comp').textContent=filterByDate(rows,s7,e7,'completed').length;
     document.getElementById('kpi-7prog').textContent=filterByDate(rows,s7,e7,'in_progress').length;
   }catch(e){console.error(e);}
+}
+
+// ── WIR Summary ──
+async function loadWirSummary(tab){
+  const start=document.getElementById('sum-start').value;
+  const end=document.getElementById('sum-end').value;
+  const bodyId=tab==='wir'?'sum-wir-body':'sum-wirresp-body';
+  const cols=tab==='wir'?9:5;
+  document.getElementById(bodyId).innerHTML=`<tr><td colspan="${cols}" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr>`;
+
+  // Update KPI card labels to reflect WIR mode
+  const isWir=tab==='wir'||tab==='wirresp';
+  const dateLabel=tab==='wir'?'WIR Submitted':'WIR Responded';
+  if(document.getElementById('kpi-comp-lbl')) document.getElementById('kpi-comp-lbl').textContent=isWir?dateLabel+' (Range)':'Completed (Range)';
+  if(document.getElementById('kpi-prog-lbl')) document.getElementById('kpi-prog-lbl').textContent=isWir?dateLabel+' Last 7d':'In Progress (Range)';
+  if(document.getElementById('kpi-7comp-lbl')) document.getElementById('kpi-7comp-lbl').textContent=isWir?'Approved (Range)':'Completed Last 7d';
+  if(document.getElementById('kpi-7prog-lbl')) document.getElementById('kpi-7prog-lbl').textContent=isWir?'Rejected (Range)':'In Progress Last 7d';
+
+  try{
+    const dateField=tab==='wir'?'submitted_date':'response_date';
+    // Fetch ALL WIRs in date range - no status filter, just date and match_status
+    let url=`dc_import_log?select=raw_activity_code,raw_activity_name,raw_cluster,normalised_status,${dateField}&match_status=eq.matched`;
+    if(start) url+=`&${dateField}=gte.${start}`;
+    if(end)   url+=`&${dateField}=lte.${end}`;
+    // Also fetch last 7 days for KPI
+    const today=new Date(); const fmt=d=>d.toISOString().split('T')[0];
+    const last7=new Date(today); last7.setDate(today.getDate()-7);
+    let url7=`dc_import_log?select=raw_activity_code,normalised_status,${dateField}&match_status=eq.matched&${dateField}=gte.${fmt(last7)}&${dateField}=lte.${fmt(today)}`;
+
+    const [rows, rows7]=await Promise.all([get(url), get(url7)]);
+    // Cache for export
+    if(tab==='wir') cachedWirRows=rows; else cachedWirRespRows=rows;
+
+    if(tab==='wir'){
+      // KPI: total submitted in range, total in last 7d
+      document.getElementById('kpi-comp').textContent=rows.length;
+      document.getElementById('kpi-prog').textContent=rows7.length;
+      document.getElementById('kpi-7comp').textContent=rows.filter(r=>r.normalised_status==='approved').length;
+      document.getElementById('kpi-7prog').textContent=rows.filter(r=>r.normalised_status==='rejected').length;
+
+      // Group by activity × cluster
+      const groups={};
+      rows.forEach(r=>{
+        const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+        const cl=r.raw_cluster||'—';
+        if(!groups[act]) groups[act]={};
+        groups[act][cl]=(groups[act][cl]||0)+1;
+      });
+      const acts=Object.keys(groups).sort();
+      let html='',total=0;
+      acts.forEach(act=>{
+        const rowTotal=CLUSTERS.reduce((s,c)=>s+(groups[act][c]||0),0);
+        total+=rowTotal;
+        html+=`<tr><td style="font-size:11px">${act}</td>${CLUSTERS.map(c=>`<td class="num">${groups[act][c]||'—'}</td>`).join('')}<td class="num" style="color:var(--text);font-weight:700">${rowTotal}</td></tr>`;
+      });
+      if(!html) html=`<tr><td colspan="9" style="color:var(--text-faint);text-align:center;padding:16px">No WIR submissions in this date range</td></tr>`;
+      else html+=`<tr class="total-row"><td>Total</td>${CLUSTERS.map(c=>`<td class="num">${acts.reduce((s,a)=>s+(groups[a][c]||0),0)||'—'}</td>`).join('')}<td class="num">${total}</td></tr>`;
+      document.getElementById('sum-wir-body').innerHTML=html;
+
+    } else {
+      // KPI: total responded in range
+      document.getElementById('kpi-comp').textContent=rows.length;
+      document.getElementById('kpi-prog').textContent=rows7.length;
+      document.getElementById('kpi-7comp').textContent=rows.filter(r=>r.normalised_status==='approved').length;
+      document.getElementById('kpi-7prog').textContent=rows.filter(r=>r.normalised_status==='rejected').length;
+
+      // Group by activity × status
+      const groups={};
+      rows.forEach(r=>{
+        const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+        const st=r.normalised_status||'unknown';
+        if(!groups[act]) groups[act]={};
+        groups[act][st]=(groups[act][st]||0)+1;
+      });
+      const acts=Object.keys(groups).sort();
+      let html='',total=0;
+      acts.forEach(act=>{
+        const ap=groups[act]['approved']||0;
+        const ur=groups[act]['under_review']||0;
+        const rj=groups[act]['rejected']||0;
+        const rowTotal=ap+ur+rj;
+        total+=rowTotal;
+        html+=`<tr><td style="font-size:11px">${act}</td>
+          <td class="num" style="color:var(--st-approved-tx)">${ap||'—'}</td>
+          <td class="num" style="color:var(--accent-text)">${ur||'—'}</td>
+          <td class="num" style="color:var(--st-rejected-tx)">${rj||'—'}</td>
+          <td class="num" style="color:var(--text);font-weight:700">${rowTotal}</td></tr>`;
+      });
+      if(!html) html=`<tr><td colspan="5" style="color:var(--text-faint);text-align:center;padding:16px">No WIR responses in this date range</td></tr>`;
+      else html+=`<tr class="total-row"><td>Total</td>
+        <td class="num" style="color:var(--st-approved-tx)">${acts.reduce((s,a)=>s+(groups[a]['approved']||0),0)||'—'}</td>
+        <td class="num" style="color:var(--accent-text)">${acts.reduce((s,a)=>s+(groups[a]['under_review']||0),0)||'—'}</td>
+        <td class="num" style="color:var(--st-rejected-tx)">${acts.reduce((s,a)=>s+(groups[a]['rejected']||0),0)||'—'}</td>
+        <td class="num">${total}</td></tr>`;
+      document.getElementById('sum-wirresp-body').innerHTML=html;
+    }
+  }catch(e){
+    console.error('loadWirSummary',e);
+    document.getElementById(bodyId).innerHTML=`<tr><td colspan="${cols}" style="color:var(--st-rejected-tx);padding:16px">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// Restore KPI labels when switching back to site tabs
+function restoreSiteKpis(){
+  if(document.getElementById('kpi-comp-lbl')) document.getElementById('kpi-comp-lbl').textContent='Completed (Range)';
+  if(document.getElementById('kpi-prog-lbl')) document.getElementById('kpi-prog-lbl').textContent='In Progress (Range)';
+  if(document.getElementById('kpi-7comp-lbl')) document.getElementById('kpi-7comp-lbl').textContent='Completed Last 7d';
+  if(document.getElementById('kpi-7prog-lbl')) document.getElementById('kpi-7prog-lbl').textContent='In Progress Last 7d';
 }
 
 // ── Activity Mappings ──
@@ -925,17 +1051,60 @@ function removePillFromEntry(idx,id){
 }
 
 // ── Export CSV ──
+var cachedWirRows=[], cachedWirRespRows=[];
+
 function exportCSV(mode){
-  // Export ALL data — no date range filter
-  let rows;
-  let filename;
-  if(mode==='comp'){rows=cachedRows.filter(r=>r.status==='completed');filename='completed_progress';}
-  else if(mode==='prog'){rows=cachedRows.filter(r=>r.status==='in_progress');filename='in_progress';}
-  else{rows=[...cachedRows];filename='all_progress';}
+  const start=document.getElementById('sum-start').value;
+  const end=document.getElementById('sum-end').value;
+  const today=new Date().toISOString().split('T')[0];
+  let rows, headers, filename;
 
-  if(!rows.length){alert('No data to export.');return;}
+  if(activeSumTab==='wir'||activeSumTab==='wirresp'){
+    // Export WIR data
+    const src=activeSumTab==='wir'?cachedWirRows:cachedWirRespRows;
+    if(!src.length){alert('No WIR data loaded. Switch to the WIR tab first.');return;}
+    headers=['Cluster','Activity Code','Activity Name','Status','Submitted Date','Response Date'];
+    filename=activeSumTab==='wir'?'wir_submissions':'wir_responses';
+    // Apply date filter
+    const dateField=activeSumTab==='wir'?'submitted_date':'response_date';
+    rows=src.filter(r=>{
+      const d=r[dateField];
+      return (!start||!d||d>=start)&&(!end||!d||d<=end);
+    });
+    const csvRows=[headers.join(','),...rows.map(r=>[
+      r.raw_cluster||'',
+      r.raw_activity_code||'',
+      '"'+(r.raw_activity_name||'').replace(/"/g,'""')+'"',
+      r.normalised_status||'',
+      r.submitted_date||'',
+      r.response_date||''
+    ].join(','))];
+    const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${filename}_${today}.csv`});
+    a.click(); URL.revokeObjectURL(a.href);
+    return;
+  }
 
-  const headers=['Cluster','Villa No','Activity','Status','Start Date','Finish Date','Updated At'];
+  // Site progress export — filter by date range
+  function filterByDate(r,s,e){
+    const d=r.finish_date||(r.updated_at||'').split('T')[0];
+    return (!s||d>=s)&&(!e||d<=e);
+  }
+
+  if(mode==='comp'){
+    rows=cachedRows.filter(r=>r.status==='completed'&&filterByDate(r,start,end));
+    filename='completed_progress';
+  } else if(mode==='prog'){
+    rows=cachedRows.filter(r=>r.status==='in_progress'&&filterByDate(r,start,end));
+    filename='in_progress';
+  } else {
+    rows=cachedRows.filter(r=>filterByDate(r,start,end));
+    filename='all_progress';
+  }
+
+  if(!rows.length){alert('No data in selected date range.');return;}
+
+  headers=['Cluster','Villa No','Activity','Status','Start Date','Finish Date','Updated At'];
   const csvRows=[headers.join(','),...rows.map(r=>[
     r.villas?.clusters?.code||'',
     r.villas?.villa_no||r.villa_id||'',
@@ -947,10 +1116,7 @@ function exportCSV(mode){
   ].join(','))];
 
   const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
-  const a=Object.assign(document.createElement('a'),{
-    href:URL.createObjectURL(blob),
-    download:`${filename}_${new Date().toISOString().split('T')[0]}.csv`
-  });
+  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${filename}_${today}.csv`});
   a.click(); URL.revokeObjectURL(a.href);
 }
 
