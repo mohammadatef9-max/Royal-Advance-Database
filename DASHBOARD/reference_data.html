@@ -257,6 +257,10 @@ body.in-shell .page-wrap{height:100vh}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
       WIR Code Aliases
     </button>
+    <button class="tab-btn" id="tab-priority" onclick="switchTab('priority')" style="color:#f59e0b">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      Priority <span class="tab-badge" id="badge-priority">—</span>
+    </button>
     <button class="tab-btn" id="tab-openfront" onclick="switchTab('openfront')" style="color:var(--accent-text,#93b6ff)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Open Front <span class="tab-badge" id="badge-openfront">—</span>
@@ -609,6 +613,68 @@ body.in-shell .page-wrap{height:100vh}
     </div>
   </div><!-- end content-openfront -->
 
+  <!-- ══ PRIORITY TAB ══ -->
+  <div class="tab-content" id="content-priority" style="flex-direction:column">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" id="pri-search" placeholder="Search villa or cluster…" oninput="filterPriority()">
+      </div>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" onclick="loadPriority()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-primary" onclick="openPriModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+          + Add Priority Villa
+        </button>
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:12px 24px 24px">
+      <div id="pri-list">
+        <div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">
+          No priority villas yet. Click <b>+ Add Priority Villa</b> to mark villas as priority.
+        </div>
+      </div>
+    </div>
+  </div><!-- end content-priority -->
+
+  <!-- ══ PRIORITY MODAL ══ -->
+  <div class="modal-overlay" id="pri-modal" style="display:none" onclick="if(event.target===this)closePriModal()">
+    <div class="modal" style="width:480px;max-width:95vw">
+      <h2>⭐ Add Priority Villa</h2>
+      <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px">Select a cluster and villa to mark as priority.</p>
+      <div class="form-group">
+        <label class="form-label">Cluster</label>
+        <select class="form-select" id="pri-m-cluster" onchange="loadPriModalVillas()">
+          <option value="">— Select Cluster —</option>
+          <option value="1">Cluster 1</option>
+          <option value="2">Cluster 2</option>
+          <option value="3">Cluster 3</option>
+          <option value="4">Cluster 4</option>
+          <option value="5">Cluster 5</option>
+          <option value="6">Cluster 6</option>
+          <option value="7">Cluster 7</option>
+        </select>
+      </div>
+      <div class="form-group" id="pri-villa-wrap" style="display:none">
+        <label class="form-label">Villa Numbers <span style="color:var(--muted);font-weight:400">(comma-separated, e.g. 108, 120, 135)</span></label>
+        <input class="form-input" id="pri-villa-search" placeholder="e.g. 1, 5, 12, 108…" oninput="onPriVillaInput()" style="font-family:JetBrains Mono,monospace">
+        <div id="pri-villa-preview" style="margin-top:6px;font-size:11px;color:var(--muted)"></div>
+      </div>
+      <div class="form-group" id="pri-note-wrap" style="display:none">
+        <label class="form-label">Note (optional)</label>
+        <input class="form-input" id="pri-m-note" placeholder="e.g. Handover deadline, VIP client…">
+      </div>
+      <div id="pri-m-alert" style="margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-primary" style="flex:1" id="pri-m-add-btn" onclick="addPriorityVilla()" disabled>⭐ Mark as Priority</button>
+        <button class="btn btn-ghost" onclick="closePriModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
 <!-- ══ OPEN FRONT MODAL ══ -->
 <div class="modal-overlay" id="of-modal" style="display:none" onclick="if(event.target===this)closeOFModal()">
   <div class="modal">
@@ -750,8 +816,14 @@ let editingWirId = null, editingClrId = null;
 // ── TAB SWITCH ──
 function switchTab(tab) {
   if(tab==='openfront'){ loadOpenFront(); }
+  if(tab==='priority'){
+    // Default to C3 if no cluster selected
+    var pc=document.getElementById('pri-cluster');
+    if(pc&&!pc.value) pc.value='3';
+    loadPriority();
+  }
   currentTab = tab;
-  ['wir','clr','map','alias','subs','wiralias','maint','openfront'].forEach(t => {
+  ['wir','clr','map','alias','subs','wiralias','maint','openfront','priority'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t === tab);
     document.getElementById('content-'+t)?.classList.toggle('active', t === tab);
   });
@@ -1745,6 +1817,169 @@ async function sbFetch(path){
   try{const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()});return r.json();}catch(e){return [];}
 }
 function esc2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+
+/* ══ PRIORITY TAB ══ */
+var _priList = []; // currently priority villas: [{id, villa_no, cluster_name, priority_note}]
+var _priModalVillas = []; // villas for modal selection
+var _priSelectedVillaId = null;
+
+async function loadPriority(){
+  var listEl = document.getElementById('pri-list');
+  if(listEl) listEl.innerHTML='<div style="padding:20px;color:var(--muted);font-size:13px">Loading...</div>';
+  var clusterNames={'1':'Cluster 1','2':'Cluster 2','3':'Cluster 3','4':'Cluster 4','5':'Cluster 5','6':'Cluster 6','7':'Cluster 7'};
+  try{
+    var r = await fetch(SB+'/rest/v1/villas?select=id,villa_no,cluster_id,priority_note&is_active=eq.true&is_priority=eq.true&order=cluster_id,villa_no&limit=500',{headers:getH()});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var d = await r.json();
+    if(!Array.isArray(d)) throw new Error(JSON.stringify(d));
+    _priList = d.map(function(v){
+      return {id:v.id, villa_no:v.villa_no, cluster_name:clusterNames[String(v.cluster_id)]||('Cluster '+v.cluster_id), priority_note:v.priority_note||''};
+    });
+    var badge = document.getElementById('badge-priority');
+    if(badge) badge.textContent = _priList.length ? _priList.length+' priority' : '—';
+    renderPriority();
+  }catch(e){
+    if(listEl) listEl.innerHTML='<div style="padding:20px;color:var(--rejected);font-size:13px">Error: '+esc2(e.message)+'</div>';
+    console.error('loadPriority',e);
+  }
+}
+
+function renderPriority(){
+  var listEl = document.getElementById('pri-list');
+  if(!listEl) return;
+  var q = ((document.getElementById('pri-search')||{}).value||'').toLowerCase();
+  var filtered = _priList.filter(function(v){
+    return !q || String(v.villa_no).includes(q) || v.cluster_name.toLowerCase().includes(q) || v.priority_note.toLowerCase().includes(q);
+  });
+  if(!filtered.length){
+    listEl.innerHTML='<div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">'+(q?'No results for "'+esc2(q)+'"':'No priority villas yet. Click <b>+ Add Priority Villa</b> to get started.')+'</div>';
+    return;
+  }
+  var html='<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+  html+='<div style="display:grid;grid-template-columns:80px 120px 1fr auto;gap:0;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--bg-panel)">';
+  html+='<span>Villa</span><span>Cluster</span><span>Note</span><span>Actions</span></div>';
+  filtered.forEach(function(v){
+    html+='<div style="display:grid;grid-template-columns:80px 120px 1fr auto;gap:0;padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;background:rgba(245,158,11,0.04)">';
+    html+='<span style="font-family:JetBrains Mono,monospace;font-weight:700;color:#f59e0b;font-size:13px">⭐ '+v.villa_no+'</span>';
+    html+='<span style="color:var(--muted);font-size:11px">'+esc2(v.cluster_name)+'</span>';
+    html+='<input type="text" value="'+esc2(v.priority_note)+'" placeholder="Add note…" onchange="updatePriNote('+v.id+',this.value)"'+
+          ' style="background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:3px 8px;width:90%">';
+    html+='<button onclick="removePriorityVilla('+v.id+')" class="btn btn-ghost" style="padding:3px 10px;font-size:11px;color:var(--rejected);border-color:var(--rejected)">✕ Remove</button>';
+    html+='</div>';
+  });
+  html+='</div>';
+  listEl.innerHTML=html;
+}
+
+function filterPriority(){ renderPriority(); }
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openPriModal(){
+  _priSelectedVillaId=null; _priModalVillas=[];
+  document.getElementById('pri-m-cluster').value='';
+  document.getElementById('pri-m-note').value='';
+  document.getElementById('pri-villa-wrap').style.display='none';
+  document.getElementById('pri-note-wrap').style.display='none';
+  document.getElementById('pri-m-alert').innerHTML='';
+  document.getElementById('pri-m-add-btn').disabled=true;
+  var inp=document.getElementById('pri-villa-search');
+  if(inp) inp.value='';
+  var prev=document.getElementById('pri-villa-preview');
+  if(prev) prev.textContent='';
+  document.getElementById('pri-modal').style.display='flex';
+}
+function closePriModal(){ document.getElementById('pri-modal').style.display='none'; }
+
+async function loadPriModalVillas(){
+  var clusterId = document.getElementById('pri-m-cluster').value;
+  if(!clusterId){ document.getElementById('pri-villa-wrap').style.display='none'; return; }
+  document.getElementById('pri-villa-wrap').style.display='block';
+  document.getElementById('pri-note-wrap').style.display='block';
+  document.getElementById('pri-m-add-btn').disabled=true;
+  document.getElementById('pri-villa-search').value='';
+  document.getElementById('pri-villa-preview').textContent='Loading villas...';
+  try{
+    var r=await fetch(SB+'/rest/v1/villas?select=id,villa_no,is_priority&is_active=eq.true&cluster_id=eq.'+clusterId+'&order=villa_no&limit=500',{headers:getH()});
+    var d=await r.json();
+    if(!Array.isArray(d)) throw new Error(JSON.stringify(d));
+    _priModalVillas=d;
+    document.getElementById('pri-villa-preview').textContent='Enter villa numbers above. Already priority villas will be skipped.';
+  }catch(e){
+    document.getElementById('pri-villa-preview').textContent='Error loading villas: '+e.message;
+  }
+}
+
+function onPriVillaInput(){
+  var val=document.getElementById('pri-villa-search').value;
+  var nums=val.split(',').map(function(s){return parseInt(s.trim());}).filter(function(n){return !isNaN(n)&&n>0;});
+  if(!nums.length){
+    document.getElementById('pri-villa-preview').textContent='Enter villa numbers separated by commas.';
+    document.getElementById('pri-m-add-btn').disabled=true;
+    return;
+  }
+  // Validate against loaded villas
+  var valid=[],already=[],notFound=[];
+  nums.forEach(function(n){
+    var v=_priModalVillas.find(function(x){return x.villa_no===n;});
+    if(!v) notFound.push(n);
+    else if(v.is_priority) already.push(n);
+    else valid.push(n);
+  });
+  var parts=[];
+  if(valid.length) parts.push('<span style="color:#22c55e">✓ '+valid.length+' will be marked priority</span>');
+  if(already.length) parts.push('<span style="color:#f59e0b">⭐ '+already.length+' already priority</span>');
+  if(notFound.length) parts.push('<span style="color:var(--rejected)">✕ '+notFound.join(', ')+' not found in cluster</span>');
+  document.getElementById('pri-villa-preview').innerHTML=parts.join(' &nbsp;·&nbsp; ');
+  document.getElementById('pri-m-add-btn').disabled=valid.length===0;
+}
+
+async function addPriorityVilla(){
+  var val=document.getElementById('pri-villa-search').value;
+  var nums=val.split(',').map(function(s){return parseInt(s.trim());}).filter(function(n){return !isNaN(n)&&n>0;});
+  var note=document.getElementById('pri-m-note').value||null;
+  var al=document.getElementById('pri-m-alert');
+  // Find valid villa IDs
+  var toMark=_priModalVillas.filter(function(v){return nums.indexOf(v.villa_no)>=0&&!v.is_priority;});
+  if(!toMark.length){ al.innerHTML='<div style="color:var(--rejected);font-size:12px;margin-bottom:8px">No valid villas to mark.</div>'; return; }
+  al.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Saving '+toMark.length+' villa(s)...</div>';
+  var errs=0;
+  for(var i=0;i<toMark.length;i++){
+    var res=await fetch(SB+'/rest/v1/villas?id=eq.'+toMark[i].id,{
+      method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({is_priority:true,priority_note:note})
+    });
+    if(!res.ok) errs++;
+  }
+  closePriModal();
+  toast(errs===0?'⭐ '+toMark.length+' villa(s) marked as priority':'Saved with '+errs+' errors', errs===0?'success':'error');
+  await loadPriority();
+}
+
+async function removePriorityVilla(id){
+  if(!confirm('Remove priority from this villa?')) return;
+  try{
+    var res=await fetch(SB+'/rest/v1/villas?id=eq.'+id,{
+      method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({is_priority:false,priority_note:null})
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    toast('Priority removed','info');
+    await loadPriority();
+  }catch(e){ toast('Error: '+esc2(e.message),'error'); }
+}
+
+async function updatePriNote(id, val){
+  try{
+    await fetch(SB+'/rest/v1/villas?id=eq.'+id,{
+      method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({priority_note:val||null})
+    });
+    // Update local
+    var v=_priList.find(function(x){return x.id===id;});
+    if(v) v.priority_note=val;
+  }catch(e){ toast('Error saving note','error'); }
+}
+
 
 /* ══ OPEN FRONT TAB ══ */
 var _ofLinks=[], _ofWirs=[], _ofClrs=[];
