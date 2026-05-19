@@ -196,6 +196,10 @@ body.space-down #map-viewport{cursor:grab}
   <div class="tb-div"></div>
   <button class="tbtn" id="btn-sub-labels" onclick="toggleSubLabels()">① Sub Labels</button>
   <button class="tbtn" id="btn-toggle-bg">🖼 BG</button>
+  <select id="print-paper" class="tbtn" style="padding:5px 8px;cursor:pointer;font-size:11px">
+    <option value="A4">A4 Landscape</option>
+    <option value="A3">A3 Landscape</option>
+  </select>
   <button class="tbtn" onclick="doPrint()">🖨 Print</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="zoomBy(1.25)" title="Zoom in (Ctrl+wheel)">🔍+</button>
@@ -883,7 +887,19 @@ function doPrint(){
   // Villa layer scale = printImg.offsetWidth / 1800 (naturalWidth).
 
     // Hardcoded print transform — calibrated values: scale=0.550, X=73px, Y=-57px
-  var PRINT_SCALE = 0.520, PRINT_OX = 73, PRINT_OY = -57;
+  // Scale calibrated per paper size (A4 landscape = 0.520, A3 landscape = 0.760)
+  var paper = (document.getElementById('print-paper')||{value:'A4'}).value;
+  var PRINT_SCALE, PRINT_OX, PRINT_OY, PAGE_SIZE;
+  if(paper === 'A3'){
+    PRINT_SCALE = 0.760; PRINT_OX = 107; PRINT_OY = -83; PAGE_SIZE = 'A3 landscape';
+  } else {
+    PRINT_SCALE = 0.520; PRINT_OX = 73;  PRINT_OY = -57;  PAGE_SIZE = 'A4 landscape';
+  }
+  // Inject dynamic @page size
+  var pageStyle = document.getElementById('_kp_page_style');
+  if(!pageStyle){ pageStyle=document.createElement('style'); pageStyle.id='_kp_page_style'; document.head.appendChild(pageStyle); }
+  pageStyle.textContent = '@page{size:'+PAGE_SIZE+';margin:8mm}';
+
   var layer = document.getElementById('pp-layer-inner');
   if(layer){
     layer.style.transform = 'translate('+PRINT_OX+'px,'+PRINT_OY+'px) scale('+PRINT_SCALE+')';
