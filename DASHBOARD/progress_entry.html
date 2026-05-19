@@ -388,6 +388,7 @@ body.in-shell header { display: none !important; }
             <button class="sum-tab" id="tab-prog" onclick="switchSumTab('prog')">🔄 In Progress</button>
             <button class="sum-tab" id="tab-wir" onclick="switchSumTab('wir')">📋 WIR Submission</button>
             <button class="sum-tab" id="tab-wirresp" onclick="switchSumTab('wirresp')">✔ WIR Response</button>
+            <button class="sum-tab" id="tab-ra" onclick="switchSumTab('ra')" style="color:#ec4899">🔴 RA Sub-Contractor</button>
           </div>
 
           <div class="sum-wrap">
@@ -415,6 +416,19 @@ body.in-shell header { display: none !important; }
               <table class="sum-table">
                 <thead><tr><th>Activity</th><th class="num">Approved</th><th class="num">Under Rev.</th><th class="num">Rejected</th><th class="num">Total</th></tr></thead>
                 <tbody id="sum-wirresp-body"><tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:16px">Select date range and click Apply</td></tr></tbody>
+              </table>
+            </div>
+            <div id="sum-ra-pane" style="display:none">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 2px 8px">
+                <span style="font-size:11px;color:var(--text-muted)">WIRs raised by <b style="color:#ec4899">RA</b> sub-contractor in date range.</span>
+                <select id="ra-date-field" onchange="loadRaSummary()" style="font-size:11px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:5px">
+                  <option value="submitted_date">By Submission Date</option>
+                  <option value="response_date">By Response Date</option>
+                </select>
+              </div>
+              <table class="sum-table">
+                <thead><tr><th>Activity</th><th class="num">C1</th><th class="num">C2</th><th class="num">C3</th><th class="num">C4</th><th class="num">C5</th><th class="num">C6</th><th class="num">C7</th><th class="num">Approved</th><th class="num">Rejected</th><th class="num">Total</th></tr></thead>
+                <tbody id="sum-ra-body"><tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:16px">Select date range and click Apply</td></tr></tbody>
               </table>
             </div>
           </div>
@@ -685,11 +699,12 @@ const CLUSTERS=['C1','C2','C3','C4','C5','C6','C7'];
 
 function switchSumTab(tab){
   activeSumTab=tab;
-  ['comp','prog','wir','wirresp'].forEach(function(t){
+  ['comp','prog','wir','wirresp','ra'].forEach(function(t){
     document.getElementById('tab-'+t).classList.toggle('active',tab===t);
     document.getElementById('sum-'+t+'-pane').style.display=tab===t?'block':'none';
   });
   if(tab==='wir'||tab==='wirresp') loadWirSummary(tab);
+  else if(tab==='ra') loadRaSummary();
   else { restoreSiteKpis(); loadSummary(); }
 }
 
@@ -1050,6 +1065,77 @@ function removePillFromEntry(idx,id){
   renderMapEntries(drafts);
 }
 
+// ── RA Sub-Contractor Summary ──
+var cachedRaRows=[];
+async function loadRaSummary(){
+  const start=document.getElementById('sum-start').value;
+  const end=document.getElementById('sum-end').value;
+  const dateField=(document.getElementById('ra-date-field')||{value:'submitted_date'}).value||'submitted_date';
+  document.getElementById('sum-ra-body').innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr>`;
+
+  const dateLabel=dateField==='submitted_date'?'Submitted':'Responded';
+  if(document.getElementById('kpi-comp-lbl')) document.getElementById('kpi-comp-lbl').textContent='RA WIRs (Range)';
+  if(document.getElementById('kpi-prog-lbl')) document.getElementById('kpi-prog-lbl').textContent='RA WIRs Last 7d';
+  if(document.getElementById('kpi-7comp-lbl')) document.getElementById('kpi-7comp-lbl').textContent='RA Approved (Range)';
+  if(document.getElementById('kpi-7prog-lbl')) document.getElementById('kpi-7prog-lbl').textContent='RA Rejected (Range)';
+
+  try{
+    let url=`dc_import_log?select=raw_activity_code,raw_activity_name,raw_cluster,normalised_status,submitted_date,response_date&match_status=eq.matched&raw_subcontractor=eq.RA`;
+    if(start) url+=`&${dateField}=gte.${start}`;
+    if(end)   url+=`&${dateField}=lte.${end}`;
+    const today=new Date(); const fmt=d=>d.toISOString().split('T')[0];
+    const last7=new Date(today); last7.setDate(today.getDate()-7);
+    let url7=`dc_import_log?select=raw_activity_code,normalised_status&match_status=eq.matched&raw_subcontractor=eq.RA&${dateField}=gte.${fmt(last7)}&${dateField}=lte.${fmt(today)}`;
+
+    const [rows,rows7]=await Promise.all([get(url),get(url7)]);
+    cachedRaRows=rows;
+
+    // KPIs
+    document.getElementById('kpi-comp').textContent=rows.length;
+    document.getElementById('kpi-prog').textContent=rows7.length;
+    document.getElementById('kpi-7comp').textContent=rows.filter(r=>r.normalised_status==='approved').length;
+    document.getElementById('kpi-7prog').textContent=rows.filter(r=>r.normalised_status==='rejected').length;
+
+    // Group by activity
+    const groups={};
+    rows.forEach(r=>{
+      const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+      const cl=r.raw_cluster||'—';
+      const st=r.normalised_status||'';
+      if(!groups[act]) groups[act]={ap:0,rj:0};
+      if(!groups[act][cl]) groups[act][cl]=0;
+      groups[act][cl]++;
+      if(st==='approved') groups[act].ap++;
+      else if(st==='rejected') groups[act].rj++;
+    });
+
+    const acts=Object.keys(groups).sort();
+    let html='',total=0;
+    acts.forEach(act=>{
+      const rowTotal=CLUSTERS.reduce((s,c)=>s+(groups[act][c]||0),0);
+      total+=rowTotal;
+      html+=`<tr>
+        <td style="font-size:11px">${act}</td>
+        ${CLUSTERS.map(c=>`<td class="num">${groups[act][c]||'—'}</td>`).join('')}
+        <td class="num" style="color:var(--st-approved-tx)">${groups[act].ap||'—'}</td>
+        <td class="num" style="color:var(--st-rejected-tx)">${groups[act].rj||'—'}</td>
+        <td class="num" style="color:var(--text);font-weight:700">${rowTotal}</td>
+      </tr>`;
+    });
+    if(!html) html=`<tr><td colspan="11" style="color:var(--text-faint);text-align:center;padding:16px">No RA WIRs in this date range</td></tr>`;
+    else html+=`<tr class="total-row"><td>Total</td>
+      ${CLUSTERS.map(c=>`<td class="num">${acts.reduce((s,a)=>s+(groups[a][c]||0),0)||'—'}</td>`).join('')}
+      <td class="num" style="color:var(--st-approved-tx)">${acts.reduce((s,a)=>s+groups[a].ap,0)||'—'}</td>
+      <td class="num" style="color:var(--st-rejected-tx)">${acts.reduce((s,a)=>s+groups[a].rj,0)||'—'}</td>
+      <td class="num">${total}</td>
+    </tr>`;
+    document.getElementById('sum-ra-body').innerHTML=html;
+  }catch(e){
+    console.error('loadRaSummary',e);
+    document.getElementById('sum-ra-body').innerHTML=`<tr><td colspan="11" style="color:var(--st-rejected-tx);padding:16px">Error: ${e.message}</td></tr>`;
+  }
+}
+
 // ── Export CSV ──
 var cachedWirRows=[], cachedWirRespRows=[];
 
@@ -1059,9 +1145,9 @@ function exportCSV(mode){
   const today=new Date().toISOString().split('T')[0];
   let rows, headers, filename;
 
-  if(activeSumTab==='wir'||activeSumTab==='wirresp'){
+  if(activeSumTab==='wir'||activeSumTab==='wirresp'||activeSumTab==='ra'){
     // Export WIR data
-    const src=activeSumTab==='wir'?cachedWirRows:cachedWirRespRows;
+    const src=activeSumTab==='wir'?cachedWirRows:activeSumTab==='wirresp'?cachedWirRespRows:cachedRaRows;
     if(!src.length){alert('No WIR data loaded. Switch to the WIR tab first.');return;}
     headers=['Cluster','Activity Code','Activity Name','Status','Submitted Date','Response Date'];
     filename=activeSumTab==='wir'?'wir_submissions':'wir_responses';
