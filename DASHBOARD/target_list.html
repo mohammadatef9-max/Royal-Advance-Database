@@ -15,7 +15,7 @@
   --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
   --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
   --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
-  --st-approved-bg:#163d28;--st-approved-bd:#1f5a39;--st-approved-tx:#6ee2a3;
+  --st-approved-bg:#0a2218;--st-approved-bd:#154228;--st-approved-tx:#3bba78;
   --st-rejected-bg:#4a1820;--st-rejected-bd:#6b2530;--st-rejected-tx:#ff8a99;
   --st-progress-bg:#2a2410;--st-progress-bd:#4a3c14;--st-progress-tx:#f4c95a;
   --st-review-bg:#1c2348;--st-review-bd:#2c3870;--st-review-tx:#a3b3ff;
@@ -29,7 +29,7 @@
   --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
   --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
   --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
-  --st-approved-bg:#e3f5ea;--st-approved-bd:#b8e0c7;--st-approved-tx:#15803d;
+  --st-approved-bg:#c6ecd4;--st-approved-bd:#7fcca0;--st-approved-tx:#166534;
   --st-rejected-bg:#fde8eb;--st-rejected-bd:#f5b8c1;--st-rejected-tx:#b91c1c;
   --st-progress-bg:#fef5d8;--st-progress-bd:#f3dca3;--st-progress-tx:#92580a;
   --st-review-bg:#e8eeff;--st-review-bd:#c0cdf5;--st-review-tx:#2942a8;
@@ -159,7 +159,7 @@ input,select,textarea{font:inherit;color:inherit}
 .tw::-webkit-scrollbar-thumb{background:var(--border-strong);border:2px solid var(--bg);border-radius:5px}
 table{border-collapse:collapse;width:max-content;min-width:100%}
 thead{position:sticky;top:0;z-index:50}
-thead th{background:var(--bg-elev);border:1.5px solid var(--border);padding:0;vertical-align:bottom}
+thead th{background:var(--bg-elev);border:1px solid var(--border-strong);padding:0;vertical-align:bottom}
 thead th.vc{min-width:200px;width:200px;background:var(--bg-panel);
   position:sticky;left:0;z-index:51;border-right:1px solid var(--border)}
 .thi{display:flex;flex-direction:column;align-items:center;padding:6px 4px 4px;
@@ -174,12 +174,12 @@ th.vc2,td.vc2{position:sticky;left:0;z-index:10;background:var(--bg-elev)}
 tbody tr:hover .vc{background:var(--bg-hover)!important}
 tbody tr:hover td.dc{background:var(--border)!important}
 tbody tr.rh{display:none}
-tbody td{border:1px solid var(--border);padding:0;vertical-align:top;background:var(--bg-cell)}
+tbody td{border:1px solid var(--border-strong);padding:0;vertical-align:top;background:var(--bg-cell)}
 tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
 [data-theme="light"] tbody td.dc{background:var(--border)!important}
 
 /* Divider col */
-.dc{width:5px;min-width:5px;background:var(--border)!important;border:none!important}
+.dc{width:5px;min-width:5px;background:#2a3340!important;border:none!important}
 
 /* Villa cell */
 .vc{min-width:200px;width:200px;position:sticky;left:0;z-index:10;
@@ -205,7 +205,12 @@ tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .csb{padding:1px 4px;font-size:8px;border-top:1px solid var(--cell-divider,rgba(255,255,255,.04));
   text-align:center;color:var(--text-muted);overflow:hidden;
-  white-space:nowrap;text-overflow:ellipsis;max-width:88px;font-family:var(--font-mono)}
+  white-space:nowrap;text-overflow:ellipsis;font-family:var(--font-mono)}
+/* Toolbar show-subs toggle */
+.btn-show-subs{font-size:11px;padding:4px 9px;border-radius:5px;border:1px solid var(--border);
+  background:var(--bg-panel);color:var(--text-muted);cursor:pointer;display:flex;align-items:center;gap:5px}
+.btn-show-subs:hover{background:var(--bg-hover);color:var(--text)}
+.btn-show-subs.has-hidden{border-color:var(--accent);color:var(--accent-text);background:var(--accent-soft)}
 [data-theme="light"]{--cell-divider:rgba(0,0,0,.1)}
 .ca,.cc{background:var(--st-approved-bg);color:var(--st-approved-tx)}
 .cu{background:var(--st-review-bg);color:var(--st-review-tx)}
@@ -339,7 +344,7 @@ tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
   td{border:1px solid #e2e8f0!important}
   .vc{position:static!important;background:#f8fafc!important}
   .cl-hdr td{background:#dbeafe!important;color:#1d4ed8!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .ca,.cc{background:#bbf7d0!important;color:#14532d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .ca,.cc{background:#86efad!important;color:#14532d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .cu{background:#ddd6fe!important;color:#312e81!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .cj{background:#fecaca!important;color:#7f1d1d!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .ci{background:#fef08a!important;color:#713f12!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -425,6 +430,14 @@ body.in-shell header { display: none !important; }
       </button>
       <span id="fi"></span><span id="s2"></span>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-show-subs" id="btn-show-subs" onclick="toggleSubs()" title="Hide sub-contractor labels">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          <span class="btn-subs-txt">Sub Labels</span>
+        </button>
+        <button class="btn btn-show-subs" id="btn-show-prog" onclick="toggleProg()" title="Hide site progress">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="btn-prog-txt">Progress</span>
+        </button>
         <button class="btn" id="btn-edit-cols" onclick="openCM()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
           Columns
@@ -677,6 +690,37 @@ var vByNo={},vByKey={},vById={};
 var weeks=[],actWk=null,tVillas=[],actDisc=null,wirCodeAliases={};
 var wirD={},wirSD={},progD={},clrD2={},flagsD={};
 var colF={},popKey=null,editKey=null,dragSrc=null;
+
+// Sub-contractor label visibility — simple global toggle
+var subsHidden=false;
+// Site progress row visibility — simple global toggle
+var progHidden=false;
+
+function toggleSubs(){
+  subsHidden=!subsHidden;
+  var btn=document.getElementById('btn-show-subs');
+  if(btn){
+    btn.classList.toggle('has-hidden',subsHidden);
+    btn.title=subsHidden?'Show sub-contractor labels':'Hide sub-contractor labels';
+    btn.querySelector('.btn-subs-txt').textContent=subsHidden?'Show Subs':'Sub Labels';
+  }
+  document.querySelectorAll('#tb2 .csb').forEach(function(el){
+    el.style.display=subsHidden?'none':'';
+  });
+}
+
+function toggleProg(){
+  progHidden=!progHidden;
+  var btn=document.getElementById('btn-show-prog');
+  if(btn){
+    btn.classList.toggle('has-hidden',progHidden);
+    btn.title=progHidden?'Show site progress':'Hide site progress';
+    btn.querySelector('.btn-prog-txt').textContent=progHidden?'Show Progress':'Progress';
+  }
+  document.querySelectorAll('#tb2 .ct').forEach(function(el){
+    el.style.display=progHidden?'none':'';
+  });
+}
 
 var WPR=['approved','under_review','rejected','not_submitted'];
 var PPR=['completed','in_progress','not_started'];
@@ -996,19 +1040,10 @@ function togFlag(vid,key,el){
   var cur=!!(flagsD[vid]&&flagsD[vid][key]);
   var val=!cur;
   if(!flagsD[vid])flagsD[vid]={};
-  if(val) flagsD[vid][key]=true;
-  else delete flagsD[vid][key];
+  flagsD[vid][key]=val;
   el.classList.toggle('on',val);
   el.querySelector('.tkb').textContent=val?'\u2713':'';
-  if(val){
-    // INSERT/upsert when checking
-    dbUpsert('target_villa_flags',{week_name:actWk,villa_id:vid,col_key:key,checked:true,updated_at:new Date().toISOString()}).catch(function(e){console.warn('flag save error:',e);});
-  } else {
-    // DELETE when unchecking — cleaner than storing checked:false
-    fetch(SB+'/rest/v1/target_villa_flags?week_name=eq.'+encodeURIComponent(actWk)+'&villa_id=eq.'+vid+'&col_key=eq.'+encodeURIComponent(key),{
-      method:'DELETE',headers:hdr({})
-    }).catch(function(e){console.warn('flag delete error:',e);});
-  }
+  dbUpsert('target_villa_flags',{week_name:actWk,villa_id:vid,col_key:key,checked:val,updated_at:new Date().toISOString()}).catch(function(e){console.warn('flag save error:',e);});
 }
 
 function buildSum(){
@@ -1113,10 +1148,15 @@ function buildTbl(){
       var wir=cW(vid,col);
       var prg=col.type==='pair'?cP(vid,col):null;
       var csub=gSub(vid,col.ac||[]);
+      var csubHtml='';
+      if(csub){
+        var csubSafe=csub.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        csubHtml='<div class="csb"'+(subsHidden?' style="display:none"':'')+'>'+csubSafe+'</div>';
+      }
       r+='<td><div class="cw">'
-        +(prg?'<div class="ct '+sc(prg)+'">'+sl(prg)+'</div>':'')
+        +(prg?'<div class="ct '+sc(prg)+'"'+(progHidden?' style="display:none"':'')+'>'+sl(prg)+'</div>':'')
         +'<div class="cm '+sc(wir)+'">'+sl(wir)+'</div>'
-        +(csub?'<div class="csb">'+csub+'</div>':'')
+        +csubHtml
         +'</div></td>';
     });
     r+='</tr>';
@@ -1370,6 +1410,8 @@ document.addEventListener('click',function(e){
   if(!document.getElementById('pop').contains(e.target)&&!e.target.closest('.thf'))clsPop();
   if(e.target.id==='avbd')clsAV();
   if(e.target.id==='nwbd')clsNW();
+  var hideBtn=e.target.closest('.csb-hide');
+  if(hideBtn){e.stopPropagation();}
 });
 
 init();
@@ -1419,6 +1461,8 @@ function printWeek(){
     '*{box-sizing:border-box;margin:0;padding:0}'+
     'body{font-family:system-ui,-apple-system,sans-serif;font-size:8pt;background:#fff;color:#111;'+
     'padding:8mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    (subsHidden?'.csb{display:none!important}':'')+
+    (progHidden?'.ct{display:none!important}':'')+
 
     /* Header */
     '.ph{display:flex;justify-content:space-between;align-items:flex-start;'+
@@ -1453,13 +1497,13 @@ function printWeek(){
 
     /* Table */
     'table{border-collapse:collapse;width:100%;font-size:7pt}'+
-    'thead th{background:#f1f5f9;color:#374151;border:1.5pt solid #64748b;'+
+    'thead th{background:#f1f5f9;color:#374151;border:1pt solid #cbd5e1;'+
     'padding:3pt 3pt;text-align:center;vertical-align:bottom;font-weight:600;'+
     '-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     'thead th.vc{text-align:left;background:#e8edf5;min-width:48pt;width:48pt}'+
     'thead th.vc2{text-align:left;background:#e8edf5;min-width:32pt;width:32pt}'+
     'thead th.vc3{text-align:left;background:#e8edf5;min-width:28pt;width:28pt;border-right:2pt solid #94a3b8}'+
-    'td{border:1pt solid #94a3b8;padding:0;vertical-align:top;text-align:center}'+
+    'td{border:1pt solid #e2e8f0;padding:0;vertical-align:top;text-align:center}'+
     'td.vc,td.vc2,td.vc3{text-align:left;background:#f8fafc;padding:2pt 3pt}'+
     'td.vc3{border-right:2pt solid #94a3b8}'+
     '.dc{width:3pt;min-width:3pt;background:#e5e7eb;border:none}'+
@@ -1487,7 +1531,8 @@ function printWeek(){
     '.cm{padding:1.5pt 3pt;font-size:6.5pt;text-align:center;border-top:1pt solid rgba(0,0,0,.08);line-height:1.3}'+
     '.csb{padding:1.5pt 3pt;font-size:6pt;text-align:center;border-top:1pt solid rgba(0,0,0,.06);'+
     'color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62pt}'+
-    '.ca,.cc{background:#bbf7d0;color:#14532d;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    '.csb-hide{display:none!important}'+
+    '.ca,.cc{background:#86efad;color:#14532d;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.cu{background:#ddd6fe;color:#312e81;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.cj{background:#fecaca;color:#7f1d1d;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
     '.ci{background:#fef08a;color:#713f12;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
@@ -1538,7 +1583,7 @@ function printWeek(){
 
     // Legend
     '<div class="legend">'+
-      '<span class="leg-item"><span class="leg-sw" style="background:#bbf7d0;border-color:#15803d"></span>Completed / Approved</span>'+
+      '<span class="leg-item"><span class="leg-sw" style="background:#86efad;border-color:#166534"></span>Completed / Approved</span>'+
       '<span class="leg-item"><span class="leg-sw" style="background:#fef08a;border-color:#b45309"></span>In Progress</span>'+
       '<span class="leg-item"><span class="leg-sw" style="background:#ddd6fe;border-color:#4f46e5"></span>Under Review</span>'+
       '<span class="leg-item"><span class="leg-sw" style="background:#fecaca;border-color:#b91c1c"></span>Rejected</span>'+
@@ -1558,6 +1603,43 @@ function printWeek(){
 // Clock
 (function(){function tick(){var el=document.getElementById('clock');if(el)el.textContent=new Date().toTimeString().slice(0,8);}tick();setInterval(tick,1000);})();
 
+// ── Supabase Realtime for target_villa_flags ──
+var _rtClient=null,_rtChannel=null;
+function initFlagsRealtime(){
+  if(_rtClient)return;
+  try{
+    var token=window.__MEP_TOKEN__;
+    if(!token){try{var s=localStorage.getItem('mep_session');if(s){var j=JSON.parse(s);token=j.access_token;}}catch(e){}}
+    _rtClient=supabase.createClient(SB,AK,{global:{headers:{Authorization:'Bearer '+(token||AK)}},realtime:{params:{eventsPerSecond:2}}});
+    _rtChannel=_rtClient.channel('target-flags')
+      .on('postgres_changes',{event:'*',schema:'public',table:'target_villa_flags'},function(payload){
+        var r=payload.new||payload.old;
+        if(!r||r.week_name!==actWk)return;
+        if(payload.eventType==='DELETE'){
+          if(flagsD[r.villa_id])delete flagsD[r.villa_id][r.col_key];
+        } else {
+          if(!flagsD[r.villa_id])flagsD[r.villa_id]={};
+          flagsD[r.villa_id][r.col_key]=r.checked;
+        }
+        var rows=document.querySelectorAll('#tb2 tr[data-vid="'+r.villa_id+'"]');
+        rows.forEach(function(row){
+          var col=COLS.find(function(c){return c.key===r.col_key;});
+          if(!col)return;
+          var tks=row.querySelectorAll('.tk');
+          var tkIdx=0;
+          COLS.filter(function(c){return c.visible;}).forEach(function(c){
+            if(c.key===r.col_key&&c.type==='tick'){
+              var tk=tks[tkIdx];
+              if(tk){tk.classList.toggle('on',!!r.checked);tk.querySelector('.tkb').textContent=r.checked?'\u2713':'';}
+            }
+            if(c.type==='tick')tkIdx++;
+          });
+        });
+      })
+      .subscribe();
+  }catch(e){console.warn('[Realtime flags]',e.message);}
+}
+
 </script>
 <script>
 // ── MEP Theme Sync ──
@@ -1572,7 +1654,6 @@ function printWeek(){
     if (e.data.type === 'theme') { applyTheme(e.data.theme); try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {} }
     if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; if (typeof applyTargetPermissions === 'function') applyTargetPermissions(); }
   });
-  // Hide own topbar when running inside the main shell
   if (window.self !== window.top) document.body.classList.add('in-shell');
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
 })();
@@ -1756,7 +1837,9 @@ async function printSelectedWeeks(){
 
   if(!pages.length){alert('No data loaded.');return;}
 
-  var CSS='*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;font-size:8pt;background:#fff;color:#111;padding:8mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ph{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:5pt;margin-bottom:5pt}.ph-title{font-size:14pt;font-weight:700}.ph-week{font-size:10pt;font-weight:700;color:#2563eb;margin-top:2pt}.ph-sub{font-size:7pt;color:#6b7280;margin-top:2pt}.ph-right{text-align:right;font-size:7pt;color:#6b7280;line-height:1.7}.ph-co{font-size:9pt;font-weight:700;color:#111}.stats{display:grid;grid-template-columns:repeat(5,1fr);border:1pt solid #e5e7eb;border-radius:3pt;overflow:hidden;margin-bottom:4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.stat{padding:4pt 6pt;border-right:1pt solid #e5e7eb}.stat:last-child{border-right:none}.sl{font-size:6pt;text-transform:uppercase;color:#9ca3af;font-weight:600;margin-bottom:1pt}.sv{font-size:14pt;font-weight:700;color:#111}.sv.g{color:#15803d}.sv.a{color:#b45309}.sv.r{color:#b91c1c}.cr{display:flex;align-items:center;gap:3pt;padding:3pt 6pt;background:#f8fafc;border:1pt solid #e5e7eb;border-radius:3pt;margin-bottom:3pt;font-size:7.5pt}.crl{font-size:6pt;text-transform:uppercase;color:#9ca3af;font-weight:600;margin-right:5pt}.leg{display:flex;gap:8pt;font-size:6pt;color:#6b7280;margin-bottom:3pt;align-items:center}.ls{width:8pt;height:8pt;border-radius:2pt;border:1pt solid;display:inline-block;margin-right:2pt}.page-break{page-break-after:always;height:0;display:block}table{border-collapse:collapse;width:100%;font-size:7pt}thead th{background:#f1f5f9;color:#374151;border:1.5pt solid #64748b;padding:3pt;text-align:center;vertical-align:bottom;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}thead th.vc{text-align:left;background:#e8edf5;min-width:48pt;width:48pt}thead th.vc2{text-align:left;background:#e8edf5;min-width:32pt;width:32pt}thead th.vc3{text-align:left;background:#e8edf5;min-width:28pt;width:28pt;border-right:2pt solid #94a3b8}td{border:1pt solid #94a3b8;padding:0;vertical-align:top;text-align:center}td.vc,td.vc2,td.vc3{text-align:left;background:#f8fafc;padding:2pt 3pt}td.vc3{border-right:2pt solid #94a3b8}.dc{width:3pt;min-width:3pt;background:#e5e7eb;border:none}thead th.dc{background:#94a3b8}.vn{font-size:9pt;font-weight:700}.vl{font-size:6pt;color:#6b7280}.vt{font-size:5.5pt;background:#e5e7eb;color:#6b7280;padding:0 2pt;border-radius:2pt}.cl-pill{background:#dbeafe;color:#1d4ed8;padding:0 3pt;border-radius:2pt;font-size:6pt;font-weight:700;display:inline-block}.thi{display:flex;flex-direction:column;align-items:center;padding:3pt 2pt;width:62pt;min-width:62pt;max-width:62pt}.thl{font-size:7pt;font-weight:600;text-align:center;line-height:1.3;margin-bottom:1pt;white-space:normal;word-break:break-word;width:100%}.thg{font-size:5.5pt;color:#9ca3af;text-align:center}.thc{font-size:5pt;color:#9ca3af;font-family:monospace;text-align:center;word-break:break-all;width:100%}.thf{display:none}.cw{display:flex;flex-direction:column;width:62pt;min-width:62pt;max-width:62pt}.ct{padding:2pt 3pt;font-size:7pt;font-weight:600;text-align:center;line-height:1.3;min-height:12pt}.cm{padding:1pt 3pt;font-size:6pt;text-align:center;border-top:1pt solid rgba(0,0,0,.08)}.csb{padding:1pt 3pt;font-size:5.5pt;text-align:center;border-top:1pt solid rgba(0,0,0,.06);color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62pt}.ca,.cc{background:#bbf7d0;color:#14532d;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cu{background:#ddd6fe;color:#312e81;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cj{background:#fecaca;color:#7f1d1d;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ci{background:#fef08a;color:#713f12;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cn{background:#f8fafc;color:#64748b;-webkit-print-color-adjust:exact;print-color-adjust:exact}.tk{display:flex;align-items:center;justify-content:center;min-height:28pt;width:62pt}.tkb{width:13pt;height:13pt;border-radius:3pt;border:1.5pt solid #94a3b8;display:flex;align-items:center;justify-content:center;font-size:9pt}.tk.on .tkb{background:#15803d;border-color:#15803d;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cl-hdr td{background:#dbeafe;color:#1d4ed8;border-top:1.5pt solid #2563eb;border-bottom:1.5pt solid #2563eb;border-left:none;border-right:none;padding:3pt 6pt;font-size:9pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cl-cnt{font-size:7.5pt;color:#3b82f6;font-weight:400;margin-left:6pt}.rh{display:none}.vx{display:none}@page{size:landscape;margin:8mm}';
+  var CSS='*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;font-size:8pt;background:#fff;color:#111;padding:8mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    (subsHidden?'.csb{display:none!important}':'')+
+    (progHidden?'.ct{display:none!important}':'')+'.ph{display:flex;justify-content:space-between;border-bottom:2px solid #111;padding-bottom:5pt;margin-bottom:5pt}.ph-title{font-size:14pt;font-weight:700}.ph-week{font-size:10pt;font-weight:700;color:#2563eb;margin-top:2pt}.ph-sub{font-size:7pt;color:#6b7280;margin-top:2pt}.ph-right{text-align:right;font-size:7pt;color:#6b7280;line-height:1.7}.ph-co{font-size:9pt;font-weight:700;color:#111}.stats{display:grid;grid-template-columns:repeat(5,1fr);border:1pt solid #e5e7eb;border-radius:3pt;overflow:hidden;margin-bottom:4pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}.stat{padding:4pt 6pt;border-right:1pt solid #e5e7eb}.stat:last-child{border-right:none}.sl{font-size:6pt;text-transform:uppercase;color:#9ca3af;font-weight:600;margin-bottom:1pt}.sv{font-size:14pt;font-weight:700;color:#111}.sv.g{color:#15803d}.sv.a{color:#b45309}.sv.r{color:#b91c1c}.cr{display:flex;align-items:center;gap:3pt;padding:3pt 6pt;background:#f8fafc;border:1pt solid #e5e7eb;border-radius:3pt;margin-bottom:3pt;font-size:7.5pt}.crl{font-size:6pt;text-transform:uppercase;color:#9ca3af;font-weight:600;margin-right:5pt}.leg{display:flex;gap:8pt;font-size:6pt;color:#6b7280;margin-bottom:3pt;align-items:center}.ls{width:8pt;height:8pt;border-radius:2pt;border:1pt solid;display:inline-block;margin-right:2pt}.page-break{page-break-after:always;height:0;display:block}table{border-collapse:collapse;width:100%;font-size:7pt}thead th{background:#f1f5f9;color:#374151;border:1pt solid #cbd5e1;padding:3pt;text-align:center;vertical-align:bottom;font-weight:600;-webkit-print-color-adjust:exact;print-color-adjust:exact}thead th.vc{text-align:left;background:#e8edf5;min-width:48pt;width:48pt}thead th.vc2{text-align:left;background:#e8edf5;min-width:32pt;width:32pt}thead th.vc3{text-align:left;background:#e8edf5;min-width:28pt;width:28pt;border-right:2pt solid #94a3b8}td{border:1pt solid #e2e8f0;padding:0;vertical-align:top;text-align:center}td.vc,td.vc2,td.vc3{text-align:left;background:#f8fafc;padding:2pt 3pt}td.vc3{border-right:2pt solid #94a3b8}.dc{width:3pt;min-width:3pt;background:#e5e7eb;border:none}thead th.dc{background:#94a3b8}.vn{font-size:9pt;font-weight:700}.vl{font-size:6pt;color:#6b7280}.vt{font-size:5.5pt;background:#e5e7eb;color:#6b7280;padding:0 2pt;border-radius:2pt}.cl-pill{background:#dbeafe;color:#1d4ed8;padding:0 3pt;border-radius:2pt;font-size:6pt;font-weight:700;display:inline-block}.thi{display:flex;flex-direction:column;align-items:center;padding:3pt 2pt;width:62pt;min-width:62pt;max-width:62pt}.thl{font-size:7pt;font-weight:600;text-align:center;line-height:1.3;margin-bottom:1pt;white-space:normal;word-break:break-word;width:100%}.thg{font-size:5.5pt;color:#9ca3af;text-align:center}.thc{font-size:5pt;color:#9ca3af;font-family:monospace;text-align:center;word-break:break-all;width:100%}.thf{display:none}.cw{display:flex;flex-direction:column;width:62pt;min-width:62pt;max-width:62pt}.ct{padding:2pt 3pt;font-size:7pt;font-weight:600;text-align:center;line-height:1.3;min-height:12pt}.cm{padding:1pt 3pt;font-size:6pt;text-align:center;border-top:1pt solid rgba(0,0,0,.08)}.csb{padding:1pt 3pt;font-size:5.5pt;text-align:center;border-top:1pt solid rgba(0,0,0,.06);color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62pt}.csb-hide{display:none!important}.ca,.cc{background:#86efad;color:#14532d;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cu{background:#ddd6fe;color:#312e81;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cj{background:#fecaca;color:#7f1d1d;-webkit-print-color-adjust:exact;print-color-adjust:exact}.ci{background:#fef08a;color:#713f12;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cn{background:#f8fafc;color:#64748b;-webkit-print-color-adjust:exact;print-color-adjust:exact}.tk{display:flex;align-items:center;justify-content:center;min-height:28pt;width:62pt}.tkb{width:13pt;height:13pt;border-radius:3pt;border:1.5pt solid #94a3b8;display:flex;align-items:center;justify-content:center;font-size:9pt}.tk.on .tkb{background:#15803d;border-color:#15803d;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cl-hdr td{background:#dbeafe;color:#1d4ed8;border-top:1.5pt solid #2563eb;border-bottom:1.5pt solid #2563eb;border-left:none;border-right:none;padding:3pt 6pt;font-size:9pt;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}.cl-cnt{font-size:7.5pt;color:#3b82f6;font-weight:400;margin-left:6pt}.rh{display:none}.vx{display:none}@page{size:landscape;margin:8mm}';
 
   var now2=new Date();
   var ds=now2.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
@@ -1767,7 +1850,7 @@ async function printSelectedWeeks(){
       +'<div class="ph-right"><div class="ph-co">Royal Advance · MEP Tracker</div><div>Printed '+ds+', '+ts+'</div><div>Week '+(idx+1)+' of '+pages.length+'</div></div></div>'
       +'<div class="stats"><div class="stat"><div class="sl">Total</div><div class="sv">'+p.t+'</div></div><div class="stat"><div class="sl">Approved</div><div class="sv g">'+p.aa+'</div></div><div class="stat"><div class="sl">Pending</div><div class="sv a">'+p.hp+'</div></div><div class="stat"><div class="sl">Rejected</div><div class="sv r">'+p.hr+'</div></div><div class="stat"><div class="sl">Clusters</div><div class="sv">'+p.clKeys.length+'</div></div></div>'
       +'<div class="cr"><span class="crl">Per cluster</span>'+p.clPills+'</div>'
-      +'<div class="leg"><span><span class="ls" style="background:#bbf7d0;border-color:#15803d"></span>Approved</span><span><span class="ls" style="background:#fef08a;border-color:#b45309"></span>In Progress</span><span><span class="ls" style="background:#ddd6fe;border-color:#4f46e5"></span>Under Review</span><span><span class="ls" style="background:#fecaca;border-color:#b91c1c"></span>Rejected</span><span><span class="ls" style="background:#f8fafc;border-color:#94a3b8"></span>Not Started</span></div>'
+      +'<div class="leg"><span><span class="ls" style="background:#86efad;border-color:#166534"></span>Approved</span><span><span class="ls" style="background:#fef08a;border-color:#b45309"></span>In Progress</span><span><span class="ls" style="background:#ddd6fe;border-color:#4f46e5"></span>Under Review</span><span><span class="ls" style="background:#fecaca;border-color:#b91c1c"></span>Rejected</span><span><span class="ls" style="background:#f8fafc;border-color:#94a3b8"></span>Not Started</span></div>'
       +'<table><thead><tr>'+headerHTML+'</tr></thead><tbody>'+p.tableHTML+'</tbody></table>';
     if(idx<pages.length-1)pg+='<div class="page-break"></div>';
     return pg;
@@ -1779,45 +1862,6 @@ async function printSelectedWeeks(){
   win.document.close();
 }
 
-// ── Supabase Realtime for target_villa_flags (tick boxes sync across users) ──
-var _rtClient=null,_rtChannel=null;
-function initFlagsRealtime(){
-  if(_rtClient)return;
-  try{
-    var token=window.__MEP_TOKEN__;
-    if(!token){try{var s=localStorage.getItem('mep_session');if(s){var j=JSON.parse(s);token=j.access_token;}}catch(e){}}
-    _rtClient=supabase.createClient(SB,AK,{global:{headers:{Authorization:'Bearer '+(token||AK)}},realtime:{params:{eventsPerSecond:2}}});
-    _rtChannel=_rtClient.channel('target-flags')
-      .on('postgres_changes',{event:'*',schema:'public',table:'target_villa_flags'},function(payload){
-        var r=payload.new||payload.old;
-        if(!r||r.week_name!==actWk)return; // ignore other weeks
-        if(payload.eventType==='DELETE'){
-          if(flagsD[r.villa_id])delete flagsD[r.villa_id][r.col_key];
-        } else {
-          if(!flagsD[r.villa_id])flagsD[r.villa_id]={};
-          flagsD[r.villa_id][r.col_key]=r.checked;
-        }
-        // Update just that cell without full re-render
-        var rows=document.querySelectorAll('#tb2 tr[data-vid="'+r.villa_id+'"]');
-        rows.forEach(function(row){
-          var col=COLS.find(function(c){return c.key===r.col_key;});
-          if(!col)return;
-          var idx=COLS.filter(function(c){return c.visible;}).indexOf(col);
-          if(idx<0)return;
-          var tks=row.querySelectorAll('.tk');
-          var tkIdx=0;
-          COLS.filter(function(c){return c.visible;}).forEach(function(c,i){
-            if(c.key===r.col_key&&c.type==='tick'){
-              var tk=tks[tkIdx];
-              if(tk){tk.classList.toggle('on',!!r.checked);tk.querySelector('.tkb').textContent=r.checked?'✓':'';}
-            }
-            if(c.type==='tick')tkIdx++;
-          });
-        });
-      })
-      .subscribe();
-  }catch(e){console.warn('[Realtime flags]',e.message);}
-}
 </script>
 
 <!-- ══ MULTI-WEEK PRINT PICKER ══ -->
