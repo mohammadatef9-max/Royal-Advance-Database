@@ -657,6 +657,9 @@ function renderTable(users) {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                </button>`
           }
+          <button class="btn btn-sm btn-icon" title="Delete user permanently" onclick="promptDeleteUser(${u.id},'${escH(u.full_name)}')" style="border-color:var(--st-rejected-bd);color:var(--st-rejected-tx);background:var(--st-rejected-bg)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
         </div>
       </td>
     </tr>`;
@@ -915,6 +918,35 @@ async function setUserActive(userId, active) {
     loadAll();
   } catch(e) {
     alert('Error: ' + e.message);
+  }
+}
+
+// ── Confirm: delete permanently ──
+function promptDeleteUser(userId, name) {
+  document.getElementById('confirm-icon').className = 'confirm-icon danger';
+  document.getElementById('confirm-icon').textContent = '🗑';
+  document.getElementById('confirm-title').textContent = 'Permanently delete ' + name + '?';
+  document.getElementById('confirm-desc').textContent = 'This will remove the user from both the app and Supabase Auth. They will not be able to log in and cannot be recovered. This cannot be undone.';
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.className = 'btn btn-danger';
+  btn.textContent = 'Delete Permanently';
+  confirmCallback = () => deleteUser(userId, name);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+async function deleteUser(userId, name) {
+  closeConfirm();
+  try {
+    const res = await fetch(`${SB}/rest/v1/rpc/delete_mep_user`, {
+      method: 'POST',
+      headers: getH(),
+      body: JSON.stringify({ p_user_id: userId })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    loadAll();
+  } catch(e) {
+    alert('Error deleting user: ' + e.message);
   }
 }
 
@@ -1304,26 +1336,33 @@ async function deleteRole(roleId, type) {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
-// ── Init ──
-loadAll();
-</script>
+// ── Init (session-aware) ──
+let _initCalled = false;
+function _tryInit() { if (_initCalled) return; _initCalled = true; loadAll(); }
 
-<script>
-// ── MEP Theme Sync ──
-(function() {
-  function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); }
-  try { applyTheme(localStorage.getItem('mep_theme')); } catch(e) {}
-  window.addEventListener('storage', function(e) {
-    if (e.key === 'mep_theme' && e.newValue) applyTheme(e.newValue);
-  });
-  window.addEventListener('message', function(e) {
-    if (!e.data || typeof e.data !== 'object') return;
-    if (e.data.type === 'theme') { applyTheme(e.data.theme); try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {} }
-    if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; }
-  });
-  if (window.self !== window.top) document.body.classList.add('in-shell');
+function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); }
+try { applyTheme(localStorage.getItem('mep_theme')); } catch(e) {}
+
+window.addEventListener('storage', function(e) {
+  if (e.key === 'mep_theme' && e.newValue) applyTheme(e.newValue);
+});
+window.addEventListener('message', function(e) {
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.type === 'theme') { applyTheme(e.data.theme); try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {} }
+  if (e.data.type === 'session') {
+    window.__MEP_TOKEN__ = e.data.token;
+    window.__MEP_USER__ = e.data.user;
+    _tryInit();
+  }
+});
+
+if (window.self !== window.top) {
+  document.body.classList.add('in-shell');
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
-})();
+  setTimeout(_tryInit, 1000); // fallback if postMessage is slow
+} else {
+  _tryInit(); // running standalone
+}
 </script>
 </body>
 </html>
