@@ -208,14 +208,38 @@ tr.rh{display:none}
 .cmgr-hdr{padding:12px 16px;border-bottom:1px solid var(--border-subtle);
   display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .cmgr-hdr h3{font-size:13px;font-weight:600;color:var(--text)}
-.cmgr-tabs{display:flex;gap:3px;padding:0 16px;border-bottom:1px solid var(--border-subtle);
-  flex-shrink:0;background:var(--bg-elev)}
-.cmgr-tab{padding:8px 14px;font-size:12px;color:var(--text-muted);cursor:pointer;
+.cmgr-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--border-subtle);
+  flex-shrink:0;background:var(--bg-elev);overflow-x:auto;scrollbar-width:none}
+.cmgr-tabs::-webkit-scrollbar{display:none}
+.cmgr-tab{padding:8px 10px;font-size:11px;color:var(--text-muted);cursor:pointer;white-space:nowrap;flex-shrink:0;
   border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;font-family:var(--font)}
 .cmgr-tab:hover{color:var(--text)}
 .cmgr-tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
 .cmgr-body{flex:1;overflow-y:auto;padding:14px 16px}
 .cmgr-footer{padding:10px 16px;border-top:1px solid var(--border-subtle);display:flex;gap:8px;align-items:center;flex-shrink:0;background:var(--bg-elev)}
+.sv-wrap{display:flex;flex-direction:column;gap:10px;height:100%}
+.sv-save-row{display:flex;gap:7px;align-items:center}
+.sv-save-row input{flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)}
+.sv-save-row input::placeholder{color:var(--text-faint)}
+.sv-save-row input:focus{outline:none;border-color:var(--accent)}
+.sv-list{border:1px solid var(--border);border-radius:8px;background:var(--bg-input);overflow:hidden;flex:1}
+.sv-row{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--border-subtle);font-size:11px}
+.sv-row:last-child{border:none}
+.sv-row:hover{background:var(--bg-hover)}
+.sv-name{flex:1;color:var(--text);font-weight:500;min-width:0;word-break:break-word}
+.sv-meta{font-size:9px;color:var(--text-faint);font-family:var(--font-mono);white-space:nowrap;flex-shrink:0}
+.sv-actions{display:flex;gap:4px;flex-shrink:0}
+.sv-btn{padding:3px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text-muted);font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap}
+.sv-btn:hover{background:var(--bg-hover);color:var(--text)}
+.sv-btn.apply{border-color:var(--accent);color:var(--accent-text)}
+.sv-btn.apply:hover{background:var(--accent-soft)}
+.sv-btn.del{border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.sv-btn.del:hover{background:var(--st-rejected-bg)}
+.sv-empty{text-align:center;padding:30px 16px;color:var(--text-faint);font-size:12px;line-height:1.6}
+.sv-disc-badge{font-size:9px;padding:1px 6px;border-radius:4px;font-weight:700;flex-shrink:0}
+.sv-disc-mech{background:var(--accent-soft);color:var(--accent-text)}
+.sv-disc-elec{background:var(--st-progress-bg);color:var(--st-progress-tx)}
+.sv-user-note{font-size:10px;color:var(--text-faint);padding:4px 2px}
 .cm-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-cell);border:1px solid var(--border-subtle);border-radius:8px;margin-bottom:5px;cursor:grab;flex-wrap:wrap}
 .cm-item:active{cursor:grabbing;opacity:.6}
 .cm-item.dragging{opacity:.3;border-style:dashed}
@@ -379,6 +403,29 @@ body.in-shell header { display: none !important; }
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
     Columns
   </button>
+  <div style="position:relative;display:inline-block">
+    <button class="btn btn-gray" id="btn-views" onclick="toggleViewsPanel(event)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      Views
+    </button>
+    <div id="views-panel" style="display:none;position:fixed;z-index:1200;width:320px;background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.5);padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:600;color:var(--text)">Saved Views</div>
+        <div id="vp-user-label" style="font-size:10px;color:var(--text-faint)"></div>
+      </div>
+      <div style="display:flex;gap:7px;margin-bottom:10px">
+        <input type="text" id="sv-name-input" placeholder="Name this view…" maxlength="40"
+          style="flex:1;background:var(--bg-input);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:12px;font-family:var(--font-ui)"
+          onkeydown="if(event.key==='Enter')saveView()">
+        <button class="btn btn-blue" style="padding:5px 12px;font-size:11px;white-space:nowrap" onclick="saveView()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Save Current
+        </button>
+      </div>
+      <div id="sv-flash" style="font-size:11px;min-height:16px;margin-bottom:6px;transition:opacity .3s;opacity:0"></div>
+      <div id="sv-list" style="border:1px solid var(--border);border-radius:8px;background:var(--bg-input);max-height:260px;overflow-y:auto"></div>
+    </div>
+  </div>
   <button class="btn btn-gray" onclick="copyVillas()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
     Copy Villas
@@ -495,6 +542,7 @@ body.in-shell header { display: none !important; }
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
       Sub-Contractors
     </button>
+
   </div>
   <div class="cmgr-body">
     <div id="tab-cols-content">
@@ -601,7 +649,8 @@ body.in-shell header { display: none !important; }
         <div id="aliases-list" style="max-height:180px;overflow-y:auto;border:1px solid #2d3748;border-radius:6px;background:#0f1117;font-size:10px"></div>
       </div>
     </div>
-  <div class="cmgr-footer">
+
+  <div class="cmgr-footer"><div class="cmgr-footer">
     <button class="btn btn-blue" onclick="applyMgr()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       Apply &amp; Save
@@ -664,6 +713,7 @@ const bestProg=ss=>ss.reduce((b,s)=>PRG_PRI.indexOf(s)>PRG_PRI.indexOf(b)?s:b,'n
 
 const COLS_MECH=[
   {key:'rain_water',   label:'Rain Water\nOutlet & Pipes',  type:'pair', actCodes:['3000'],visible:true},
+  {key:'balcony_drain',label:'Balcony/Rain\nWater Outlet',  type:'pair', actCodes:['3162'],visible:true},
   {key:'pex',          label:'PEX Pipe\nInstallation',      type:'pair', actCodes:['3050'],visible:true},
   {key:'drain_wall',   label:'Drain Pipe\nIn Wall',         type:'pair', actCodes:['3060'],visible:true},
   {key:'_d0',label:'',type:'divider',visible:true},
@@ -757,7 +807,7 @@ const WS=[{v:'approved',l:'Approved',c:'#34d399',bg:'#064e3b'},{v:'rejected',l:'
 const CS=[{v:'fully_approved',l:'Fully Approved',c:'#34d399',bg:'#064e3b'},{v:'not_approved',l:'Not Approved',c:'#f87171',bg:'#7f1d1d'},{v:'pending',l:'Pending',c:'#fcd34d',bg:'#78350f'},{v:'not_submitted',l:'Not Submitted',c:'#4b5563',bg:'#1f2937'}];
 const PS=[{v:'completed',l:'Completed',c:'#34d399',bg:'#064e3b'},{v:'in_progress',l:'In Progress',c:'#fcd34d',bg:'#78350f'},{v:'not_started',l:'Not Started',c:'#4b5563',bg:'#1f2937'}];
 
-const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water supply':'3100','high level ppr':'3100','hl drainage installation':'3060','hl drainage install':'3060','high level drainage':'3060','drainage installation':'3060','drainage':'3060','leak test drainage h/l':'3070','leak test drainage hl':'3070','drainage leak test':'3070','gravity leak test':'3070','leak test':'3070','acoustic':'3170','acoustic lagging':'3170','acoustic wir':'3170','ppr pressure test':'3110','pressure test water supply':'3110','ppr press test':'3110','ppr insulation':'3180','hot water insulation':'3180','insulation':'3180','copper installation':'3210','ac copper installation':'3210','hl ac refrigerant':'3210','copper pressure test':'3220','ac copper pressure':'3220','duct dry area':'3190','pi duct dry':'3190','dry area duct':'3190','duct dry':'3190','duct wet area':'3200','pi duct wet':'3200','wet area duct':'3200','duct wet':'3200','exhaust fan':'3290','exhaust fan installation':'3290','exhaust':'3290','fcu installation':'3300','fcu install':'3300','vrf indoor':'3300','fcu':'3300','shaft closing':'3150','shaft closing villa':'3150','shaft':'3150','cdp installation':'3270','cdp':'3270','cdp wir':'3270','rain water':'3000','underground drainage':'3000','ugd':'3000','pex pipes':'3050','pex installation':'3050','gf pex':'3050','pex':'3050','drain pipe in wall':'3060','drain pipe wall':'3060','suspension dry':'3190G','suspension dry area':'3190G','gf suspension dry':'3190G','suspension wet':'3200G','suspension wet area':'3200G','gf suspension wet':'3200G','board closing dry':'3520','fc closing dry':'3520','false ceiling dry':'3520','board closing wet':'3530','false ceiling wet':'3530','false ceiling wet area':'3530','bathtub':'3590','bathtub installation':'3590','bathtub leak test':'3590','wc':'3140','wc flush tank':'3140','wc stand':'3140','water closet':'3140','roof foundation':'3540','roof water supply':'3540','vrf outdoor':'3560','vrf outdoor unit':'3560','outdoor unit':'3560','solar panel':'3301','solar water heater':'3301','balcony drain':'3080','rain water outlet':'3080'};
+const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water supply':'3100','high level ppr':'3100','hl drainage installation':'3060','hl drainage install':'3060','high level drainage':'3060','drainage installation':'3060','drainage':'3060','leak test drainage h/l':'3070','leak test drainage hl':'3070','drainage leak test':'3070','gravity leak test':'3070','leak test':'3070','acoustic':'3170','acoustic lagging':'3170','acoustic wir':'3170','ppr pressure test':'3110','pressure test water supply':'3110','ppr press test':'3110','ppr insulation':'3180','hot water insulation':'3180','insulation':'3180','copper installation':'3210','ac copper installation':'3210','hl ac refrigerant':'3210','copper pressure test':'3220','ac copper pressure':'3220','duct dry area':'3190','pi duct dry':'3190','dry area duct':'3190','duct dry':'3190','duct wet area':'3200','pi duct wet':'3200','wet area duct':'3200','duct wet':'3200','exhaust fan':'3290','exhaust fan installation':'3290','exhaust':'3290','fcu installation':'3300','fcu install':'3300','vrf indoor':'3300','fcu':'3300','shaft closing':'3150','shaft closing villa':'3150','shaft':'3150','cdp installation':'3270','cdp':'3270','cdp wir':'3270','rain water':'3000','underground drainage':'3000','ugd':'3000','pex pipes':'3050','pex installation':'3050','gf pex':'3050','pex':'3050','drain pipe in wall':'3060','drain pipe wall':'3060','suspension dry':'3190G','suspension dry area':'3190G','gf suspension dry':'3190G','suspension wet':'3200G','suspension wet area':'3200G','gf suspension wet':'3200G','board closing dry':'3520','fc closing dry':'3520','false ceiling dry':'3520','board closing wet':'3530','false ceiling wet':'3530','false ceiling wet area':'3530','bathtub':'3590','bathtub installation':'3590','bathtub leak test':'3590','wc':'3140','wc flush tank':'3140','wc stand':'3140','water closet':'3140','roof foundation':'3540','roof water supply':'3540','vrf outdoor':'3560','vrf outdoor unit':'3560','outdoor unit':'3560','solar panel':'3301','solar water heater':'3301','balcony drain':'3162','rain water outlet':'3162','balcony rainwater':'3162','balcony/rainwater outlet':'3162','leak test balcony':'3162','balcony outlet':'3162'};
 
 let disc='mech';
 let COLS=COLS_MECH.map(c=>({...c}));
@@ -1296,6 +1346,154 @@ let activeMgrTab='cols';
 function openMgr(tab){switchMgrTab(tab||'cols');document.getElementById('cmgr').classList.add('open');buildCmList();}
 function closeMgr(){document.getElementById('cmgr').classList.remove('open');editingKey=null;}
 function applyMgr(){closeMgr();render();saveLayout();}
+// ── SAVED VIEWS PANEL ────────────────────────────────────
+function toggleViewsPanel(e){
+  e.stopPropagation();
+  const panel=document.getElementById('views-panel');
+  const btn=document.getElementById('btn-views');
+  if(panel.style.display==='none'){
+    // Position panel below button
+    const r=btn.getBoundingClientRect();
+    panel.style.top=(r.bottom+6)+'px';
+    panel.style.left=Math.min(r.left,window.innerWidth-336)+'px';
+    panel.style.display='block';
+    buildViewsList();
+    btn.classList.add('active');
+    document.getElementById('sv-name-input').focus();
+  } else {
+    closeViewsPanel();
+  }
+}
+function closeViewsPanel(){
+  const panel=document.getElementById('views-panel');
+  if(panel) panel.style.display='none';
+  const btn=document.getElementById('btn-views');
+  if(btn) btn.classList.remove('active');
+}
+
+const escH=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const VIEWS_STORE='mep_col_views_v1';
+
+function svUserId(){
+  // Use user id, email, or name — whatever is available — as a stable key
+  const u=window.__MEP_USER__;
+  return u?.id||u?.email||u?.full_name||'default';
+}
+function svKey(){
+  // Key: store_prefix : disc : userId
+  return VIEWS_STORE+':'+disc+':'+svUserId();
+}
+// In-memory fallback in case localStorage is blocked (iframe security)
+const _viewsMemory={};
+function loadViews(){
+  const k=svKey();
+  try{
+    const raw=localStorage.getItem(k);
+    if(raw) return JSON.parse(raw);
+  }catch(e){console.warn('[Views] localStorage read failed:',e);}
+  return _viewsMemory[k]?JSON.parse(_viewsMemory[k]):[];
+}
+function persistViews(views){
+  const k=svKey();
+  const json=JSON.stringify(views);
+  _viewsMemory[k]=json; // always store in memory
+  try{
+    localStorage.setItem(k,json);
+    console.log('[Views] saved to localStorage key:',k,'count:',views.length);
+  }catch(e){
+    console.warn('[Views] localStorage write failed, using memory only:',e);
+    svFlash('Saved in session only (storage blocked)','err');
+  }
+}
+
+function saveView(){
+  const name=(document.getElementById('sv-name-input').value||'').trim();
+  if(!name){svFlash('Enter a name first','err');return;}
+  const views=loadViews();
+  const existing=views.findIndex(v=>v.name===name);
+  const entry={name,cols:JSON.stringify(COLS),saved:Date.now()};
+  if(existing>=0){
+    // Duplicate — overwrite silently (no confirm — blocked in iframes)
+    views[existing]=entry;
+  }else{
+    views.push(entry);
+  }
+  persistViews(views);
+  document.getElementById('sv-name-input').value='';
+  buildViewsList();
+  svFlash('"'+name+'" saved','ok');
+}
+
+function svFlash(msg,type){
+  const el=document.getElementById('sv-flash');
+  if(!el)return;
+  el.textContent=msg;
+  el.style.color=type==='ok'?'var(--st-approved-tx)':'var(--st-rejected-tx)';
+  el.style.opacity='1';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.opacity='0';},2000);
+}
+
+function applyView(name){
+  const views=loadViews();
+  const view=views.find(v=>v.name===name);
+  if(!view)return;
+  try{
+    const saved=JSON.parse(view.cols);
+    const defaults=disc==='mech'?COLS_MECH:COLS_ELEC;
+    // Restore saved visibility/order, add any new default cols hidden
+    COLS=saved.map(sc=>{
+      const def=defaults.find(c=>c.key===sc.key);
+      return def?{...def,...sc}:sc;
+    });
+    defaults.forEach(def=>{
+      if(!COLS.some(c=>c.key===def.key))COLS.push({...def,visible:false});
+    });
+  }catch(e){alert('Failed to apply view: '+e.message);return;}
+  closeMgr();
+  render();
+  saveLayout();
+}
+
+function deleteView(name){
+  // No confirm() — blocked in iframes. Delete immediately.
+  const views=loadViews().filter(v=>v.name!==name);
+  persistViews(views);
+  buildViewsList();
+  svFlash('"'+name+'" deleted','err');
+}
+
+function buildViewsList(){
+  const u=window.__MEP_USER__;
+  const uLabel=document.getElementById('vp-user-label');
+  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':'Electrical');
+
+  const views=loadViews();
+  const el=document.getElementById('sv-list');
+  if(!el)return;
+  if(!views.length){
+    el.innerHTML='<div class="sv-empty">No saved views yet.<br>Set up your columns then click <strong>Save Current</strong>.</div>';
+    return;
+  }
+  const discClass=disc==='mech'?'sv-disc-mech':'sv-disc-elec';
+  const discLabel=disc==='mech'?'Mech':'Elec';
+  el.innerHTML=views.slice().reverse().map(v=>{
+    let visCnt=0;
+    try{visCnt=JSON.parse(v.cols).filter(c=>c.visible&&c.type!=='divider').length;}catch(e){}
+    const date=new Date(v.saved).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+    const safe=v.name.replace(/'/g,"&#39;");
+    return '<div class="sv-row" data-vname="'+safe+'">'
+      +'<span class="sv-name">'+escH(v.name)+'</span>'
+      +'<span class="sv-disc-badge '+discClass+'">'+discLabel+'</span>'
+      +'<span class="sv-meta">'+visCnt+' cols · '+date+'</span>'
+      +'<div class="sv-actions">'
+      +'<button class="sv-btn apply" onclick="applyView(this.closest(\'[data-vname]\').dataset.vname)">Apply</button>'
+      +'<button class="sv-btn del" onclick="deleteView(this.closest(\'[data-vname]\').dataset.vname)">Del</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
 function switchMgrTab(tab){
   activeMgrTab=tab;
   ['cols','add','import','subs'].forEach(t=>{
@@ -1739,7 +1937,7 @@ async function startProgImport(){
   }
 
   fill.style.width='100%';
-  log(`✅ Imported ${ok} records${fail>0?` · ${fail} failed`:'`'}`,'log-ok');
+  log('✅ Imported '+ok+' records'+(fail>0?' · '+fail+' failed':''),'log-ok');
   btn.disabled=false;btn.textContent='⬆ Import to Database';
   if(ok>0){buildTable();applyFilters();}
 }
@@ -2012,8 +2210,10 @@ ${tableHTML}
 // Close handlers
 document.addEventListener('click',e=>{
   if(!document.getElementById('pop').contains(e.target)&&!e.target.closest('.th-icon'))closePop();
-  if(!e.target.isConnected)return; // element was re-rendered (e.g. edit button rebuild)
+  if(!e.target.isConnected)return;
   if(!document.getElementById('cmgr').contains(e.target)&&!e.target.closest('[onclick*="openMgr"]'))closeMgr();
+  const vp=document.getElementById('views-panel');
+  if(vp&&vp.style.display!=='none'&&!vp.contains(e.target)&&e.target.id!=='btn-views'&&!e.target.closest('#btn-views'))closeViewsPanel();
   if(e.target.id==='modal')closeMod();
 });
 
