@@ -650,7 +650,7 @@ body.in-shell header { display: none !important; }
       </div>
     </div>
 
-  <div class="cmgr-footer"><div class="cmgr-footer">
+  <div class="cmgr-footer">
     <button class="btn btn-blue" onclick="applyMgr()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
       Apply &amp; Save
@@ -826,7 +826,7 @@ let vtFilter=new Set();
 let subSel=new Set();
 let progRows=[],progActOverrides={};
 
-const sl=s=>({approved:'Approved',rejected:'Rejected',under_review:'UR',not_submitted:'Not Sub.',fully_approved:'FA ✓',not_approved:'Not Appr.',pending:'Pending',completed:'Completed',in_progress:'In Prog.',not_started:'Not Started',ready:'✅ Ready',not_ready:'❌ Not Ready'}[s]||s);
+const sl=s=>({approved:'Approved',rejected:'Rejected',under_review:'UR',not_submitted:'Not Sub.',fully_approved:'Released ✓',not_approved:'Not Appr.',pending:'Pending',completed:'Completed',in_progress:'In Prog.',not_started:'Not Started',ready:'✅ Ready',not_ready:'❌ Not Ready'}[s]||s);
 const sc=s=>'c-'+(s||'not_submitted').replace(/ /g,'_');
 // Apply alias: return canonical name for a raw sub-contractor string
 const resolveWirCode=code=>{let c=code,seen=new Set(),hops=0;while(wirCodeAliases[c]&&!seen.has(c)&&hops<5){seen.add(c);c=wirCodeAliases[c];hops++;}return c;};
@@ -1140,7 +1140,7 @@ function mkCell(vid,col){
     const s=colClr(vid,col);
     const codes=(col.clrCodes||[]).join(',');
     const label=col.label.replace('\n',' ').replace(/"/g,'');
-    return `<td data-col="${col.key}" ${hid}><div class="cw cro ${sc(s)}" data-clickable="1" data-type="clr" data-vid="${vid}" data-code="${col.clrCodes?.[0]||''}" data-codes="${codes}" data-label="${label}" style="justify-content:center;min-height:30px;padding:3px;align-items:center;cursor:pointer"><span style="font-size:9px;font-weight:600">${sl(s)}</span></div></td>`;
+    return `<td data-col="${col.key}" ${hid}><div class="cw cro ${sc(s)}" data-clickable="1" data-type="clr" data-vid="${vid}" data-code="${col.clrCodes?.[0]||''}" data-codes="${codes}" data-label="${label}" style="justify-content:center;min-height:30px;padding:3px;align-items:center;cursor:pointer" onclick="cellClick(event,this)"><span style="font-size:9px;font-weight:600">${sl(s)}</span></div></td>`;
   }
   if(col.type==='calc'){
     const s=calcReady(vid,col);
@@ -1161,7 +1161,7 @@ function mkCell(vid,col){
   const subHTML=subDisp
     ? `<div class="csb"${subIsManual?' style="color:var(--st-progress-tx);font-style:italic" title="Manual entry — no WIR yet"':''}>${subDisp}${subIsManual?' ✎':''}</div>`
     : `<div class="csb" style="color:var(--text-faint)">—</div>`;
-  const da=`data-clickable="1" data-vid="${vid}" data-code="${codes[0]||''}" data-codes="${codes.join(',')}" data-label="${col.label.replace('\n',' ').replace(/"/g,'')}"`;
+  const da=`data-clickable="1" data-vid="${vid}" data-code="${codes[0]||''}" data-codes="${codes.join(',')}" data-label="${col.label.replace('\n',' ').replace(/"/g,'')}" onclick="cellClick(event,this)"`;
   if(col.type==='wir-only'){
     return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
       <div class="ct ${sc(wir)}" style="min-height:20px;display:flex;align-items:center;justify-content:center">${sl(wir)}</div>
@@ -1177,6 +1177,19 @@ function mkCell(vid,col){
 }
 
 function hideCol(key){const col=COLS.find(c=>c.key===key);if(!col)return;col.visible=false;buildHeader();document.querySelectorAll(`td[data-col="${key}"]`).forEach(td=>td.style.display='none');}
+
+function cellClick(e,el){
+  e.stopPropagation();
+  const vid=parseInt(el.getAttribute('data-vid'));
+  const code=el.getAttribute('data-code');
+  const codes=(el.getAttribute('data-codes')||code).split(',').filter(Boolean);
+  const label=el.getAttribute('data-label')||'Activity';
+  if(el.getAttribute('data-type')==='clr'){
+    openClrMod(vid,codes,label);
+  } else {
+    openMod(vid,code,label,codes);
+  }
+}
 
 function openPop(e,key){
   e.stopPropagation();
@@ -1341,7 +1354,7 @@ function togglePriOnly(){
 function removeF(key){delete colF[key];buildHeader();updateChips();applyFilters();}
 function clearAll(){colF={};subFilter=new Set();vtFilter=new Set();updateVtypeBtn();rejOnly=false;document.getElementById('fcl').value='';document.getElementById('fvtype').value='';document.getElementById('fv').value='';const rb=document.getElementById('btn-rej-only');if(rb){rb.style.background='#1f2937';rb.style.color='#f87171';rb.style.borderColor='#7f1d1d';}
   priRejOnly=false;const prb=document.getElementById('btn-pri-rej');if(prb){prb.style.background='';prb.style.color='';prb.style.borderColor='';}
-  priOnly=false;const pob=document.getElementById('btn-pri-only');if(pob){pob.style.background='';pob.style.color='';pob.style.borderColor='';}updateSubFilterBtn();buildHeader();updateChips();applyFilters();}
+  priOnly=false;const pob=document.getElementById('btn-pri-only');if(pob){pob.style.background='';pob.style.color='';pob.style.borderColor='';}updateSubFilterBtn();updateChips();render();}
 
 // COLUMN MANAGER
 let activeMgrTab='cols';
@@ -1961,6 +1974,14 @@ function resetProgImport(){
   progRows=[];progActOverrides={};
 }
 
+function showToast(msg,type){
+  const d=document.createElement('div');
+  d.setAttribute('style','position:fixed;bottom:24px;right:24px;z-index:100000;background:'+(type==='err'?'#c0392b':'#1a7a4a')+';color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:600;max-width:320px;box-shadow:0 4px 16px rgba(0,0,0,.5);pointer-events:none');
+  d.textContent=msg;
+  document.body.appendChild(d);
+  setTimeout(()=>d.remove(),3500);
+}
+
 // MODAL
 function openMod(vid,actCode,actLabel,codes){
   try{
@@ -1980,10 +2001,12 @@ function openMod(vid,actCode,actLabel,codes){
     document.getElementById('m-fd').value=prog.finish_date||'';
     document.getElementById('m-r').value=prog.subcontractor||'';
     document.getElementById('m-al').innerHTML='';
-    document.getElementById('modal').classList.add('open');
-  }catch(e){console.error('openMod error:',e);}
+    const mod=document.getElementById('modal');
+    if(!mod){showToast('Error: modal element missing','err');return;}
+    mod.setAttribute('style','display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);z-index:99999;align-items:center;justify-content:center');
+  }catch(e){alert('openMod error: '+e.message);console.error('openMod error:',e);}
 }
-function closeMod(){document.getElementById('modal').classList.remove('open');}
+function closeMod(){const mod=document.getElementById('modal');if(mod)mod.setAttribute('style','');}
 
 async function saveProgress(){
   if(!canEditProgress()){showToast('You do not have permission to edit progress','err');return;}

@@ -688,7 +688,7 @@ var LK='mep_tgt_v4';
 var actCI={},clrCI={},clrIC={};
 var vByNo={},vByKey={},vById={};
 var weeks=[],actWk=null,tVillas=[],actDisc=null,wirCodeAliases={};
-var wirD={},wirSD={},progD={},clrD2={},flagsD={};
+var wirD={},wirSD={},progD={},progSubD={},clrD2={},flagsD={};
 var colF={},popKey=null,editKey=null,dragSrc=null;
 
 // Sub-contractor label visibility — simple global toggle
@@ -726,7 +726,7 @@ var WPR=['approved','under_review','rejected','not_submitted'];
 var PPR=['completed','in_progress','not_started'];
 var CLRP=['not_submitted','not_approved','pending','fully_approved'];
 var SL={approved:'Approved',rejected:'Rejected',under_review:'UR',not_submitted:'Not Sub.',
-  fully_approved:'FA\u2713',not_approved:'Not Appr.',pending:'Pending',
+  fully_approved:'Released\u2713',not_approved:'Not Appr.',pending:'Pending',
   completed:'Completed',in_progress:'In Prog.',not_started:'Not Started'};
 
 function sl(s){return SL[s]||s||'\u2014';}
@@ -749,7 +749,11 @@ function gC(v,codes){
 }
 function cW(v,col){return bW((col.ac||[]).map(function(c){return gW(v,c);}));}
 function cP(v,col){return bP((col.ac||[]).map(function(c){return gP(v,c);}));}
-function gSub(v,codes){for(var i=0;i<codes.length;i++){var s=wirSD[v]&&wirSD[v][codes[i]];if(s)return s;}return null;}
+function gSub(v,codes){
+  for(var i=0;i<codes.length;i++){var ws=wirD[v]&&wirD[v][codes[i]];if(ws&&ws!=='not_submitted'){var s=wirSD[v]&&wirSD[v][codes[i]];if(s)return{name:s,source:'wir'};}}
+  for(var i=0;i<codes.length;i++){var s=progSubD[v]&&progSubD[v][codes[i]];if(s)return{name:s,source:'manual'};}
+  return null;
+}
 function setLm(m){var el=document.getElementById('lm');if(el)el.textContent=m;}
 function setS2(m){document.getElementById('s2').textContent=m;}
 
@@ -918,7 +922,7 @@ function selWeek(nm){
 }
 
 function loadVillaData(vids){
-  wirD={};wirSD={};progD={};clrD2={};
+  wirD={};wirSD={};progD={};progSubD={};clrD2={};
   if(!vids.length)return Promise.resolve();
   var ids=vids.join(',');
   setS2('Loading WIR...');
@@ -929,10 +933,15 @@ function loadVillaData(vids){
       if(r.raw_subcontractor){if(!wirSD[r.villa_id])wirSD[r.villa_id]={};wirSD[r.villa_id][r.raw_activity_code]=r.raw_subcontractor;}
     });
     setS2('Loading progress...');
-    return dbGetAll('progress_updates?select=villa_id,activity_id,status&is_current=eq.true&is_deleted=eq.false&villa_id=in.('+ids+')');
+    return dbGetAll('progress_updates?select=villa_id,activity_id,status,subcontractor&is_current=eq.true&is_deleted=eq.false&villa_id=in.('+ids+')');
   }).then(function(prog){
     var i2c={};Object.keys(actCI).forEach(function(c){i2c[actCI[c]]=c;});
-    prog.forEach(function(r){var c=i2c[r.activity_id];if(!c)return;if(!progD[r.villa_id])progD[r.villa_id]={};progD[r.villa_id][c]=r.status;});
+    prog.forEach(function(r){
+      var c=i2c[r.activity_id];if(!c)return;
+      if(!progD[r.villa_id])progD[r.villa_id]={};
+      progD[r.villa_id][c]=r.status;
+      if(r.subcontractor){if(!progSubD[r.villa_id])progSubD[r.villa_id]={};progSubD[r.villa_id][c]=r.subcontractor;}
+    });
     var hasClr=COLS.some(function(c){return c.type==='clr';}); // load for ALL clr cols, visible or hidden
     if(!hasClr){setS2('');return;}
     setS2('Loading clearances...');
@@ -1150,8 +1159,13 @@ function buildTbl(){
       var csub=gSub(vid,col.ac||[]);
       var csubHtml='';
       if(csub){
-        var csubSafe=csub.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        csubHtml='<div class="csb"'+(subsHidden?' style="display:none"':'')+'>'+csubSafe+'</div>';
+        var csubSafe=csub.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        var csubStyle=(subsHidden?' style="display:none"':'');
+        if(csub.source==='manual'){
+          csubHtml='<div class="csb"'+csubStyle+'><em style="opacity:.8">&#9998; '+csubSafe+'</em></div>';
+        } else {
+          csubHtml='<div class="csb"'+csubStyle+'>'+csubSafe+'</div>';
+        }
       }
       r+='<td><div class="cw">'
         +(prg?'<div class="ct '+sc(prg)+'"'+(progHidden?' style="display:none"':'')+'>'+sl(prg)+'</div>':'')
@@ -1202,10 +1216,10 @@ function exportCSV(){
       } else if(col.type==='pair'){
         row.push(esl(cP(vid,col)));
         row.push(esl(cW(vid,col)));
-        row.push(gSub(vid,col.ac||[])||'');
+        row.push((gSub(vid,col.ac||[])||{name:''}).name||'');
       } else {
         row.push(esl(cW(vid,col)));
-        row.push(gSub(vid,col.ac||[])||'');
+        row.push((gSub(vid,col.ac||[])||{name:''}).name||'');
       }
     });
     csvRows.push(row);
@@ -1787,7 +1801,7 @@ async function printSelectedWeeks(){
   win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Loading…</title><style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0b0e14;color:#8a93a3;font-size:14px}</style></head><body><div>Loading weeks, please wait…</div></body></html>');
 
   // Save current state
-  var _actWk=actWk,_tVillas=tVillas.slice(),_wirD=wirD,_wirSD=wirSD,_progD=progD,_clrD2=clrD2,_flagsD=flagsD;
+  var _actWk=actWk,_tVillas=tVillas.slice(),_wirD=wirD,_wirSD=wirSD,_progD=progD,_progSubD=progSubD,_clrD2=clrD2,_flagsD=flagsD;
   var pages=[];
   var headerHTML=document.getElementById('th').innerHTML;
 
@@ -1829,7 +1843,7 @@ async function printSelectedWeeks(){
   }
 
   // Restore original week
-  actWk=_actWk;tVillas=_tVillas;wirD=_wirD;wirSD=_wirSD;progD=_progD;clrD2=_clrD2;flagsD=_flagsD;
+  actWk=_actWk;tVillas=_tVillas;wirD=_wirD;wirSD=_wirSD;progD=_progD;progSubD=_progSubD;clrD2=_clrD2;flagsD=_flagsD;
   if(actWk)selWeek(actWk);
 
   btn.disabled=false;btn.textContent='Print Selected';

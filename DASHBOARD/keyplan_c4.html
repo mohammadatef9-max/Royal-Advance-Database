@@ -623,6 +623,7 @@ document.getElementById('villa-layer').addEventListener('mouseover',function(e){
   tip.style.display='block';
 });
 document.getElementById('villa-layer').addEventListener('mousemove',function(e){
+  if(!e.target.closest('.villa')){tip.style.display='none';return;}
   tip.style.left=(e.clientX+16)+'px';tip.style.top=Math.min(e.clientY-10,window.innerHeight-180)+'px';
 });
 document.getElementById('villa-layer').addEventListener('mouseleave',function(){tip.style.display='none';});
