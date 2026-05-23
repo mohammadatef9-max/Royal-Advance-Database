@@ -785,7 +785,21 @@ const canonSub=s=>{if(!s)return null;const t=String(s).trim();return subAliases[
 const gW=(vid,code)=>wirD[vid]?.[code]||'not_submitted';
 const gC=(vid,code)=>clrD[vid]?.[code]||'not_submitted';
 const gP=(vid,code)=>progD[vid]?.[code]?.status||'not_started';
-const gSub=(vid,codes)=>{for(const c of codes){const s=wirSubD[vid]?.[c];if(s)return s;}return null;};
+// Returns {name, source:'wir'|'manual'} or null
+const gSub=(vid,codes)=>{
+  for(const c of codes){
+    const wirStatus=wirD[vid]?.[c];
+    if(wirStatus&&wirStatus!=='not_submitted'){
+      const s=wirSubD[vid]?.[c];
+      if(s)return{name:s,source:'wir'};
+    }
+  }
+  for(const c of codes){
+    const s=progD[vid]?.[c]?.subcontractor;
+    if(s)return{name:s,source:'manual'};
+  }
+  return null;
+};
 const colWir=(vid,col)=>bestWir((col.actCodes||[]).map(c=>gW(vid,c)));
 const colProg=(vid,col)=>bestProg((col.actCodes||[]).map(c=>gP(vid,c)));
 const colClr=(vid,col)=>bestClr((col.clrCodes||[col.clrCode]).filter(Boolean).map(c=>gC(vid,c)));
@@ -1082,20 +1096,31 @@ function mkCell(vid,col){
   }
   const codes=col.actCodes||[];
   const wir=colWir(vid,col);
-  const sub=gSub(vid,codes);
-  const subDisp=sub?canonSub(sub):null;
+  const subObj=gSub(vid,codes);
+  // subObj = {name, source:'wir'|'manual'} or null
+  // Only show sub if: WIR is submitted (source='wir') OR manually entered (source='manual')
+  // If WIR is not_submitted and no manual sub, show nothing
+  const wirSubmitted=wir!=='not_submitted';
+  let subDisp=null,subIsManual=false;
+  if(subObj){
+    subDisp=canonSub(subObj.name).substring(0,16);
+    subIsManual=(subObj.source==='manual');
+  }
+  const subHTML=subDisp
+    ? `<div class="csb"${subIsManual?' style="color:var(--st-progress-tx);font-style:italic" title="Manual entry — no WIR yet"':''}>${subDisp}${subIsManual?' ✎':''}</div>`
+    : `<div class="csb" style="color:var(--text-faint)">—</div>`;
   const da=`data-clickable="1" data-vid="${vid}" data-code="${codes[0]||''}" data-codes="${codes.join(',')}" data-label="${col.label.replace('\n',' ').replace(/"/g,'')}"`;
   if(col.type==='wir-only'){
     return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
       <div class="ct ${sc(wir)}" style="min-height:20px;display:flex;align-items:center;justify-content:center">${sl(wir)}</div>
-      <div class="csb">${subDisp?subDisp.substring(0,16):'—'}</div>
+      ${subHTML}
     </div></td>`;
   }
   const prog=colProg(vid,col);
   return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
     <div class="ct ${sc(prog)}">${sl(prog)}</div>
     <div class="cm ${sc(wir)}">${sl(wir)}</div>
-    <div class="csb">${subDisp?subDisp.substring(0,16):'—'}</div>
+    ${subHTML}
   </div></td>`;
 }
 
@@ -1736,7 +1761,7 @@ function openMod(vid,actCode,actLabel,codes){
     const prog=progD[vid]?.[actCode]||{};
     mCtx={vid,actCode,codes:codesArr,actLabel};
     const sb=document.getElementById('sub-box');
-    if(sub){document.getElementById('sub-val').textContent=canonSub(sub);sb.style.display='block';}else sb.style.display='none';
+    if(sub){document.getElementById('sub-val').textContent=canonSub(sub.name)+(sub.source==='manual'?' (manual)':'');sb.style.display='block';}else sb.style.display='none';
     document.getElementById('m-v').value=`Villa ${v.villa_no} — ${v.cluster} (${v.villa_type||'—'})`;
     document.getElementById('m-a').value=actLabel+(codesArr.length>1?` [${codesArr.join(', ')}]`:'');
     document.getElementById('m-w').value=sl(wir);
