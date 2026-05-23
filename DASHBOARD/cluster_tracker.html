@@ -374,9 +374,9 @@ body.in-shell header { display: none !important; }
     <button class="btn-disc" id="disc-elec" onclick="setDisc('elec')"><span class="disc-dot" style="background:var(--st-progress-tx)"></span>Electrical</button>
   </div>
   <!-- Cluster -->
-  <select id="fcl" onchange="applyFilters()">
+  <select id="fcl" onchange="render()">
     <option value="">All Clusters</option>
-    <option>C1</option><option>C2</option><option>C3</option>
+    <option selected>C1</option><option>C2</option><option>C3</option>
     <option>C4</option><option>C5</option><option>C6</option><option>C7</option>
   </select>
   <!-- Sub filter -->
@@ -1119,8 +1119,10 @@ function buildStats(){if(!villas.length)return;
 }
 
 function buildTable(){
+  const fc=document.getElementById('fcl').value;
+  const subset=fc?villas.filter(v=>v.cluster===fc):villas;
   // Build all HTML as one string — single innerHTML set = single reflow
-  const rows=villas.map(v=>{
+  const rows=subset.map(v=>{
     let r=`<tr data-vid="${v.id}">
       <td class="fx" style="left:0;text-align:center">${v.villa_no}</td>
       <td class="fx" style="left:50px;text-align:center"><span class="cl-pill">${v.cluster}</span></td>
@@ -1352,7 +1354,6 @@ function toggleViewsPanel(e){
   const panel=document.getElementById('views-panel');
   const btn=document.getElementById('btn-views');
   if(panel.style.display==='none'){
-    // Position panel below button
     const r=btn.getBoundingClientRect();
     panel.style.top=(r.bottom+6)+'px';
     panel.style.left=Math.min(r.left,window.innerWidth-336)+'px';
@@ -1372,55 +1373,60 @@ function closeViewsPanel(){
 }
 
 const escH=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const VIEWS_STORE='mep_col_views_v1';
+const VIEWS_STORE='mep_views_v1';
 
 function svUserId(){
-  // Use user id, email, or name — whatever is available — as a stable key
   const u=window.__MEP_USER__;
   return u?.id||u?.email||u?.full_name||'default';
 }
-function svKey(){
-  // Key: store_prefix : disc : userId
-  return VIEWS_STORE+':'+disc+':'+svUserId();
+function svDbKey(){
+  return VIEWS_STORE+':'+svUserId();
 }
-// In-memory fallback in case localStorage is blocked (iframe security)
-const _viewsMemory={};
-function loadViews(){
-  const k=svKey();
+
+// In-memory cache — populated on panel open, used for apply/delete without re-fetch
+let _viewsCache=null;
+
+async function loadViewsFromDB(){
+  const key=svDbKey();
   try{
-    const raw=localStorage.getItem(k);
-    if(raw) return JSON.parse(raw);
-  }catch(e){console.warn('[Views] localStorage read failed:',e);}
-  return _viewsMemory[k]?JSON.parse(_viewsMemory[k]):[];
+    const rows=await fa(`user_column_layouts?select=layout&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
+    if(rows.length) return JSON.parse(rows[0].layout)||[];
+  }catch(e){console.warn('[Views] DB load failed:',e);}
+  // Fall back: migrate any views saved under the old localStorage key
+  try{
+    const old=localStorage.getItem('mep_col_views_v1:'+disc+':'+svUserId());
+    if(old){const v=JSON.parse(old);if(v.length)return v;}
+  }catch(e){}
+  return [];
 }
-function persistViews(views){
-  const k=svKey();
-  const json=JSON.stringify(views);
-  _viewsMemory[k]=json; // always store in memory
+
+async function persistViewsToDB(views){
+  const key=svDbKey();
+  _viewsCache=views;
   try{
-    localStorage.setItem(k,json);
-    console.log('[Views] saved to localStorage key:',k,'count:',views.length);
+    const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
+    const json=JSON.stringify(views);
+    if(existing.length){
+      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:json})});
+    }else{
+      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:key,discipline:disc,layout:json})});
+    }
   }catch(e){
-    console.warn('[Views] localStorage write failed, using memory only:',e);
-    svFlash('Saved in session only (storage blocked)','err');
+    console.warn('[Views] DB persist failed:',e);
+    svFlash('Saved locally only (offline?)','err');
   }
 }
 
-function saveView(){
+async function saveView(){
   const name=(document.getElementById('sv-name-input').value||'').trim();
   if(!name){svFlash('Enter a name first','err');return;}
-  const views=loadViews();
+  const views=_viewsCache!=null?_viewsCache:await loadViewsFromDB();
   const existing=views.findIndex(v=>v.name===name);
   const entry={name,cols:JSON.stringify(COLS),saved:Date.now()};
-  if(existing>=0){
-    // Duplicate — overwrite silently (no confirm — blocked in iframes)
-    views[existing]=entry;
-  }else{
-    views.push(entry);
-  }
-  persistViews(views);
+  if(existing>=0){views[existing]=entry;}else{views.push(entry);}
+  await persistViewsToDB(views);
   document.getElementById('sv-name-input').value='';
-  buildViewsList();
+  _renderViewsList(_viewsCache);
   svFlash('"'+name+'" saved','ok');
 }
 
@@ -1435,13 +1441,12 @@ function svFlash(msg,type){
 }
 
 function applyView(name){
-  const views=loadViews();
+  const views=_viewsCache||[];
   const view=views.find(v=>v.name===name);
   if(!view)return;
   try{
     const saved=JSON.parse(view.cols);
     const defaults=disc==='mech'?COLS_MECH:COLS_ELEC;
-    // Restore saved visibility/order, add any new default cols hidden
     COLS=saved.map(sc=>{
       const def=defaults.find(c=>c.key===sc.key);
       return def?{...def,...sc}:sc;
@@ -1455,23 +1460,17 @@ function applyView(name){
   saveLayout();
 }
 
-function deleteView(name){
-  // No confirm() — blocked in iframes. Delete immediately.
-  const views=loadViews().filter(v=>v.name!==name);
-  persistViews(views);
-  buildViewsList();
+async function deleteView(name){
+  const views=(_viewsCache||[]).filter(v=>v.name!==name);
+  await persistViewsToDB(views);
+  _renderViewsList(_viewsCache);
   svFlash('"'+name+'" deleted','err');
 }
 
-function buildViewsList(){
-  const u=window.__MEP_USER__;
-  const uLabel=document.getElementById('vp-user-label');
-  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':'Electrical');
-
-  const views=loadViews();
+function _renderViewsList(views){
   const el=document.getElementById('sv-list');
   if(!el)return;
-  if(!views.length){
+  if(!views||!views.length){
     el.innerHTML='<div class="sv-empty">No saved views yet.<br>Set up your columns then click <strong>Save Current</strong>.</div>';
     return;
   }
@@ -1492,6 +1491,19 @@ function buildViewsList(){
       +'</div>'
       +'</div>';
   }).join('');
+}
+
+async function buildViewsList(){
+  const u=window.__MEP_USER__;
+  const uLabel=document.getElementById('vp-user-label');
+  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':'Electrical');
+
+  const el=document.getElementById('sv-list');
+  if(!el)return;
+  el.innerHTML='<div class="sv-empty" style="color:var(--text-dim)">Loading…</div>';
+
+  _viewsCache=await loadViewsFromDB();
+  _renderViewsList(_viewsCache);
 }
 
 function switchMgrTab(tab){

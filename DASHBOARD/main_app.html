@@ -427,10 +427,6 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
         <span class="nl">Import DC CSV</span>
       </div>
-      <div class="nav perm-gate" id="nav-dc_log_cleaner" data-label="DC Log Cleaner" data-perm="import_wir" onclick="go('dc_log_cleaner')">
-        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></span>
-        <span class="nl">DC Log Cleaner</span>
-      </div>
       <div class="nav perm-gate" id="nav-reference_data" data-label="Reference Data" data-perm="manage_activities" onclick="go('reference_data')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
         <span class="nl">Reference Data</span>
@@ -523,7 +519,6 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-clearance_release"  title="Release Requests"></iframe>
       <iframe id="frame-progress_entry"     title="Progress Entry"></iframe>
       <iframe id="frame-csv_import_tool"    title="Import DC CSV"></iframe>
-      <iframe id="frame-dc_log_cleaner"     title="DC Log Cleaner"></iframe>
       <iframe id="frame-reference_data"    title="Reference Data"></iframe>
       <iframe id="frame-user_management"   title="User Management"></iframe>
       <iframe id="frame-keyplan_c1"         title="Cluster 1 Keyplan"></iframe>
@@ -554,7 +549,6 @@ const PAGES = {
   clearance_release: { title:'Release Requests',     desc:'Clearance release & rejection workflow', file:'clearance_release.html',  built:true },
   progress_entry:    { title:'Progress Entry',       desc:'Manual site progress updates',           file:'progress_entry.html',     built:true },
   csv_import_tool:   { title:'Import DC CSV',        desc:'Import DC WIR & clearance data',        file:'csv_import_tool.html',    built:true },
-  dc_log_cleaner:    { title:'DC Log Cleaner',      desc:'Clean & upload DC WIR & clearance logs',  file:'dc_log_cleaner.html',     built:true },
   reference_data:    { title:'Reference Data',       desc:'WIR activities & clearance items',       file:'reference_data.html',     built:true },
   user_management:   { title:'User Management',      desc:'Manage team members, roles & access',    file:'user_management.html',    built:true },
   keyplan_c1:        { title:'Cluster 1 Keyplan',    desc:'Interactive villa keyplan — C1',         file:'keyplan_c1.html',         built:true },
@@ -727,7 +721,6 @@ function preloadAllFrames() {
     'clearance_release',
     'progress_entry',
     'csv_import_tool',
-    'dc_log_cleaner',
     'reference_data',
     'user_management',
     'keyplan_c1','keyplan_c2','keyplan_c3',
@@ -991,7 +984,6 @@ async function loadBadges() {
 window.addEventListener('message', function(e) {
   if (!e.data) return;
 
-  // dc_log_cleaner broadcasts when upload completes
   if (e.data.type === 'data_updated') {
     const who = e.data.uploadedBy || (currentUser ? currentUser.full_name : '');
     showUpdateBanner(e.data.dataType || 'wir', who);

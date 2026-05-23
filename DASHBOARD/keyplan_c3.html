@@ -399,6 +399,7 @@ function renderVillas(dm, dm2){
     } else {
       var d=dm?dm[vNum]:null;
       var st=d?getStatus(d.status):'NS';
+      if(currentMode==='clr'&&st==='NA')st='NS';
       var rawSub=d?(d.sub||''):'';
       var sub=subRenameMap[rawSub]||rawSub;
       var color=(sub&&subColorMap[sub])?subColorMap[sub]:null;
@@ -470,23 +471,24 @@ function recomputeOpenFront(){
   });
 }
 function updateStats(dm){
-  var statusKeys=currentMode==='clr'?['FA','PN','NA','NS']:['AP','UR','RJ','NS'];
+  var statusKeys=currentMode==='clr'?['FA','PN','NS']:['AP','UR','RJ','NS'];
   var c={};statusKeys.forEach(function(k){c[k]=0;});
   var getStatus=currentMode==='clr'?getClrStatus:getWirStatus;
   for(var v=1;v<=320;v++){
     var d=dm?dm[String(v)]:null;
     var st=d?getStatus(d.status):'NS';
+    if(currentMode==='clr'&&st==='NA')st='NS';
     if(c[st]!==undefined)c[st]++;else c.NS++;
   }
   var apV,urV,rjV,pct;
   if(currentMode==='clr'){
-    apV=c.FA;urV=c.PN;rjV=c.NA;
+    apV=c.FA;urV=c.PN;rjV=0;
     document.getElementById('leg-label-ap').textContent='Fully Approved';
     document.getElementById('leg-label-ur').textContent='Pending';
-    document.getElementById('leg-label-rj').textContent='Not Approved';
     document.getElementById('sl-ap').textContent='F.Appr';
     document.getElementById('sl-ur').textContent='Pend';
-    document.getElementById('sl-rj').textContent='N.Appr';
+    document.getElementById('leg-RJ').style.display='none';
+    document.getElementById('stat-RJ').style.display='none';
     pct=dm?Math.round(c.FA/320*100)+'%':'—';
   } else {
     apV=c.AP;urV=c.UR;rjV=c.RJ;
@@ -496,8 +498,12 @@ function updateStats(dm){
     document.getElementById('sl-ap').textContent='Appr';
     document.getElementById('sl-ur').textContent='Review';
     document.getElementById('sl-rj').textContent='Reject';
+    document.getElementById('leg-RJ').style.display='';
+    document.getElementById('stat-RJ').style.display='';
     pct=dm?Math.round(c.AP/320*100)+'%':'—';
   }
+  var _urDot=document.querySelector('#leg-UR .ldot');
+  if(_urDot)_urDot.style.background=currentMode==='clr'?'#f59e0b':'var(--review)';
   document.getElementById('s-ap').textContent=apV;
   document.getElementById('s-ur').textContent=urV;
   document.getElementById('s-rj').textContent=rjV;
@@ -512,12 +518,12 @@ function updateStats(dm){
   var phStats=document.getElementById('ph-stats');
   var labelAp=currentMode==='clr'?'Fully Approved':'Approved';
   var labelUr=currentMode==='clr'?'Pending':'Under Review';
-  var labelRj=currentMode==='clr'?'Not Approved':'Rejected';
+  var labelRj='Rejected';
   phStats.innerHTML=
     '<div class="ph-card pc-total"><div class="pc-val">320</div><div class="pc-lbl">Total</div></div>'+
     '<div class="ph-card pc-ap"><div class="pc-val">'+apV+'</div><div class="pc-lbl">'+labelAp+'</div></div>'+
     '<div class="ph-card pc-ur"><div class="pc-val">'+urV+'</div><div class="pc-lbl">'+labelUr+'</div></div>'+
-    '<div class="ph-card pc-rj"><div class="pc-val">'+rjV+'</div><div class="pc-lbl">'+labelRj+'</div></div>'+
+    (currentMode!=='clr'?'<div class="ph-card pc-rj"><div class="pc-val">'+rjV+'</div><div class="pc-lbl">'+labelRj+'</div></div>':'')+
     '<div class="ph-card pc-pn"><div class="pc-val">'+c.NS+'</div><div class="pc-lbl">Not Subm.</div></div>'+
     '<div class="ph-card pc-of"><div class="pc-val">'+ofCount+'</div><div class="pc-lbl">Open Front</div></div>'+
     '<div class="ph-card pc-pct"><div class="pc-val">'+pct+'</div><div class="pc-lbl">Progress</div></div>';
@@ -546,9 +552,15 @@ function buildSubLegend(rows){
   document.getElementById('sub-section').style.display='block';
 }
 function toggleStatus(st){
-  var idx=hiddenStatus.indexOf(st);
-  if(idx>=0)hiddenStatus.splice(idx,1);else hiddenStatus.push(st);
-  var h=inArr(hiddenStatus,st);
+  var actualSt=st;
+  if(currentMode==='clr'){
+    if(st==='AP')actualSt='FA';
+    else if(st==='UR')actualSt='PN';
+    else if(st==='RJ')return;
+  }
+  var idx=hiddenStatus.indexOf(actualSt);
+  if(idx>=0)hiddenStatus.splice(idx,1);else hiddenStatus.push(actualSt);
+  var h=inArr(hiddenStatus,actualSt);
   var l=document.getElementById('leg-'+st),s=document.getElementById('stat-'+st);
   if(l)l.classList.toggle('hidden-filter',h);if(s)s.classList.toggle('hidden-filter',h);
   applyFilters();
@@ -863,9 +875,9 @@ function doPrint(){
   var imgSrc = ''; // BG intentionally excluded from print
 
   var legendHtml =
-    '<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>Approved / Fully Approved</span></div>'+
-    '<div class="pl-item"><div class="pl-dot" style="background:#818cf8"></div><span>Under Review / Pending</span></div>'+
-    '<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected / Not Approved</span></div>'+
+    '<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>'+(currentMode==='clr'?'Fully Approved':'Approved / Fully Approved')+'</span></div>'+
+    '<div class="pl-item"><div class="pl-dot" style="background:'+(currentMode==='clr'?'#f59e0b':'#818cf8')+'"></div><span>'+(currentMode==='clr'?'Pending':'Under Review / Pending')+'</span></div>'+
+    (currentMode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected / Not Approved</span></div>':'')+
     '<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>'+
     (openFrontVillas.size>0 ? '<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>' : '')+
     (priorityVillas.size>0 ? '<div class="pl-item"><span style="font-size:9pt">⭐</span><span>Priority ('+priorityVillas.size+')</span></div>' : '');
@@ -920,30 +932,42 @@ function doPrint(){
   // img CSS: width:100% of pp-map-wrap, height:auto => rendered width = pp-map-wrap width.
   // Villa layer scale = printImg.offsetWidth / 1800 (naturalWidth).
 
-    // Hardcoded print transform — calibrated values: scale=0.550, X=73px, Y=-57px
-  // Scale calibrated per paper size (A4 landscape = 0.520, A3 landscape = 0.760)
-  var paper = (document.getElementById('print-paper')||{value:'A4'}).value;
-  var PRINT_SCALE, PRINT_OX, PRINT_OY, PAGE_SIZE;
-  if(paper === 'A3'){
-    PRINT_SCALE = 0.760; PRINT_OX = 107; PRINT_OY = -83; PAGE_SIZE = 'A3 landscape';
-  } else {
-    PRINT_SCALE = 0.520; PRINT_OX = 73;  PRINT_OY = -57;  PAGE_SIZE = 'A4 landscape';
-  }
+    var paper = (document.getElementById('print-paper')||{value:'A4'}).value;
+  var PAGE_SIZE = paper === 'A3' ? 'A3 landscape' : 'A4 landscape';
   // Inject dynamic @page size
   var pageStyle = document.getElementById('_kp_page_style');
   if(!pageStyle){ pageStyle=document.createElement('style'); pageStyle.id='_kp_page_style'; document.head.appendChild(pageStyle); }
   pageStyle.textContent = '@page{size:'+PAGE_SIZE+';margin:8mm}';
 
-  var layer = document.getElementById('pp-layer-inner');
-  if(layer){
-    layer.style.transform = 'translate('+PRINT_OX+'px,'+PRINT_OY+'px) scale('+PRINT_SCALE+')';
-    layer.style.transformOrigin = '0 0';
-  }
-  window.print();
-  setTimeout(function(){
-    var pp2 = document.getElementById('print-page');
-    if(pp2) pp2.parentNode.removeChild(pp2);
-  }, 1500);
+  // Compute scale from paper dimensions, not screen viewport.
+  // #print-page is position:fixed;inset:0 in @media print, filling the @page content area.
+  // @page margin:8mm + #print-page padding:8mm = 16mm inset each side.
+  var MM = 96 / 25.4;
+  var isA3 = paper === 'A3';
+  var usableW = ((isA3 ? 420 : 297) - 32) * MM;
+  var usableH = ((isA3 ? 297 : 210) - 32) * MM;
+  var LAYER_W = 1800, LAYER_H = 1273;
+  var mapH = usableH - 65 - 22 - 8;
+  var scale = Math.min(usableW / LAYER_W, (mapH - 10) / LAYER_H);
+  var ox = (usableW - LAYER_W * scale) / 2;
+
+  requestAnimationFrame(function(){
+    var mapWrap = document.getElementById('pp-map-inner');
+    var layer   = document.getElementById('pp-layer-inner');
+    if(layer){
+      layer.style.transformOrigin = '0 0';
+      layer.style.transform = 'translate('+ox.toFixed(1)+'px,0) scale('+scale.toFixed(5)+')';
+    }
+    if(mapWrap){
+      mapWrap.style.height = (LAYER_H * scale).toFixed(1)+'px';
+      mapWrap.style.flex = 'none';
+    }
+    window.print();
+    setTimeout(function(){
+      var pp2 = document.getElementById('print-page');
+      if(pp2) pp2.parentNode.removeChild(pp2);
+    }, 1500);
+  });
 }
 
 async function loadData(){
@@ -974,19 +998,34 @@ async function loadData(){
     }
     console.log('[keyplan] Open Front links:',OPEN_FRONT_LINKS);
   }catch(e){console.warn('[keyplan] Could not load open front codes',e);}
-  var actsR=await fetchAll('activities?select=activity_code,activity_name&is_active=eq.true');
+  var _actsAndAliases=await Promise.all([
+    fetchAll('activities?select=activity_code,activity_name&is_active=eq.true'),
+    fetchAll('wir_code_aliases?select=old_code,new_code&is_active=eq.true')
+  ]);
+  var actsR=_actsAndAliases[0], wirAliasRows=_actsAndAliases[1];
   var actNameMap={};
   if(Array.isArray(actsR))actsR.forEach(function(a){actNameMap[a.activity_code]=a.activity_name;});
+  var wirAliases={};
+  if(Array.isArray(wirAliasRows))wirAliasRows.forEach(function(r){wirAliases[r.old_code.trim()]=r.new_code.trim();});
+  var resolveWirCode=function(c){var seen=new Set(),h=0;while(wirAliases[c]&&!seen.has(c)&&h<5){seen.add(c);c=wirAliases[c];h++;}return c;};
+  var wirStPriority=function(s){s=(s||'').toLowerCase().trim();if(s==='approved'||s==='a'||s==='b')return 0;if(s==='under_review'||s==='ur')return 1;if(s==='rejected'||s==='c'||s==='d')return 2;return 3;};
   document.getElementById('lm').textContent='Loading WIR data...';
   var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type&raw_cluster=eq.'+CLUSTER);
-  wirCsvData=[];
+  var wirBestMap={};
   wirRows.forEach(function(row){
-    var code=row.raw_activity_code||'';
-    var name=actNameMap[code]||'';
-    wirCsvData.push({code:code,activity:name||code,actKey:name?(code+' — '+name):code,
-      villa:String(parseInt(row.raw_villa_no)||0),type:row.raw_villa_type||'',
-      sub:row.raw_subcontractor||'',status:row.raw_status||''});
+    var rawCode=row.raw_activity_code||'';
+    var resolved=resolveWirCode(rawCode);
+    var name=actNameMap[resolved]||actNameMap[rawCode]||'';
+    var actKey=resolved+(name?' — '+name:'');
+    var villa=String(parseInt(row.raw_villa_no)||0);
+    var mk=actKey+'|'+villa;
+    var pri=wirStPriority(row.raw_status);
+    if(!wirBestMap[mk]||pri<wirStPriority(wirBestMap[mk].status)){
+      wirBestMap[mk]={code:resolved,activity:name||resolved,actKey:actKey,
+        villa:villa,type:row.raw_villa_type||'',sub:row.raw_subcontractor||'',status:row.raw_status||''};
+    }
   });
+  wirCsvData=Object.values(wirBestMap);
   var wirActMap={};
   wirCsvData.forEach(function(r){if(r.actKey&&!wirActMap[r.actKey])wirActMap[r.actKey]=parseInt(r.code)||0;});
   var wirActKeys=Object.keys(wirActMap).sort(function(a,b){return wirActMap[a]-wirActMap[b]||a.localeCompare(b);});
