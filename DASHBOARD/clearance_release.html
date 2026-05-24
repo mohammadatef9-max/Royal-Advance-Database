@@ -281,6 +281,7 @@ async function init(){
     const clrs=await fa('clearance_activities?select=id,clearance_code,clearance_name,discipline&is_active=eq.true');
     clrs.forEach(c=>{clrActivities[c.clearance_code]={id:c.id,name:c.clearance_name,discipline:c.discipline};});
     const clrOpts=clrs.sort((a,b)=>a.clearance_code.localeCompare(b.clearance_code)).map(c=>`<option value="${c.clearance_code}">${c.clearance_code} — ${c.clearance_name}</option>`).join('');
+    document.getElementById('rf-clr').innerHTML='<option value="">All Clearances</option>'+clrOpts;
     document.getElementById('pf-clr').innerHTML='<option value="">All Clearances</option>'+clrOpts;
     document.getElementById('sef-clr').innerHTML='<option value="">All Clearances</option>'+clrOpts;
     msg('Loading WIR activities…');
@@ -757,7 +758,6 @@ function renderBlocked() {
 // ── READY TO RELEASE TAB ──
 function renderReady(){
   const cl  = document.getElementById('rf-cl')?.value||'';
-  const clr = document.getElementById('rf-clr')?.value||'';
   const q   = (document.getElementById('rf-q')?.value||'').toLowerCase();
 
   // Filter readyItems — exclude those already pending_site_engineer or pending_dc
@@ -766,10 +766,28 @@ function renderReady(){
       .map(r=>r.villa_id+'_'+r.clearance_activity_id)
   );
 
-  let items = readyItems.filter(r=>{
+  // Base items filtered by cluster only (used to build the clearance dropdown)
+  const baseItems = readyItems.filter(r=>{
     const clrId = clrActivities[r.clearance_code]?.id;
-    if(alreadyActive.has(r.villa_id+'_'+clrId)) return false; // already released or submitted
-    if(cl  && r.cluster !== cl)  return false;
+    if(alreadyActive.has(r.villa_id+'_'+clrId)) return false;
+    if(cl && r.cluster !== cl) return false;
+    return true;
+  });
+
+  // Rebuild clearance dropdown to only show codes present in the current cluster
+  const clrSel = document.getElementById('rf-clr');
+  const presentCodes = [...new Set(baseItems.map(r=>r.clearance_code))].sort();
+  const prevClr = clrSel.value;
+  clrSel.innerHTML = '<option value="">All Clearances</option>' +
+    presentCodes.map(code=>{
+      const name = clrActivities[code]?.name||code;
+      return `<option value="${code}">${code} — ${name}</option>`;
+    }).join('');
+  if(prevClr && presentCodes.includes(prevClr)) clrSel.value = prevClr;
+  else clrSel.value = '';
+  const clr = clrSel.value;
+
+  let items = baseItems.filter(r=>{
     if(clr && r.clearance_code !== clr) return false;
     if(q   && !String(r.villa_no).includes(q) && !r.clearance_code.toLowerCase().includes(q) && !(r.clearance_name||'').toLowerCase().includes(q)) return false;
     return true;

@@ -314,11 +314,12 @@ body.in-shell .topbar{display:none!important}
         <th>Side Roles</th>
         <th>Discipline</th>
         <th>Status</th>
+        <th>Last Sign In</th>
         <th style="text-align:right">Actions</th>
       </tr>
     </thead>
     <tbody id="user-tbody">
-      <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-faint)">
+      <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-faint)">
         <div class="spin" style="border-top-color:var(--accent);border-color:var(--border-strong)"></div> Loading users…
       </td></tr>
     </tbody>
@@ -603,7 +604,7 @@ function renderTable(users) {
   document.getElementById('user-count').textContent = users.length + ' user' + (users.length !== 1 ? 's' : '');
   const tbody = document.getElementById('user-tbody');
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="6">
+    tbody.innerHTML = `<tr><td colspan="7">
       <div class="empty-state">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <h3>No users found</h3>
@@ -644,6 +645,7 @@ function renderTable(users) {
         <span class="status-dot ${active ? 'dot-active' : 'dot-inactive'}"></span>
         <span class="status-text" style="color:${active ? 'var(--st-approved-tx)' : 'var(--text-faint)'}">${active ? 'Active' : 'Inactive'}</span>
       </td>
+      <td style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);white-space:nowrap">${fmtSignIn(u.last_sign_in_at)}</td>
       <td>
         <div class="actions-cell">
           <button class="btn btn-sm btn-icon" title="Edit user" onclick="openEditModal(${u.id})">
@@ -667,7 +669,7 @@ function renderTable(users) {
 }
 
 function showTableError(msg) {
-  document.getElementById('user-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--st-rejected-tx)">${msg}</td></tr>`;
+  document.getElementById('user-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--st-rejected-tx)">${msg}</td></tr>`;
 }
 
 // ── Filters ──
@@ -963,6 +965,20 @@ function fmtRole(r) {
 }
 function escH(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtSignIn(ts) {
+  if (!ts) return '<span style="color:var(--text-faint)">Never</span>';
+  const d = new Date(ts);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)   return 'Just now';
+  if (mins < 60)  return mins + 'm ago';
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24)   return hrs + 'h ago';
+  const days = Math.floor(hrs / 24);
+  if (days < 7)   return days + 'd ago';
+  return d.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' });
 }
 
 
