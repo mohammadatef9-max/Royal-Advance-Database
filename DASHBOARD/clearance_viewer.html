@@ -305,6 +305,12 @@ input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:po
   <button class="btn btn-gray" style="margin-left:auto" onclick="clearSelection()">✕ Clear Selection</button>
 </div>
 
+<!-- Preview banner -->
+<div id="preview-banner" style="background:var(--progress-bg);border-bottom:1px solid var(--progress-bd);padding:5px 16px;display:none;align-items:center;gap:8px;flex-shrink:0;font-size:11px;color:var(--progress)">
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+  <span>Showing first <strong>50</strong> records preview — select a <strong>Cluster</strong> or <strong>Clearance Code</strong> to load all matching records</span>
+</div>
+
 <!-- Table -->
 <div class="tbl-wrap">
   <div id="loading">
@@ -334,8 +340,8 @@ input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:po
   </table>
 </div>
 
-<!-- Pager (hidden — all rows shown) -->
-<div class="pager">
+<!-- Pager (always hidden) -->
+<div class="pager" style="display:none">
   <button id="btn-first" onclick="goPage(1)">«</button>
   <button id="btn-prev" onclick="goPage(currentPage-1)">‹</button>
   <div class="pager-pages" id="pager-pages"></div>
@@ -405,10 +411,12 @@ function getH(extra) {
   return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(token||KEY),'Content-Type':'application/json'}, extra||{});
 }
 
-let currentPage=1,pageSize=100,totalCount=0,totalPages=1;
-let sortCol='raw_cluster',sortDir='asc';
+let sortCol='raw_cluster', sortDir='asc';
 let filterTimer=null;
-let currentRows=[];
+let allRows=[];        // full server dataset for current (lastCluster, lastCode) combo
+let currentRows=[];    // client-side filtered view of allRows
+let isPreview=true;    // true = only first 50 rows loaded, no cluster/code filter active
+let lastCluster='', lastCode=''; // tracks what combination is currently loaded server-side
 let selectedKeys=new Set();
 let modalType='release';
 let villaMap={};
@@ -424,8 +432,10 @@ let existingRequests={};
 
 // ─── INIT ──────────────────────────────────────────
 async function init(){
-  await Promise.all([populateFilters(),loadVillaMap(),loadClearanceActivities()]);
-  loadData();
+  showLoading(true,'Initializing…');
+  await Promise.all([populateFilters(), loadVillaMap(), loadClearanceActivities()]);
+  await loadExistingRequests();
+  fetchPreview();
 }
 
 async function loadVillaMap(){
@@ -446,15 +456,17 @@ async function loadClearanceActivities(){
   const d=await r.json();if(Array.isArray(d))d.forEach(c=>clrActivityMap[c.clearance_code]=c.id);
 }
 
+// Called once on init and after submitting requests — not on every filter change
 async function loadExistingRequests(){
-  const r=await fetch(`${SB}/rest/v1/clearance_release_requests?select=villa_id,clearance_activity_id,status,request_type&order=created_at.desc&limit=5000`,{headers:getH()});
-  const d=await r.json();existingRequests={};
-  if(Array.isArray(d))d.forEach(req=>{const k=req.villa_id+'_'+req.clearance_activity_id;if(!existingRequests[k])existingRequests[k]=req;});
+  try{
+    const r=await fetch(`${SB}/rest/v1/clearance_release_requests?select=villa_id,clearance_activity_id,status,request_type&order=created_at.desc&limit=5000`,{headers:getH()});
+    const d=await r.json();existingRequests={};
+    if(Array.isArray(d))d.forEach(req=>{const k=req.villa_id+'_'+req.clearance_activity_id;if(!existingRequests[k])existingRequests[k]=req;});
+  }catch(e){console.error('loadExistingRequests',e);}
 }
 
 // ─── FILTERS ───────────────────────────────────────
 async function fetchAllPages(url){
-  // Paginate through all rows to get complete distinct sets
   let all=[],offset=0;
   while(true){
     const r=await fetch(`${url}&limit=1000&offset=${offset}`,{headers:getH()});
@@ -468,19 +480,16 @@ async function fetchAllPages(url){
 }
 
 async function populateFilters(){
-  // Clusters: query the clusters table directly — guaranteed distinct & complete
   const [clusterRows, codeRows, typeRows] = await Promise.all([
     fetch(`${SB}/rest/v1/clusters?select=code&order=code`,{headers:getH()}).then(r=>r.json()),
     fetchAllPages(`${SB}/rest/v1/clearance_import_log?select=raw_clearance_code,raw_activity_name&order=raw_clearance_code`),
     fetchAllPages(`${SB}/rest/v1/clearance_import_log?select=raw_villa_type&order=raw_villa_type`),
   ]);
 
-  // Clusters — from the clusters table (always complete)
   const clSel=document.getElementById('f-cluster');
   (Array.isArray(clusterRows)?clusterRows:[]).map(r=>r.code).filter(Boolean).sort()
     .forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;clSel.appendChild(o);});
 
-  // Clearance codes — deduplicated across all pages
   const codeSel=document.getElementById('f-code');
   const seen=new Set();
   codeRows.filter(r=>r.raw_clearance_code).sort((a,b)=>a.raw_clearance_code.localeCompare(b.raw_clearance_code))
@@ -488,54 +497,45 @@ async function populateFilters(){
       const o=document.createElement('option');o.value=r.raw_clearance_code;
       o.textContent=r.raw_clearance_code+(r.raw_activity_name?' — '+r.raw_activity_name:'');codeSel.appendChild(o);});
 
-  // Villa types — deduplicated across all pages
   const vtSel=document.getElementById('f-vtype');
   [...new Set(typeRows.map(r=>r.raw_villa_type).filter(Boolean))].sort()
     .forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;vtSel.appendChild(o);});
 }
 
-function buildQuery(forExport=false){
+// ─── SERVER QUERY BUILDER (cluster + code + sort only) ─────────────────────
+// Status, villa type, villa no, ref are applied client-side after loading
+function buildServerQuery(fc, fco){
   let q='clearance_import_log?select=raw_cluster,raw_villa_no,raw_villa_type,raw_clearance_code,raw_activity_name,normalised_status,reference_number,clearance_received_date,clearance_released_date,raw_status,remarks,villa_id,clearance_activity_id';
-  const fc=document.getElementById('f-cluster').value;
-  const fco=document.getElementById('f-code').value;
-  const fs=document.getElementById('f-status').value;
-  const fv=document.getElementById('f-vtype').value;
-  const fvn=(document.getElementById('f-villa').value||'').trim();
-  const fr=(document.getElementById('f-ref').value||'').trim();
   if(fc) q+=`&raw_cluster=eq.${encodeURIComponent(fc)}`;
   if(fco) q+=`&raw_clearance_code=eq.${encodeURIComponent(fco)}`;
-  if(fs) q+=`&normalised_status=eq.${encodeURIComponent(fs)}`;
-  const vtSel=document.getElementById('f-vtype');
-  const selectedTypes=vtSel?Array.from(vtSel.selectedOptions).map(o=>o.value).filter(v=>v):[];
-  if(selectedTypes.length===1) q+=`&raw_villa_type=eq.${encodeURIComponent(selectedTypes[0])}`;
-  else if(selectedTypes.length>1) q+=`&raw_villa_type=in.(${selectedTypes.map(v=>encodeURIComponent(v)).join(',')})`;
-  if(fvn){
-    if(fvn.startsWith('0')){q+=`&raw_villa_no=eq.${parseInt(fvn)}`;}  // 015 → exact match villa 15
-    else if(!isNaN(parseInt(fvn))) q+=`&raw_villa_no=ilike.*${encodeURIComponent(fvn)}*`; // 15 → substring (15,115,215...)
-  }
-  if(fr) q+=`&reference_number=ilike.*${encodeURIComponent(fr)}*`;
   q+=`&order=${sortCol}.${sortDir}`;
   return q;
 }
 
-function onFilterChange(){clearTimeout(filterTimer);filterTimer=setTimeout(()=>{selectedKeys.clear();updateBulkBar();loadData();},400);}
-function clearFilters(){
-  ['f-cluster','f-code','f-status'].forEach(id=>document.getElementById(id).value='');
-  const vtEl=document.getElementById('f-vtype');
-  if(vtEl) Array.from(vtEl.options).forEach(o=>o.selected=o.value==='');
-  ['f-villa','f-ref'].forEach(id=>document.getElementById(id).value='');
-  selectedKeys.clear();updateBulkBar();loadData();
+// ─── FETCH: PREVIEW (first 50, no cluster/code) ────────────────────────────
+async function fetchPreview(){
+  showLoading(true,'Loading…');
+  try{
+    const r=await fetch(`${SB}/rest/v1/${buildServerQuery('','')}&limit=50`,{headers:getH()});
+    if(!r.ok) throw new Error(r.status);
+    const d=await r.json();
+    allRows=Array.isArray(d)?d:[];
+    isPreview=true; lastCluster=''; lastCode='';
+    applyClientFilters();
+    showPreviewBanner(true);
+  }catch(e){console.error(e);showToast('Failed to load data','err');}
+  finally{showLoading(false);}
 }
 
-// ─── LOAD ALL ROWS ──────────────────────────────────
-async function loadData(){
+// ─── FETCH: ALL ROWS for cluster + code combo ──────────────────────────────
+async function fetchAll(fc, fco){
   showLoading(true,'Loading clearances…');
-  await loadExistingRequests();
   try{
     let all=[],offset=0;
     while(true){
-      const q=buildQuery(true)+'&limit=1000&offset='+offset;
+      const q=buildServerQuery(fc,fco)+`&limit=1000&offset=${offset}`;
       const r=await fetch(`${SB}/rest/v1/${q}`,{headers:getH()});
+      if(!r.ok) throw new Error(r.status);
       const batch=await r.json();
       if(!Array.isArray(batch)||!batch.length) break;
       all=all.concat(batch);
@@ -543,18 +543,76 @@ async function loadData(){
       offset+=1000;
       showLoading(true,`Loading… ${all.length.toLocaleString()} records`);
     }
-    totalCount=all.length;
-    currentRows=all;
-    renderTable(currentRows);
-    document.getElementById('total-badge').textContent=totalCount.toLocaleString();
-    document.getElementById('result-info').textContent=totalCount.toLocaleString()+' records';
-    const empty=!currentRows.length;
-    document.getElementById('empty').style.display=empty?'flex':'none';
-    document.getElementById('main-table').style.display=empty?'none':'';
-    document.querySelector('.pager').style.display='none';
-  }catch(e){console.error(e);}
+    allRows=all; isPreview=false; lastCluster=fc; lastCode=fco;
+    applyClientFilters();
+    showPreviewBanner(false);
+  }catch(e){console.error(e);showToast('Failed to load data','err');}
   finally{showLoading(false);}
 }
+
+// ─── CLIENT-SIDE FILTER (runs on every non-cluster/code filter change) ─────
+function applyClientFilters(){
+  const fs=document.getElementById('f-status').value;
+  const fvnRaw=(document.getElementById('f-villa').value||'').trim();
+  const fr=(document.getElementById('f-ref').value||'').trim();
+  const vtSel=document.getElementById('f-vtype');
+  const selectedTypes=vtSel?Array.from(vtSel.selectedOptions).map(o=>o.value).filter(v=>v):[];
+  // Villa number: exact integer match (raw_villa_no is an integer column)
+  const fvnInt=fvnRaw&&!isNaN(parseInt(fvnRaw))?parseInt(fvnRaw):null;
+
+  currentRows=allRows.filter(r=>{
+    if(fs && r.normalised_status!==fs) return false;
+    if(selectedTypes.length>0 && !selectedTypes.includes(r.raw_villa_type)) return false;
+    if(fvnInt!==null && r.raw_villa_no!==fvnInt) return false;
+    if(fr && !(r.reference_number||'').toLowerCase().includes(fr.toLowerCase())) return false;
+    return true;
+  });
+
+  renderTable(currentRows);
+  const cnt=currentRows.length;
+  document.getElementById('total-badge').textContent=cnt.toLocaleString();
+  document.getElementById('result-info').textContent=isPreview
+    ?`${cnt} of 50 preview rows`
+    :`${cnt.toLocaleString()} / ${allRows.length.toLocaleString()} loaded`;
+  const empty=!currentRows.length;
+  document.getElementById('empty').style.display=empty?'flex':'none';
+  document.getElementById('main-table').style.display=empty?'none':'';
+}
+
+function showPreviewBanner(show){
+  const b=document.getElementById('preview-banner');
+  if(b) b.style.display=show?'flex':'none';
+}
+
+// ─── SMART FILTER CHANGE HANDLER ──────────────────────────────────────────
+// If cluster or code changed → server fetch; otherwise → client-side only
+function onFilterChange(){
+  clearTimeout(filterTimer);
+  filterTimer=setTimeout(()=>{
+    const fc=document.getElementById('f-cluster').value;
+    const fco=document.getElementById('f-code').value;
+    selectedKeys.clear(); updateBulkBar();
+    if(fc!==lastCluster || fco!==lastCode){
+      // Cluster or clearance code changed — must reload from server
+      if(!fc && !fco) fetchPreview();
+      else fetchAll(fc, fco);
+    } else {
+      // Only status / villa type / villa no / ref changed — filter client-side instantly
+      applyClientFilters();
+    }
+  }, 300);
+}
+
+function clearFilters(){
+  ['f-cluster','f-code','f-status'].forEach(id=>document.getElementById(id).value='');
+  const vtEl=document.getElementById('f-vtype');
+  if(vtEl) Array.from(vtEl.options).forEach(o=>o.selected=o.value==='');
+  ['f-villa','f-ref'].forEach(id=>document.getElementById(id).value='');
+  selectedKeys.clear(); updateBulkBar();
+  fetchPreview(); // always go back to preview when all filters cleared
+}
+
+// ─── LOADING INDICATOR ────────────────────────────────────────────────────
 function showLoading(v,msg){
   document.getElementById('loading').classList.toggle('hidden',!v);
   if(msg) document.getElementById('loading-msg').textContent=msg;
@@ -636,13 +694,24 @@ function updateBulkBar(){
 
 function clearSelection(){selectedKeys.clear();renderTable(currentRows);updateBulkBar();}
 
-// ─── SORT / PAGE ───────────────────────────────────
+// ─── SORT ──────────────────────────────────────────
+// In preview mode: re-fetch 50 rows with new sort from server
+// With full dataset loaded: sort allRows client-side (instant, no network)
 function setSort(col){
   if(sortCol===col) sortDir=sortDir==='asc'?'desc':'asc'; else{sortCol=col;sortDir='asc';}
-  loadData();
+  if(isPreview){
+    fetchPreview();
+  } else {
+    const dir=sortDir==='asc'?1:-1;
+    allRows.sort((a,b)=>{
+      const av=a[col]??'', bv=b[col]??'';
+      if(col==='raw_villa_no') return ((+av)-(+bv))*dir;
+      return String(av).localeCompare(String(bv))*dir;
+    });
+    applyClientFilters();
+  }
 }
-function goPage(p){loadData();}
-function renderPager(){/* no-op — all rows shown */}
+function goPage(){}
 
 // ─── MODAL ─────────────────────────────────────────
 function openModal(type){
@@ -700,7 +769,10 @@ async function submitRequests(){
   closeModal();
   if(ok>0) showToast(`✅ ${ok} request${ok!==1?'s':''} submitted`+(fail>0?` · ${fail} failed`:''));
   else showToast(`Failed to submit (${fail} errors)`,'err');
-  selectedKeys.clear();loadData();
+  selectedKeys.clear();
+  // Refresh request badges without reloading the whole dataset
+  await loadExistingRequests();
+  applyClientFilters();
 }
 
 // ─── PRINT ─────────────────────────────────────────
@@ -711,9 +783,9 @@ function printView(){
   const fv=document.getElementById('f-villa').value;if(fv) filters.push('Villa: '+fv);
   const fr=document.getElementById('f-ref').value;if(fr) filters.push('Ref: '+fr);
   document.getElementById('ph-date').textContent='Printed: '+new Date().toLocaleString();
-  document.getElementById('ph-count').textContent=`${totalCount.toLocaleString()} records`;
-  document.getElementById('ph-page').textContent=`Showing all ${currentRows.length.toLocaleString()} rows`;
-  document.getElementById('ph-filters').textContent=filters.length?'Filters: '+filters.join(' · '):'No filters applied — showing all records';
+  document.getElementById('ph-count').textContent=`${currentRows.length.toLocaleString()} records`;
+  document.getElementById('ph-page').textContent=isPreview?'Preview (first 50 rows)':'All loaded records';
+  document.getElementById('ph-filters').textContent=filters.length?'Filters: '+filters.join(' · '):'No filters applied';
   window.print();
 }
 

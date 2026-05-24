@@ -435,6 +435,10 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="nl">User Management</span>
       </div>
+      <div class="nav perm-gate" id="nav-audit_log" data-label="Audit Log" data-perm="manage_system" onclick="go('audit_log')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+        <span class="nl">Audit Log</span>
+      </div>
 
       <div class="sb-sep"></div>
       <div class="sb-section-label">Keyplans</div>
@@ -521,6 +525,7 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-csv_import_tool"    title="Import DC CSV"></iframe>
       <iframe id="frame-reference_data"    title="Reference Data"></iframe>
       <iframe id="frame-user_management"   title="User Management"></iframe>
+      <iframe id="frame-audit_log"          title="Audit Log"></iframe>
       <iframe id="frame-keyplan_c1"         title="Cluster 1 Keyplan"></iframe>
       <iframe id="frame-keyplan_c2"         title="Cluster 2 Keyplan"></iframe>
       <iframe id="frame-keyplan_c3"         title="Cluster 3 Keyplan"></iframe>
@@ -551,6 +556,7 @@ const PAGES = {
   csv_import_tool:   { title:'Import DC CSV',        desc:'Import DC WIR & clearance data',        file:'csv_import_tool.html',    built:true },
   reference_data:    { title:'Reference Data',       desc:'WIR activities & clearance items',       file:'reference_data.html',     built:true },
   user_management:   { title:'User Management',      desc:'Manage team members, roles & access',    file:'user_management.html',    built:true },
+  audit_log:         { title:'Audit Log',            desc:'Full trail of database changes',          file:'audit_log.html',          built:true },
   keyplan_c1:        { title:'Cluster 1 Keyplan',    desc:'Interactive villa keyplan — C1',         file:'keyplan_c1.html',         built:true },
   keyplan_c2:        { title:'Cluster 2 Keyplan',    desc:'Interactive villa keyplan — C2',         file:'keyplan_c2.html',         built:true },
   keyplan_c3:        { title:'Cluster 3 Keyplan',    desc:'Interactive villa keyplan — C3',         file:'keyplan_c3.html',         built:true },
@@ -723,6 +729,7 @@ function preloadAllFrames() {
     'csv_import_tool',
     'reference_data',
     'user_management',
+    'audit_log',
     'keyplan_c1','keyplan_c2','keyplan_c3',
     'keyplan_c4','keyplan_c5','keyplan_c6','keyplan_c7',
   ];
@@ -897,11 +904,17 @@ function initRealtime(token) {
 
     realtimeChannel = realtimeClient
       .channel('data-updates')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dc_import_log' }, (payload) => {
-        // Only show once per batch (first insert triggers it)
+      // ── Broadcast listener: fires for ALL connected users when any uploader broadcasts ──
+      .on('broadcast', { event: 'data-refresh' }, ({ payload }) => {
+        const dt = payload?.dataType || 'wir';
+        const who = payload?.uploadedBy || '';
+        showUpdateBanner(dt, who);
+      })
+      // ── Postgres changes: fallback for direct DB inserts (requires table in realtime publication) ──
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dc_import_log' }, () => {
         showUpdateBanner('wir', null);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clearance_import_log' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clearance_import_log' }, () => {
         showUpdateBanner('clearance', null);
       })
       .subscribe((status) => {
@@ -944,19 +957,30 @@ function dismissBanner() {
 
 function refreshCurrentPage() {
   dismissBanner();
-  // Reload the active iframe
   const frame = document.getElementById('frame-' + currentPage);
-  if (frame && frame.src) {
-    frame.src = frame.src; // triggers reload
-    // Re-send session after reload
-    frame.onload = () => {
-      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-      try { frame.contentWindow.postMessage({ type: 'theme', theme }, '*'); } catch(e) {}
-      if (accessToken && currentUser) {
-        try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, '*'); } catch(e) {}
-      }
-    };
-  }
+  if (!frame) return;
+
+  // Re-send session + theme after the reload completes
+  frame.onload = () => {
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    try { frame.contentWindow.postMessage({ type: 'theme', theme }, '*'); } catch(e) {}
+    if (accessToken && currentUser) {
+      try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, '*'); } catch(e) {}
+    }
+  };
+
+  // Cache-bust: strip any previous _r param then append a fresh timestamp.
+  // This forces the browser to fetch a new copy instead of serving from cache.
+  try {
+    const base = (frame.src || '').split('?')[0];
+    if (base) {
+      frame.src = base + '?_r=' + Date.now();
+      return;
+    }
+  } catch(e) {}
+
+  // Fallback for edge cases
+  try { frame.contentWindow.location.reload(true); } catch(e) {}
 }
 
 // ── CLOCK ──
@@ -986,7 +1010,21 @@ window.addEventListener('message', function(e) {
 
   if (e.data.type === 'data_updated') {
     const who = e.data.uploadedBy || (currentUser ? currentUser.full_name : '');
-    showUpdateBanner(e.data.dataType || 'wir', who);
+    // Normalise dataType: dc_log_cleaner sends 'wir' or 'clr' — standardise to 'wir'/'clearance'
+    const dt = (e.data.dataType === 'wir') ? 'wir' : 'clearance';
+    showUpdateBanner(dt, who);
+    // ── Broadcast to ALL other connected users via Realtime channel ──
+    if (realtimeChannel) {
+      try {
+        realtimeChannel.send({
+          type: 'broadcast',
+          event: 'data-refresh',
+          payload: { dataType: dt, uploadedBy: who }
+        });
+      } catch(broadcastErr) {
+        console.warn('[Realtime] Broadcast failed:', broadcastErr);
+      }
+    }
     return;
   }
 

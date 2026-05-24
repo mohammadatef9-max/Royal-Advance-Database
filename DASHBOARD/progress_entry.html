@@ -388,7 +388,7 @@ body.in-shell header { display: none !important; }
             <button class="sum-tab" id="tab-prog" onclick="switchSumTab('prog')">🔄 In Progress</button>
             <button class="sum-tab" id="tab-wir" onclick="switchSumTab('wir')">📋 WIR Submission</button>
             <button class="sum-tab" id="tab-wirresp" onclick="switchSumTab('wirresp')">✔ WIR Response</button>
-            <button class="sum-tab" id="tab-ra" onclick="switchSumTab('ra')" style="color:#ec4899">🔴 RA Sub-Contractor</button>
+            <button class="sum-tab" id="tab-ra" onclick="switchSumTab('ra')" style="color:#ec4899">🔴 Royal Advance WIRs</button>
           </div>
 
           <div class="sum-wrap">
@@ -420,7 +420,7 @@ body.in-shell header { display: none !important; }
             </div>
             <div id="sum-ra-pane" style="display:none">
               <div style="display:flex;align-items:center;gap:8px;padding:6px 2px 8px">
-                <span style="font-size:11px;color:var(--text-muted)">WIRs raised by <b style="color:#ec4899">RA</b> sub-contractor in date range.</span>
+                <span style="font-size:11px;color:var(--text-muted)">WIRs raised by <b style="color:#ec4899">Royal Advance</b> sub-contractor in date range.</span>
                 <select id="ra-date-field" onchange="loadRaSummary()" style="font-size:11px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);padding:3px 8px;border-radius:5px">
                   <option value="submitted_date">By Submission Date</option>
                   <option value="response_date">By Response Date</option>
@@ -1074,10 +1074,10 @@ async function loadRaSummary(){
   document.getElementById('sum-ra-body').innerHTML=`<tr><td colspan="11" style="text-align:center;color:var(--text-faint);padding:16px">Loading…</td></tr>`;
 
   const dateLabel=dateField==='submitted_date'?'Submitted':'Responded';
-  if(document.getElementById('kpi-comp-lbl')) document.getElementById('kpi-comp-lbl').textContent='RA WIRs (Range)';
-  if(document.getElementById('kpi-prog-lbl')) document.getElementById('kpi-prog-lbl').textContent='RA WIRs Last 7d';
-  if(document.getElementById('kpi-7comp-lbl')) document.getElementById('kpi-7comp-lbl').textContent='RA Approved (Range)';
-  if(document.getElementById('kpi-7prog-lbl')) document.getElementById('kpi-7prog-lbl').textContent='RA Rejected (Range)';
+  if(document.getElementById('kpi-comp-lbl')) document.getElementById('kpi-comp-lbl').textContent='Royal Advance WIRs (Range)';
+  if(document.getElementById('kpi-prog-lbl')) document.getElementById('kpi-prog-lbl').textContent='Royal Advance WIRs Last 7d';
+  if(document.getElementById('kpi-7comp-lbl')) document.getElementById('kpi-7comp-lbl').textContent='Royal Advance Approved (Range)';
+  if(document.getElementById('kpi-7prog-lbl')) document.getElementById('kpi-7prog-lbl').textContent='Royal Advance Rejected (Range)';
 
   try{
     let url=`dc_import_log?select=raw_activity_code,raw_activity_name,raw_cluster,normalised_status,submitted_date,response_date&match_status=eq.matched&raw_subcontractor=eq.RA`;
@@ -1122,7 +1122,7 @@ async function loadRaSummary(){
         <td class="num" style="color:var(--text);font-weight:700">${rowTotal}</td>
       </tr>`;
     });
-    if(!html) html=`<tr><td colspan="11" style="color:var(--text-faint);text-align:center;padding:16px">No RA WIRs in this date range</td></tr>`;
+    if(!html) html=`<tr><td colspan="11" style="color:var(--text-faint);text-align:center;padding:16px">No Royal Advance WIRs in this date range</td></tr>`;
     else html+=`<tr class="total-row"><td>Total</td>
       ${CLUSTERS.map(c=>`<td class="num">${acts.reduce((s,a)=>s+(groups[a][c]||0),0)||'—'}</td>`).join('')}
       <td class="num" style="color:var(--st-approved-tx)">${acts.reduce((s,a)=>s+groups[a].ap,0)||'—'}</td>
@@ -1143,67 +1143,166 @@ function exportCSV(mode){
   const start=document.getElementById('sum-start').value;
   const end=document.getElementById('sum-end').value;
   const today=new Date().toISOString().split('T')[0];
-  let rows, headers, filename;
 
-  if(activeSumTab==='wir'||activeSumTab==='wirresp'||activeSumTab==='ra'){
-    // Export WIR data
-    const src=activeSumTab==='wir'?cachedWirRows:activeSumTab==='wirresp'?cachedWirRespRows:cachedRaRows;
-    if(!src.length){alert('No WIR data loaded. Switch to the WIR tab first.');return;}
-    headers=['Cluster','Activity Code','Activity Name','Status','Submitted Date','Response Date'];
-    filename=activeSumTab==='wir'?'wir_submissions':'wir_responses';
-    // Apply date filter
-    const dateField=activeSumTab==='wir'?'submitted_date':'response_date';
-    rows=src.filter(r=>{
-      const d=r[dateField];
-      return (!start||!d||d>=start)&&(!end||!d||d<=end);
-    });
-    const csvRows=[headers.join(','),...rows.map(r=>[
-      r.raw_cluster||'',
-      r.raw_activity_code||'',
-      '"'+(r.raw_activity_name||'').replace(/"/g,'""')+'"',
-      r.normalised_status||'',
-      r.submitted_date||'',
-      r.response_date||''
-    ].join(','))];
-    const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
-    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${filename}_${today}.csv`});
+  // ── helpers ──
+  function q(s){return '"'+(s||'').toString().replace(/"/g,'""')+'"';}
+
+  function triggerDownload(lines,filename){
+    const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+    const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:filename+'_'+today+'.csv'});
     a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  function filterSiteByDate(rows,s,e,statusVal){
+    return rows.filter(r=>{
+      if(r.status!==statusVal) return false;
+      const d=r.finish_date||(r.updated_at||'').split('T')[0];
+      if(!d) return false;
+      return (!s||d>=s)&&(!e||d<=e);
+    });
+  }
+
+  // Build Activity × Cluster summary section (Completed / In Progress)
+  function buildSiteSection(label,rows){
+    if(!rows.length) return [];
+    const actGroups={};
+    rows.forEach(r=>{
+      const act=resolveActivityName(r);
+      const cl=r.villas?.clusters?.code||'—';
+      if(!actGroups[act]) actGroups[act]={};
+      actGroups[act][cl]=(actGroups[act][cl]||0)+1;
+    });
+    const acts=Object.keys(actGroups).sort();
+    const lines=['=== '+label+' ===',['Activity',...CLUSTERS,'Total'].join(',')];
+    const colTotals={};
+    let grandTotal=0;
+    acts.forEach(act=>{
+      const rowTotal=CLUSTERS.reduce((s,c)=>s+(actGroups[act][c]||0),0);
+      grandTotal+=rowTotal;
+      CLUSTERS.forEach(c=>{colTotals[c]=(colTotals[c]||0)+(actGroups[act][c]||0);});
+      lines.push([q(act),...CLUSTERS.map(c=>actGroups[act][c]||0),rowTotal].join(','));
+    });
+    lines.push(['Total',...CLUSTERS.map(c=>colTotals[c]||0),grandTotal].join(','));
+    return lines;
+  }
+
+  // Build Activity × Cluster summary section (WIR Submission)
+  function buildWirSection(label,rows){
+    if(!rows.length) return [];
+    const groups={};
+    rows.forEach(r=>{
+      const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+      const cl=r.raw_cluster||'—';
+      if(!groups[act]) groups[act]={};
+      groups[act][cl]=(groups[act][cl]||0)+1;
+    });
+    const acts=Object.keys(groups).sort();
+    const lines=['=== '+label+' ===',['Activity',...CLUSTERS,'Total'].join(',')];
+    const colTotals={};
+    let grandTotal=0;
+    acts.forEach(act=>{
+      const rowTotal=CLUSTERS.reduce((s,c)=>s+(groups[act][c]||0),0);
+      grandTotal+=rowTotal;
+      CLUSTERS.forEach(c=>{colTotals[c]=(colTotals[c]||0)+(groups[act][c]||0);});
+      lines.push([q(act),...CLUSTERS.map(c=>groups[act][c]||0),rowTotal].join(','));
+    });
+    lines.push(['Total',...CLUSTERS.map(c=>colTotals[c]||0),grandTotal].join(','));
+    return lines;
+  }
+
+  // Build Activity × Status summary section (WIR Response)
+  function buildWirRespSection(label,rows){
+    if(!rows.length) return [];
+    const groups={};
+    rows.forEach(r=>{
+      const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+      const st=r.normalised_status||'unknown';
+      if(!groups[act]) groups[act]={};
+      groups[act][st]=(groups[act][st]||0)+1;
+    });
+    const acts=Object.keys(groups).sort();
+    const lines=['=== '+label+' ===',['Activity','Approved','Under Review','Rejected','Total'].join(',')];
+    let tAp=0,tUr=0,tRj=0;
+    acts.forEach(act=>{
+      const ap=groups[act]['approved']||0;
+      const ur=groups[act]['under_review']||0;
+      const rj=groups[act]['rejected']||0;
+      tAp+=ap; tUr+=ur; tRj+=rj;
+      lines.push([q(act),ap,ur,rj,ap+ur+rj].join(','));
+    });
+    lines.push(['Total',tAp,tUr,tRj,tAp+tUr+tRj].join(','));
+    return lines;
+  }
+
+  // Build Activity × Cluster + Approved/Rejected section (Royal Advance WIRs)
+  function buildRaSection(label,rows){
+    if(!rows.length) return [];
+    const groups={};
+    rows.forEach(r=>{
+      const act=(r.raw_activity_code||'?')+(r.raw_activity_name?' — '+r.raw_activity_name:'');
+      const cl=r.raw_cluster||'—';
+      const st=r.normalised_status||'';
+      if(!groups[act]) groups[act]={ap:0,rj:0};
+      if(!groups[act][cl]) groups[act][cl]=0;
+      groups[act][cl]++;
+      if(st==='approved') groups[act].ap++;
+      else if(st==='rejected') groups[act].rj++;
+    });
+    const acts=Object.keys(groups).sort();
+    const lines=['=== '+label+' ===',['Activity',...CLUSTERS,'Approved','Rejected','Total'].join(',')];
+    const colTotals={};
+    let tAp=0,tRj=0,grandTotal=0;
+    acts.forEach(act=>{
+      const rowTotal=CLUSTERS.reduce((s,c)=>s+(groups[act][c]||0),0);
+      grandTotal+=rowTotal;
+      tAp+=groups[act].ap; tRj+=groups[act].rj;
+      CLUSTERS.forEach(c=>{colTotals[c]=(colTotals[c]||0)+(groups[act][c]||0);});
+      lines.push([q(act),...CLUSTERS.map(c=>groups[act][c]||0),groups[act].ap,groups[act].rj,rowTotal].join(','));
+    });
+    lines.push(['Total',...CLUSTERS.map(c=>colTotals[c]||0),tAp,tRj,grandTotal].join(','));
+    return lines;
+  }
+
+  // ── individual tab exports ──
+  if(mode==='comp'){
+    const rows=filterSiteByDate(cachedRows,start,end,'completed');
+    const lines=buildSiteSection('COMPLETED',rows);
+    if(!lines.length){alert('No completed data in selected date range.');return;}
+    triggerDownload(lines,'completed_summary');
+    return;
+  }
+  if(mode==='prog'){
+    const rows=filterSiteByDate(cachedRows,start,end,'in_progress');
+    const lines=buildSiteSection('IN PROGRESS',rows);
+    if(!lines.length){alert('No in-progress data in selected date range.');return;}
+    triggerDownload(lines,'in_progress_summary');
     return;
   }
 
-  // Site progress export — filter by date range
-  function filterByDate(r,s,e){
-    const d=r.finish_date||(r.updated_at||'').split('T')[0];
-    return (!s||d>=s)&&(!e||d<=e);
-  }
+  // ── Export All: all 5 tabs in one file ──
+  const dateRange=start&&end?start+' to '+end:start?'from '+start:end?'to '+end:'all dates';
+  const allLines=['MEP Progress Summary Export — '+dateRange,''];
 
-  if(mode==='comp'){
-    rows=cachedRows.filter(r=>r.status==='completed'&&filterByDate(r,start,end));
-    filename='completed_progress';
-  } else if(mode==='prog'){
-    rows=cachedRows.filter(r=>r.status==='in_progress'&&filterByDate(r,start,end));
-    filename='in_progress';
-  } else {
-    rows=cachedRows.filter(r=>filterByDate(r,start,end));
-    filename='all_progress';
-  }
+  const compLines=buildSiteSection('COMPLETED',filterSiteByDate(cachedRows,start,end,'completed'));
+  if(compLines.length){allLines.push(...compLines,'');}
 
-  if(!rows.length){alert('No data in selected date range.');return;}
+  const progLines=buildSiteSection('IN PROGRESS',filterSiteByDate(cachedRows,start,end,'in_progress'));
+  if(progLines.length){allLines.push(...progLines,'');}
 
-  headers=['Cluster','Villa No','Activity','Status','Start Date','Finish Date','Updated At'];
-  const csvRows=[headers.join(','),...rows.map(r=>[
-    r.villas?.clusters?.code||'',
-    r.villas?.villa_no||r.villa_id||'',
-    '"'+resolveActivityName(r).replace(/"/g,'""')+'"',
-    r.status||'',
-    r.start_date||'',
-    r.finish_date||'',
-    (r.updated_at||'').split('T')[0]
-  ].join(','))];
+  const wirLines=buildWirSection('WIR SUBMISSIONS',cachedWirRows);
+  if(wirLines.length){allLines.push(...wirLines,'');}
+  else allLines.push('=== WIR SUBMISSIONS ===','(No data — visit WIR Submission tab first to load)','');
 
-  const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
-  const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(blob),download:`${filename}_${today}.csv`});
-  a.click(); URL.revokeObjectURL(a.href);
+  const wirRespLines=buildWirRespSection('WIR RESPONSES',cachedWirRespRows);
+  if(wirRespLines.length){allLines.push(...wirRespLines,'');}
+  else allLines.push('=== WIR RESPONSES ===','(No data — visit WIR Response tab first to load)','');
+
+  const raLines=buildRaSection('ROYAL ADVANCE WIRs',cachedRaRows);
+  if(raLines.length){allLines.push(...raLines,'');}
+  else allLines.push('=== ROYAL ADVANCE WIRs ===','(No data — visit Royal Advance WIRs tab first to load)','');
+
+  if(allLines.length<=2){alert('No data to export. Apply a date range first.');return;}
+  triggerDownload(allLines,'mep_summary_all');
 }
 
 // ── Ready to Submit ──
