@@ -155,6 +155,10 @@ tr.rh{display:none}
 .cw{min-width:82px;max-width:96px;cursor:pointer;display:flex;flex-direction:column;user-select:none}
 .cw:hover{filter:brightness(1.06)}
 [data-theme="light"] .cw:hover{filter:brightness(.96)}
+/* NCR / SOR — black cell override */
+.cw.ncr-warn{background:#0a0a0a!important;border-left:2px solid #ff4444!important;position:relative}
+.cw.ncr-warn .ct,.cw.ncr-warn .cm,.cw.ncr-warn .csb{opacity:.55}
+.cw.ncr-warn::after{content:"⚠";position:absolute;top:2px;right:3px;font-size:8px;color:#ff4444;line-height:1;pointer-events:none}
 [data-theme="light"] thead tr th[style*="background:#0f1c2e"]{background:#ecf0ff!important}
 [data-theme="light"] thead tr th[style*="background:#14192e"]{background:#f4eeff!important}
 .cro{cursor:default!important}.cro:hover{filter:none!important}
@@ -812,6 +816,7 @@ const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water sup
 let disc='mech';
 let COLS=COLS_MECH.map(c=>({...c}));
 let villas=[],wirD={},wirSubD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
+let ncrVillas=new Set(); // villa_ids with open / in-progress NCR or SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
 let rejOnly=false;
 let priRejOnly=false;
@@ -857,10 +862,16 @@ const calcReady=(vid,col)=>(col.prereqCodes||[]).length>0&&(col.prereqCodes||[])
 
 async function fa(p){let a=[],o=0;while(true){const r=await fetch(`${SB}/rest/v1/${p}&limit=1000&offset=${o}`,{headers:{...getH(),'Prefer':'count=none'}});const d=await r.json();if(!Array.isArray(d)||!d.length)break;a=a.concat(d);if(d.length<1000)break;o+=1000;}return a;}
 
-const LAYOUT_KEY='mep_tracker_v1';
+// Per-user layout key — each user gets their own column layout in the DB.
+// svUserId() is defined in the saved-views block below; it reads window.__MEP_USER__
+// which is set by the parent shell via postMessage before any awaited network calls
+// complete, so it is always populated by the time saveLayout/loadLayout run.
+function getLayoutKey(){return 'mep_tracker_v1:'+svUserId();}
+
 async function saveLayout(){
-  const payload={user_key:LAYOUT_KEY,discipline:disc,layout:JSON.stringify(COLS)};
-  const existing=await fa(`user_column_layouts?select=id&user_key=eq.${LAYOUT_KEY}&discipline=eq.${disc}`);
+  const key=getLayoutKey();
+  const payload={user_key:key,discipline:disc,layout:JSON.stringify(COLS)};
+  const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
   if(existing.length){
     await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:JSON.stringify(COLS)})});
   } else {
@@ -869,7 +880,8 @@ async function saveLayout(){
 }
 async function loadLayout(d){
   try{
-    const rows=await fa(`user_column_layouts?select=layout&user_key=eq.${LAYOUT_KEY}&discipline=eq.${d}`);
+    const key=getLayoutKey();
+    const rows=await fa(`user_column_layouts?select=layout&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${d}`);
     if(!rows.length)return false;
     const saved=JSON.parse(rows[0].layout);
     // Apply saved layout: use saved order/visibility/labels/codes but merge in any new default cols
@@ -887,14 +899,18 @@ async function loadLayout(d){
 function lm(msg){const el=document.getElementById("lm");if(el)el.textContent=msg;}
 async function init(){
   try{
-    // ── Batch 1: structure data (clusters + villas + activities) in parallel ──
+    // ── Batch 1: structure data (clusters + villas + activities + NCR) in parallel ──
     lm('Loading structure…');
-    const [clusters, vs, acts, clrs] = await Promise.all([
+    const [clusters, vs, acts, clrs, ncrRows] = await Promise.all([
       fa('clusters?select=id,code'),
       fa('villas?select=id,villa_no,villa_type,cluster_id,is_priority'),
       fa('activities?select=id,activity_code&is_active=eq.true'),
       fa('clearance_activities?select=id,clearance_code&is_active=eq.true'),
+      fa('ncr_sor_records?select=villa_id&is_active=eq.true&status=in.(open,in_progress)'),
     ]);
+    // Index open NCR villa IDs
+    ncrVillas.clear();
+    ncrRows.forEach(r=>{if(r.villa_id)ncrVillas.add(r.villa_id);});
 
     // Index clusters
     const clMap={};clusters.forEach(c=>clMap[c.id]=c.code);
@@ -1162,14 +1178,15 @@ function mkCell(vid,col){
     ? `<div class="csb"${subIsManual?' style="color:var(--st-progress-tx);font-style:italic" title="Manual entry — no WIR yet"':''}>${subDisp}${subIsManual?' ✎':''}</div>`
     : `<div class="csb" style="color:var(--text-faint)">—</div>`;
   const da=`data-clickable="1" data-vid="${vid}" data-code="${codes[0]||''}" data-codes="${codes.join(',')}" data-label="${col.label.replace('\n',' ').replace(/"/g,'')}" onclick="cellClick(event,this)"`;
+  const ncrCls=ncrVillas.has(vid)?' ncr-warn':'';
   if(col.type==='wir-only'){
-    return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
+    return `<td data-col="${col.key}" ${hid}><div class="cw${ncrCls}" ${da}>
       <div class="ct ${sc(wir)}" style="min-height:20px;display:flex;align-items:center;justify-content:center">${sl(wir)}</div>
       ${subHTML}
     </div></td>`;
   }
   const prog=colProg(vid,col);
-  return `<td data-col="${col.key}" ${hid}><div class="cw" ${da}>
+  return `<td data-col="${col.key}" ${hid}><div class="cw${ncrCls}" ${da}>
     <div class="ct ${sc(prog)}">${sl(prog)}</div>
     <div class="cm ${sc(wir)}">${sl(wir)}</div>
     ${subHTML}

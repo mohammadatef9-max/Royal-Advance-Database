@@ -77,9 +77,9 @@ body.space-down #map-viewport{cursor:grab}
   font-weight:800;line-height:1.05;box-sizing:border-box;overflow:hidden;
   border:2px solid transparent;transition:filter 0.15s,box-shadow 0.15s;
   transform-origin:center center;box-shadow:0 1px 3px rgba(0,0,0,0.25)}
-.villa.is-priority{box-shadow:0 0 0 2px #f59e0b,0 0 6px rgba(245,158,11,0.5)!important}
 .pri-star{position:absolute;font-size:11px;line-height:1;z-index:400;pointer-events:none;
   text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 2px #000;transform-origin:center center}
+
 .villa:hover{z-index:300;box-shadow:0 0 18px rgba(79,140,255,0.65);filter:brightness(1.15)}
 .villa .vinner{display:flex;flex-direction:column;align-items:center;justify-content:center;
   width:100%;height:100%;
@@ -100,6 +100,37 @@ body.space-down #map-viewport{cursor:grab}
 .villa.has-sub{border-width:2px}
 .villa.is-front{box-shadow:0 0 0 3px #ec4899,0 0 12px rgba(236,72,153,0.6),0 1px 3px rgba(0,0,0,0.4);animation:of-pulse 1.8s ease-in-out infinite}
 @keyframes of-pulse{0%,100%{box-shadow:0 0 0 3px #ec4899,0 0 8px rgba(236,72,153,0.5)}50%{box-shadow:0 0 0 3px #ec4899,0 0 18px rgba(236,72,153,0.9),0 0 30px rgba(236,72,153,0.4)}}
+/* NCR / SOR villa override */
+.villa.is-ncr{background:#0d0404!important;border-color:#ff4444!important;animation:ncr-pulse 2s ease-in-out infinite}
+@keyframes ncr-pulse{0%,100%{box-shadow:0 0 0 2px rgba(255,68,68,0.5),0 0 8px rgba(255,68,68,0.3)}50%{box-shadow:0 0 0 2px rgba(255,68,68,0.85),0 0 18px rgba(255,68,68,0.55)}}
+.villa.is-ncr .vnum{color:#ffaaaa!important;text-shadow:0 0 6px rgba(255,80,80,0.9)!important}
+/* NCR popup */
+#ncr-popup{position:fixed;z-index:600;background:#11151c;border:1px solid #5a1a1a;
+  border-radius:10px;min-width:240px;max-width:340px;max-height:360px;overflow:hidden;
+  box-shadow:0 12px 40px rgba(0,0,0,.85);display:none;flex-direction:column}
+.np-hdr{background:#1a0c0c;border-bottom:1px solid #5a1a1a;padding:10px 14px;
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.np-title{font-size:12px;font-weight:700;color:#ff8888;font-family:'JetBrains Mono',monospace}
+.np-close{background:none;border:none;color:#884444;font-size:14px;cursor:pointer;padding:0 4px;line-height:1}
+.np-close:hover{color:#ff8888}
+.np-body{overflow-y:auto;flex:1;padding:4px 0}
+.np-item{padding:8px 14px;border-bottom:1px solid rgba(90,26,26,0.5);cursor:default}
+.np-item:last-child{border-bottom:none}
+.np-row1{display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
+.np-ref{font-size:10px;font-weight:700;color:#ff8888;font-family:'JetBrains Mono',monospace}
+.np-badge{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700}
+.np-badge.ncr{background:#4a1515;color:#ff9999}
+.np-badge.sor{background:#15154a;color:#9999ff}
+.np-st{font-size:9px;margin-left:auto;font-weight:600}
+.np-st.open{color:#ff8888}.np-st.in_progress{color:#f4c95a}.np-st.closed{color:#6ee2a3}
+.np-itemtitle{font-size:11px;color:#d1d5db;line-height:1.4;word-break:break-word}
+.np-act{font-size:10px;color:#475569;margin-top:2px}
+/* NCR sidebar block */
+.ncr-block{background:#1a0c0c;border-radius:6px;padding:8px;display:none;border:1px solid #5a1a1a;margin-top:4px}
+.ncr-block.visible{display:block}
+.ncr-block-title{font-size:9px;color:#ff8888;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:4px}
+.ncr-stat-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:2px 0}
+.ncr-val{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:14px;color:#ff8888}
 #tooltip{position:fixed;display:none;z-index:500;background:var(--bg-elev);
   border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:180px;
   box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:none}
@@ -191,7 +222,6 @@ body.space-down #map-viewport{cursor:grab}
     <option value="A4">A4 Landscape</option>
     <option value="A3">A3 Landscape</option>
   </select>
-  <input type="number" id="print-scale" value="100" min="50" max="150" step="5" title="Print map scale %" class="tbtn" style="width:54px;text-align:center;padding:4px 5px;font-size:11px"><span class="tl" style="font-size:11px;margin-left:-4px">%</span>
   <button class="tbtn" onclick="doPrint()">&#128424; Print</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="zoomBy(1.25)" title="Zoom in (Ctrl+wheel)">&#128269;+</button>
@@ -237,6 +267,13 @@ body.space-down #map-viewport{cursor:grab}
       <div class="of-row"><span>Open Fronts</span><span class="of-val" id="of-count">0</span></div>
       <div class="of-row" style="font-size:9px;color:var(--muted);margin-top:2px">
         <span id="of-rule">(clearance code 1 + 2)</span>
+      </div>
+    </div>
+    <div id="ncr-block" class="ncr-block">
+      <div class="ncr-block-title">&#9888; Open NCR / SOR</div>
+      <div class="ncr-stat-row"><span>Active</span><span class="ncr-val" id="ncr-count">0</span></div>
+      <div class="ncr-stat-row" style="font-size:9px;color:#884444;margin-top:2px">
+        <span>Click a black villa for details</span>
       </div>
     </div>
     <div id="cmp-leg2" style="display:none">
@@ -292,6 +329,17 @@ body.space-down #map-viewport{cursor:grab}
   <div class="tt-row"><span class="tt-lbl">Villa Type</span><span class="tt-val" id="tt-type">&#8212;</span></div>
   <div class="tt-row"><span class="tt-lbl">Activity</span><span class="tt-val" id="tt-act" style="font-size:10px">&#8212;</span></div>
   <div class="tt-row" id="tt-front-row" style="display:none"><span class="tt-lbl">Open Front?</span><span class="tt-val" id="tt-front" style="color:var(--open-front);font-weight:800">&#8212;</span></div>
+  <div id="tt-ncr-sep" style="display:none;border-top:1px solid rgba(255,68,68,0.3);margin:6px 0 2px"></div>
+  <div class="tt-row" id="tt-ncr-row" style="display:none"><span class="tt-lbl" style="color:#ff8888">&#9888; NCR/SOR</span><span class="tt-val" id="tt-ncr" style="color:#ff8888;font-weight:700">&#8212;</span></div>
+  <div id="tt-ncr-hint" style="display:none;font-size:9px;color:#884444;margin-top:2px;text-align:right">click for details</div>
+</div>
+
+<div id="ncr-popup">
+  <div class="np-hdr">
+    <span class="np-title" id="np-title">Villa &#8212;</span>
+    <button class="np-close" id="np-close-btn">&#10005;</button>
+  </div>
+  <div class="np-body" id="np-body"></div>
 </div>
 
 <script>
@@ -313,6 +361,7 @@ var currentMode='wir', currentActivity='', showSubLabels=false;
 var hiddenStatus=[], hiddenSubs=[], subColorMap={}, subRenameMap={};
 var compareMode=false, currentActivity2='';
 var openFrontVillas=new Set();
+var ncrVillaMap={}; // key=villa_no string → [{record...}]
 
 function getH(){
   var t=window.__MEP_TOKEN__;
@@ -374,12 +423,14 @@ function renderVillas(dm, dm2){
       var cls='villa s-'+st;
       if(color)cls+=' has-sub';
       if(openFrontVillas.has(vNum))cls+=' is-front';
-      if(priorityVillas.has(vNum))cls+=' is-priority';
+
+      if(ncrVillaMap[vNum]&&ncrVillaMap[vNum].length>0)cls+=' is-ncr';
       if(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub)))cls+=' filter-hidden';
       var style=baseStyle;
       var innerStyle='transform:rotate('+(-angle)+'deg);';
       var inner='<div class="vinner" style="'+innerStyle+'"><span class="vnum">'+vNum+'</span></div>'+(color&&showSubLabels?'<div class="vsub-stripe" style="background:'+color+'"></div>':'');
       var attrs=' data-v="'+vNum+'" data-s="'+st+'" data-sub="'+(sub||'—').replace(/"/g,'&quot;')+'" data-type="'+(d?(d.type||'—'):'—').replace(/"/g,'&quot;')+'"';
+      if(priorityVillas.has(vNum))cls+=' is-priority';
       html+='<div class="'+cls+'" style="'+style+'"'+attrs+'>'+inner+'</div>';
     }
   }
@@ -389,12 +440,12 @@ function renderVillas(dm, dm2){
       if(!priorityVillas.has(vNum)) return;
       var pos=VILLAS[vNum];
       var angle=VILLA_ANGLES[parseInt(vNum)]||0;
-      var star=document.createElement('span');
-      star.className='pri-star';
       var rad=angle*Math.PI/180;
       var ox=23, oy=-16;
       var rx=ox*Math.cos(rad)-oy*Math.sin(rad);
       var ry=ox*Math.sin(rad)+oy*Math.cos(rad);
+      var star=document.createElement('span');
+      star.className='pri-star';
       star.style.left=(pos.x+rx-6)+'px';
       star.style.top=(pos.y+ry-6)+'px';
       star.textContent='⭐';
@@ -704,12 +755,65 @@ document.getElementById('villa-layer').addEventListener('mouseover',function(e){
   var isFront=openFrontVillas.has(vNum);
   frontRow.style.display=isFront?'flex':'none';
   if(isFront)document.getElementById('tt-front').textContent='Yes — clearance pending';
+  // NCR / SOR
+  var ncrRecs=ncrVillaMap[vNum]||[];
+  var ncrSep=document.getElementById('tt-ncr-sep');
+  var ncrRow=document.getElementById('tt-ncr-row');
+  var ncrHint=document.getElementById('tt-ncr-hint');
+  if(ncrRecs.length>0){
+    var openC=ncrRecs.filter(function(r){return r.status==='open';}).length;
+    var ipC=ncrRecs.filter(function(r){return r.status==='in_progress';}).length;
+    var parts=[];if(openC)parts.push(openC+' Open');if(ipC)parts.push(ipC+' In Progress');
+    document.getElementById('tt-ncr').textContent=(parts.join(', ')||ncrRecs.length+' active')+' — click';
+    ncrSep.style.display='';ncrRow.style.display='flex';ncrHint.style.display='block';
+  } else {
+    ncrSep.style.display='none';ncrRow.style.display='none';ncrHint.style.display='none';
+  }
   tip.style.display='block';
 });
 document.getElementById('villa-layer').addEventListener('mousemove',function(e){
   tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY-10)+'px';
 });
 document.getElementById('villa-layer').addEventListener('mouseleave',function(){tip.style.display='none';});
+
+/* ===== NCR POPUP ===== */
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+document.getElementById('villa-layer').addEventListener('click',function(e){
+  var v=e.target.closest('.villa');
+  if(!v||v.classList.contains('filter-hidden'))return;
+  var vNum=v.getAttribute('data-v');
+  var recs=ncrVillaMap[vNum];
+  if(!recs||!recs.length)return;
+  e.stopPropagation();
+  tip.style.display='none';
+  var pop=document.getElementById('ncr-popup');
+  document.getElementById('np-title').textContent='Villa '+vNum+' — NCR / SOR';
+  var stLabels={open:'Open',in_progress:'In Progress',closed:'Closed'};
+  document.getElementById('np-body').innerHTML=recs.map(function(r){
+    var stCls=r.status.replace('_','');
+    return '<div class="np-item">'
+      +'<div class="np-row1">'
+      +'<span class="np-ref">'+(r.reference_no||'&#8212;')+'</span>'
+      +'<span class="np-badge '+r.record_type.toLowerCase()+'">'+r.record_type+'</span>'
+      +'<span class="np-st '+stCls+'">'+(stLabels[r.status]||r.status)+'</span>'
+      +'</div>'
+      +'<div class="np-itemtitle">'+escHtml(r.title)+'</div>'
+      +(r.activity_code?'<div class="np-act">'+escHtml(r.activity_code+(r.activity_name?' — '+r.activity_name:''))+'</div>':'')
+      +(r.raised_date?'<div class="np-act">Raised: '+r.raised_date+'</div>':'')
+      +'</div>';
+  }).join('');
+  pop.style.display='flex';
+  var px=Math.min(e.clientX+12,window.innerWidth-360);
+  var py=Math.min(e.clientY-12,window.innerHeight-380);
+  pop.style.left=px+'px';pop.style.top=Math.max(8,py)+'px';
+});
+document.getElementById('np-close-btn').addEventListener('click',function(){
+  document.getElementById('ncr-popup').style.display='none';
+});
+document.addEventListener('click',function(e){
+  var pop=document.getElementById('ncr-popup');
+  if(pop&&pop.style.display!=='none'&&!pop.contains(e.target)){pop.style.display='none';}
+});
 
 /* ===== PRINT ===== */
 function doPrint(){
@@ -771,56 +875,30 @@ function doPrint(){
   var pageStyle=document.getElementById('_kp_page_style');
   if(!pageStyle){pageStyle=document.createElement('style');pageStyle.id='_kp_page_style';document.head.appendChild(pageStyle);}
   pageStyle.textContent='@page{size:'+(paper==='A3'?'A3':'A4')+' landscape;margin:8mm}';
-  var MM=96/25.4,isA3=paper==='A3';
-  var usableW=((isA3?420:297)-24)*MM,usableH=((isA3?297:210)-24)*MM,mapH=usableH-50-10-2;
-  var autoScale=Math.min(usableW/IMG_W,(mapH-10)/IMG_H);
-  var userPct=parseFloat(document.getElementById('print-scale')?.value)||100;
-  var _saved=_ppLoad();
-  var iS=_saved?autoScale*(_saved.pct/100):autoScale*(userPct/100);
-  var iX=_saved?_saved.ox:(usableW-IMG_W*iS)/2, iY=_saved?_saved.oy:0;
-  _ppState={layer:null,mw:null,autoScale:autoScale,scale:iS,ox:iX,oy:iY,iS:iS,iX:iX,iY:iY,lW:IMG_W,lH:IMG_H,drag:null};
-  _ppShowControls(_saved?_saved.pct:userPct);
+  var MM=96/25.4, isA3=paper==='A3';
+  var usableW=((isA3?420:297)-24)*MM, usableH=((isA3?297:210)-24)*MM;
+  var mapH=usableH-90; // ~60px header + ~30px legend
+  // Compute exact bounding box from actual villa positions
+  var vXs=Object.values(VILLAS).map(function(v){return v.x;});
+  var vYs=Object.values(VILLAS).map(function(v){return v.y;});
+  var pad=30;
+  var vMinX=Math.min.apply(null,vXs)-pad, vMaxX=Math.max.apply(null,vXs)+pad;
+  var vMinY=Math.min.apply(null,vYs)-pad, vMaxY=Math.max.apply(null,vYs)+pad;
+  var vW=vMaxX-vMinX, vH=vMaxY-vMinY;
+  var scale=Math.min(usableW/vW, mapH/vH);
+  var ox=(usableW-vW*scale)/2-vMinX*scale;
+  var oy=(mapH-vH*scale)/2-vMinY*scale;
   requestAnimationFrame(function(){
     var layer=document.getElementById('pp-layer-inner'),mw=pp.querySelector('.pp-map-wrap');
-    _ppState.layer=layer;_ppState.mw=mw;
-    applyPPTransform();
-    mw.style.cursor='grab';mw.style.userSelect='none';
-    mw.addEventListener('mousedown',onPPDragStart);
+    if(layer){layer.style.transformOrigin='0 0';layer.style.transform='translate('+ox.toFixed(1)+'px,'+oy.toFixed(1)+'px) scale('+scale.toFixed(5)+')';}
+    if(mw){mw.style.height=mapH+'px';mw.style.flex='none';}
+    window.print();
+    setTimeout(function(){var p=document.getElementById('print-page');if(p)p.parentNode.removeChild(p);},1500);
   });
 }
-var _ppState=null;
-function _ppShowControls(pct){
-  var old=document.getElementById('pp-controls');if(old)old.parentNode.removeChild(old);
-  if(!document.getElementById('_pp_ctrl_style')){var s=document.createElement('style');s.id='_pp_ctrl_style';s.textContent='@media print{#pp-controls{display:none!important}}';document.head.appendChild(s);}
-  var c=document.createElement('div');c.id='pp-controls';
-  c.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(11,14,20,.93);border:1px solid #2a3340;border-radius:12px;padding:10px 18px;display:flex;align-items:center;gap:14px;z-index:99999;color:#e6e9ef;font-family:Inter,sans-serif;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.7);backdrop-filter:blur(8px);white-space:nowrap';
-  c.innerHTML='<span style="font-weight:700;color:#93b6ff">&#128424; Print Preview</span>'
-    +'<div style="display:flex;align-items:center;gap:7px"><span style="color:#8a93a3">Scale</span>'
-    +'<button onclick="ppScaleAdj(-5)" style="width:26px;height:26px;background:#1a2030;border:1px solid #2a3340;color:#e6e9ef;border-radius:5px;cursor:pointer;font-size:17px;line-height:1;padding:0">&#8722;</button>'
-    +'<span id="pp-scale-val" style="font-family:monospace;width:42px;text-align:center;color:#93b6ff;font-weight:700">'+(Math.round(pct)||100)+'%</span>'
-    +'<button onclick="ppScaleAdj(5)" style="width:26px;height:26px;background:#1a2030;border:1px solid #2a3340;color:#e6e9ef;border-radius:5px;cursor:pointer;font-size:17px;line-height:1;padding:0">+</button></div>'
-    +'<span style="color:#5b6373;font-size:11px">&#8645; Drag map to reposition</span>'
-    +'<button onclick="resetPrintPreview()" style="padding:5px 11px;background:#1a2030;border:1px solid #2a3340;color:#8a93a3;border-radius:6px;cursor:pointer;font-size:11px">&#8635; Reset</button>'
-    +'<button onclick="executePrint()" style="padding:5px 14px;background:#14532d;border:1px solid #15803d;color:#6ee2a3;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">&#128424; Print</button>'
-    +'<button onclick="closePrintPreview()" style="padding:5px 11px;background:#1a2030;border:1px solid #2a3340;color:#ff8a99;border-radius:6px;cursor:pointer;font-size:11px">&#10005; Cancel</button>';
-  document.body.appendChild(c);
-}
-function _ppSave(){if(!_ppState)return;try{localStorage.setItem('kp_pp_adj_'+CLUSTER,JSON.stringify({pct:Math.round(_ppState.scale/_ppState.autoScale*100),ox:Math.round(_ppState.ox),oy:Math.round(_ppState.oy)}));}catch(e){}}
-function _ppLoad(){try{var s=JSON.parse(localStorage.getItem('kp_pp_adj_'+CLUSTER)||'null');return(s&&s.pct)?s:null;}catch(e){return null;}}
-function applyPPTransform(){if(!_ppState||!_ppState.layer)return;_ppState.layer.style.transformOrigin='0 0';_ppState.layer.style.transform='translate('+_ppState.ox.toFixed(1)+'px,'+_ppState.oy.toFixed(1)+'px) scale('+_ppState.scale.toFixed(5)+')';_ppSave();}
-function ppScaleAdj(delta){if(!_ppState)return;var pct=Math.round(_ppState.scale/_ppState.autoScale*100)+delta;pct=Math.max(30,Math.min(200,pct));var nS=_ppState.autoScale*(pct/100),cx=_ppState.ox+_ppState.lW*_ppState.scale/2,cy=_ppState.oy+_ppState.lH*_ppState.scale/2;_ppState.scale=nS;_ppState.ox=cx-_ppState.lW*nS/2;_ppState.oy=cy-_ppState.lH*nS/2;var el=document.getElementById('pp-scale-val');if(el)el.textContent=pct+'%';applyPPTransform();}
-function resetPrintPreview(){if(!_ppState)return;_ppState.scale=_ppState.iS;_ppState.ox=_ppState.iX;_ppState.oy=_ppState.iY;var el=document.getElementById('pp-scale-val');if(el)el.textContent=Math.round(_ppState.iS/_ppState.autoScale*100)+'%';try{localStorage.removeItem('kp_pp_adj_'+CLUSTER);}catch(e){}applyPPTransform();}
-function onPPDragStart(e){if(!_ppState)return;_ppState.drag={sx:e.clientX,sy:e.clientY,ox:_ppState.ox,oy:_ppState.oy};_ppState.mw.style.cursor='grabbing';function mv(ev){if(!_ppState||!_ppState.drag)return;_ppState.ox=_ppState.drag.ox+(ev.clientX-_ppState.drag.sx);_ppState.oy=_ppState.drag.oy+(ev.clientY-_ppState.drag.sy);applyPPTransform();}function up(){if(_ppState){_ppState.drag=null;if(_ppState.mw)_ppState.mw.style.cursor='grab';}document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);e.preventDefault();}
-function executePrint(){window.print();setTimeout(closePrintPreview,1500);}
-function closePrintPreview(){var p=document.getElementById('print-page');if(p)p.parentNode.removeChild(p);var c=document.getElementById('pp-controls');if(c)c.parentNode.removeChild(c);_ppState=null;}
 
 async function loadData(){
   document.getElementById('lm').textContent='Loading activities...';
-  try{
-    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no&is_priority=eq.true&is_active=eq.true&cluster_id=eq.6',{headers:getH()});
-    var priD=await priR.json();
-    if(Array.isArray(priD))priD.forEach(function(r){priorityVillas.add(String(r.villa_no));});
-  }catch(e){console.warn('[keyplan] priority villas',e);}
   try{
     var ofR=await fetch(SB+'/rest/v1/wir_open_front_links?select=activity_code,clearance_code',{headers:getH()});
     var ofD=await ofR.json();
@@ -833,6 +911,11 @@ async function loadData(){
       OPEN_FRONT_CLR_CODES=[...new Set(ofD.map(function(r){return r.clearance_code;}))];
     }
   }catch(e){console.warn('[keyplan] open front links',e);}
+  try{
+    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no&is_priority=eq.true&is_active=eq.true&cluster_id=eq.6',{headers:getH()});
+    var priD=await priR.json();
+    if(Array.isArray(priD))priD.forEach(function(r){priorityVillas.add(String(r.villa_no));});
+  }catch(e){console.warn('[keyplan] priority villas',e);}
   var _aa=await Promise.all([
     fetchAll('activities?select=activity_code,activity_name&is_active=eq.true'),
     fetchAll('wir_code_aliases?select=old_code,new_code&is_active=eq.true')
@@ -894,6 +977,19 @@ async function loadData(){
   clrActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;clrSel.appendChild(o);});
   recomputeOpenFront();
   console.log('[keyplan C6] WIR:',wirCsvData.length,'rows,',wirActKeys.length,'acts | CLR:',clrCsvData.length,'rows',clrActKeys.length,'acts');
+  // Load open NCR / SOR for this cluster
+  try{
+    var ncrRows=await fetchAll('ncr_sor_records?select=id,record_type,reference_no,villa_no,activity_code,activity_name,title,status,raised_date&is_active=eq.true&cluster=eq.'+CLUSTER+'&status=in.(open,in_progress)');
+    ncrVillaMap={};
+    ncrRows.forEach(function(r){
+      var vn=String(r.villa_no||'');
+      if(!ncrVillaMap[vn])ncrVillaMap[vn]=[];
+      ncrVillaMap[vn].push(r);
+    });
+    var ncrTotal=ncrRows.length;
+    document.getElementById('ncr-count').textContent=ncrTotal;
+    document.getElementById('ncr-block').classList.toggle('visible',ncrTotal>0);
+  }catch(e){console.warn('[keyplan C6] NCR load failed:',e);}
   document.getElementById('hdr-info').textContent=TOTAL_VILLAS+' Villas · '+wirCsvData.length+' WIR · '+clrCsvData.length+' CLR · '+openFrontVillas.size+' Open Fronts';
   document.getElementById('loading').style.display='none';
   renderVillas(null);updateStats(null);

@@ -159,9 +159,13 @@ body.banner-open .shell{margin-top:40px}
   display:flex;align-items:center;gap:6px;padding:4px 10px;
   border-radius:999px;background:var(--st-approved-bg);
   border:1px solid var(--st-approved-bd);color:var(--st-approved-tx);
-  font-size:11px;font-weight:600
+  font-size:11px;font-weight:600;transition:background .3s,border-color .3s,color .3s
+}
+.tb-live.disconnected{
+  background:var(--st-rejected-bg);border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)
 }
 .tb-live-dot{width:6px;height:6px;border-radius:50%;background:var(--st-approved-tx);animation:pulse 2s ease-in-out infinite}
+.tb-live.disconnected .tb-live-dot{background:var(--st-rejected-tx);animation:none}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .tb-theme{
   padding:4px 10px;border:1px solid var(--border);border-radius:6px;
@@ -325,6 +329,25 @@ body.banner-open .shell{margin-top:40px}
 }
 .coming-soon h3{font-size:16px;font-weight:600;color:var(--text-muted)}
 .coming-soon p{font-size:12px;color:var(--text-faint)}
+
+/* ── SESSION EXPIRED OVERLAY ── */
+#session-expired{
+  display:none;position:fixed;inset:0;z-index:99999;
+  background:rgba(40,8,12,0.96);
+  align-items:center;justify-content:center;flex-direction:column;
+  gap:14px;backdrop-filter:blur(6px);
+}
+#session-expired.show{display:flex}
+.se-icon{width:56px;height:56px;border-radius:50%;
+  background:var(--st-rejected-bg);border:2px solid var(--st-rejected-bd);
+  display:grid;place-items:center;color:var(--st-rejected-tx)}
+.se-title{font-size:20px;font-weight:700;color:#fca5a5;letter-spacing:-.02em}
+.se-msg{font-size:13px;color:#f87171;text-align:center;max-width:360px;line-height:1.6;opacity:.85}
+.se-btn{margin-top:6px;padding:11px 28px;background:#b91c1c;border:none;
+  border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+  font-family:var(--font);letter-spacing:.01em;transition:background .15s}
+.se-btn:hover{background:#dc2626}
+.se-hint{font-size:11px;color:#f87171;opacity:.5;margin-top:-6px}
 </style>
 </head>
 <body>
@@ -338,6 +361,19 @@ body.banner-open .shell{margin-top:40px}
   <div class="ub-time" id="ub-time"></div>
   <button class="ub-btn" onclick="refreshCurrentPage()">↺ Refresh Page</button>
   <button class="ub-dismiss" onclick="dismissBanner()" title="Dismiss">×</button>
+</div>
+
+<!-- SESSION EXPIRED — persistent, covers everything, refresh required -->
+<div id="session-expired">
+  <div class="se-icon">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+    </svg>
+  </div>
+  <div class="se-title">Session Expired</div>
+  <div class="se-msg">Your session has timed out for security.<br>Please refresh the page to sign in again.</div>
+  <button class="se-btn" onclick="location.reload()">↺ Refresh &amp; Sign In</button>
+  <div class="se-hint">All unsaved changes have been preserved in the database.</div>
 </div>
 
 <div id="login-screen">
@@ -377,7 +413,7 @@ body.banner-open .shell{margin-top:40px}
   </div>
   <div class="tb-spacer"></div>
   <span class="tb-clock" id="clock">--:--:--</span>
-  <div class="tb-live"><span class="tb-live-dot"></span>Live</div>
+  <div class="tb-live" id="tb-live-badge"><span class="tb-live-dot"></span><span id="tb-live-txt">Live</span></div>
   <button class="tb-theme" onclick="toggleTheme()">☀︎ / ◑</button>
 </div>
 
@@ -398,9 +434,22 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 0 4.6 4.6L21 12l-3 3-9 9-3-3 9-9 1.7-1.7z"/></svg></span>
         <span class="nl">Cluster Tracker</span>
       </div>
+      <div class="nav perm-gate" id="nav-ncr_sor" data-label="NCR / SOR Tracker" data-perm="view_ncr" onclick="go('ncr_sor')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <span class="nl">NCR / SOR</span>
+        <span class="nb" id="badge-ncr_sor" style="display:none">0</span>
+      </div>
       <div class="nav perm-gate" id="nav-target_list" data-label="Weekly Target List" data-perm="manage_targets|view_targets" onclick="go('target_list')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></span>
         <span class="nl">Weekly Target List</span>
+      </div>
+
+      <div class="sb-sep"></div>
+      <div class="sb-section-label">Finance</div>
+      <div class="nav perm-gate" id="nav-qs" data-label="QS Payment Certificates" data-perm="view_qs" onclick="go('qs')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
+        <span class="nl">QS Certificates</span>
+        <span class="nb" id="badge-qs" style="display:none">0</span>
       </div>
 
       <div class="sb-sep"></div>
@@ -526,6 +575,8 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-reference_data"    title="Reference Data"></iframe>
       <iframe id="frame-user_management"   title="User Management"></iframe>
       <iframe id="frame-audit_log"          title="Audit Log"></iframe>
+      <iframe id="frame-ncr_sor"            title="NCR / SOR Tracker"></iframe>
+      <iframe id="frame-qs"                 title="QS Payment Certificates"></iframe>
       <iframe id="frame-keyplan_c1"         title="Cluster 1 Keyplan"></iframe>
       <iframe id="frame-keyplan_c2"         title="Cluster 2 Keyplan"></iframe>
       <iframe id="frame-keyplan_c3"         title="Cluster 3 Keyplan"></iframe>
@@ -557,6 +608,8 @@ const PAGES = {
   reference_data:    { title:'Reference Data',       desc:'WIR activities & clearance items',       file:'reference_data.html',     built:true },
   user_management:   { title:'User Management',      desc:'Manage team members, roles & access',    file:'user_management.html',    built:true },
   audit_log:         { title:'Audit Log',            desc:'Full trail of database changes',          file:'audit_log.html',          built:true },
+  ncr_sor:           { title:'NCR / SOR Tracker',   desc:'Non-conformance & site observation reports', file:'ncr_sor.html',            built:true },
+  qs:                { title:'QS Certificates',     desc:'Subcontractor interim payment certificates',  file:'qs.html',                 built:true },
   keyplan_c1:        { title:'Cluster 1 Keyplan',    desc:'Interactive villa keyplan — C1',         file:'keyplan_c1.html',         built:true },
   keyplan_c2:        { title:'Cluster 2 Keyplan',    desc:'Interactive villa keyplan — C2',         file:'keyplan_c2.html',         built:true },
   keyplan_c3:        { title:'Cluster 3 Keyplan',    desc:'Interactive villa keyplan — C3',         file:'keyplan_c3.html',         built:true },
@@ -618,17 +671,20 @@ async function doLogin() {
       btn.disabled = false; btn.textContent = 'Sign In'; return;
     }
 
-    // 3. Save session
+    // 3. Save session (including refresh_token so auto-refresh can extend it)
+    const expiresAt = Date.now() + (authData.expires_in * 1000);
     try {
       localStorage.setItem(SESSION_KEY, JSON.stringify({
         access_token: accessToken,
+        refresh_token: authData.refresh_token || null,
         auth_uid: authUid,
         profile,
-        expires_at: Date.now() + (authData.expires_in * 1000)
+        expires_at: expiresAt
       }));
     } catch(e) {}
 
     bootApp(profile, accessToken);
+    scheduleSessionRefresh(expiresAt, authData.refresh_token);
 
   } catch(err) {
     showLoginError('Connection error. Please try again.');
@@ -680,6 +736,79 @@ async function doLogout() {
   document.getElementById('login-btn').textContent = 'Sign In';
   document.getElementById('login-error').classList.remove('visible');
   setTimeout(() => document.getElementById('login-email').focus(), 100);
+}
+
+// ── SESSION AUTO-REFRESH ──
+// Refreshes the Supabase token 5 minutes before expiry so users never get silently signed out.
+// If the refresh fails, shows the persistent red "Session Expired" overlay.
+let _sessionRefreshTimer = null;
+
+function scheduleSessionRefresh(expiresAt, refreshToken) {
+  if (_sessionRefreshTimer) clearTimeout(_sessionRefreshTimer);
+  if (!expiresAt) return;
+
+  const msUntilRefresh = expiresAt - Date.now() - 5 * 60 * 1000; // 5 min before expiry
+
+  if (msUntilRefresh <= 0) {
+    // Token already near/past expiry — try to refresh right now
+    doTokenRefresh(refreshToken);
+  } else {
+    _sessionRefreshTimer = setTimeout(() => doTokenRefresh(refreshToken), msUntilRefresh);
+    const mins = Math.round(msUntilRefresh / 60000);
+    console.log('[Session] Token refresh scheduled in ~' + mins + ' min');
+  }
+}
+
+async function doTokenRefresh(refreshToken) {
+  if (!refreshToken) { showSessionExpired(); return; }
+  try {
+    const res = await fetch(`${SB}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': KEY },
+      body: JSON.stringify({ refresh_token: refreshToken })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.access_token) { showSessionExpired(); return; }
+
+    // Update in-memory token
+    accessToken = data.access_token;
+    const newExpiresAt = Date.now() + (data.expires_in * 1000);
+    const newRefreshToken = data.refresh_token || refreshToken;
+
+    // Persist updated session
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      const prev = raw ? JSON.parse(raw) : {};
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        ...prev,
+        access_token: data.access_token,
+        refresh_token: newRefreshToken,
+        expires_at: newExpiresAt
+      }));
+    } catch(e) {}
+
+    // Push new token to all open iframes so their next fetch uses it
+    broadcastToFrames({ type: 'session', token: accessToken, user: currentUser });
+
+    // Schedule the next refresh
+    scheduleSessionRefresh(newExpiresAt, newRefreshToken);
+    console.log('[Session] Token refreshed OK. Next refresh in ~' + Math.round((newExpiresAt - Date.now() - 5*60*1000) / 60000) + ' min');
+  } catch(e) {
+    console.warn('[Session] Token refresh failed:', e);
+    showSessionExpired();
+  }
+}
+
+function showSessionExpired() {
+  if (_sessionRefreshTimer) clearTimeout(_sessionRefreshTimer);
+  try { localStorage.removeItem(SESSION_KEY); } catch(e) {}
+  // Flip Live → Disconnected
+  const badge = document.getElementById('tb-live-badge');
+  if (badge) badge.classList.add('disconnected');
+  const txt = document.getElementById('tb-live-txt');
+  if (txt) txt.textContent = 'Disconnected';
+  // Show persistent red overlay
+  document.getElementById('session-expired').classList.add('show');
 }
 
 // ── BOOT APP ──
@@ -803,6 +932,7 @@ async function tryRestoreSession() {
     if (!profiles || profiles.length === 0) return false;
 
     bootApp(profiles[0], session.access_token);
+    scheduleSessionRefresh(session.expires_at, session.refresh_token);
     return true;
   } catch(e) { return false; }
 }
@@ -990,6 +1120,7 @@ setInterval(tick, 1000); tick();
 // ── BADGES ──
 async function loadBadges() {
   if (!accessToken) return;
+  // Clearance release badge
   try {
     const r = await fetch(
       `${SB}/rest/v1/clearance_release_requests?select=id&status=in.(pending_elec,rejection_raised)`,
@@ -999,6 +1130,29 @@ async function loadBadges() {
     const badge = document.getElementById('badge-clearance_release');
     if (count > 0) { badge.textContent = count > 99 ? '99+' : count; badge.style.display = 'flex'; }
     else { badge.style.display = 'none'; }
+  } catch(e) {}
+  // NCR/SOR open badge
+  try {
+    const r2 = await fetch(
+      `${SB}/rest/v1/ncr_sor_records?select=id&is_active=eq.true&status=in.(open,in_progress)`,
+      { headers:{ 'apikey': KEY, 'Authorization':'Bearer ' + accessToken, 'Prefer':'count=exact', 'Range':'0-0' } }
+    );
+    const count2 = parseInt(r2.headers.get('Content-Range')?.split('/')[1] || '0', 10);
+    const badge2 = document.getElementById('badge-ncr_sor');
+    if (count2 > 0) { badge2.textContent = count2 > 99 ? '99+' : count2; badge2.style.display = 'flex'; }
+    else { badge2.style.display = 'none'; }
+  } catch(e) {}
+  try {
+    const r3 = await fetch(
+      `${SB}/rest/v1/qs_payment_certificates?select=id&status=eq.draft`,
+      { headers:{ 'apikey': KEY, 'Authorization':'Bearer ' + accessToken, 'Prefer':'count=exact', 'Range':'0-0' } }
+    );
+    const count3 = parseInt(r3.headers.get('Content-Range')?.split('/')[1] || '0', 10);
+    const badge3 = document.getElementById('badge-qs');
+    if (badge3) {
+      if (count3 > 0) { badge3.textContent = count3 > 99 ? '99+' : count3; badge3.style.display = 'flex'; }
+      else { badge3.style.display = 'none'; }
+    }
   } catch(e) {}
 }
 

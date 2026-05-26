@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QS Payment Certificates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0e14;--bg2:#11151c;--bg3:#151a23;--bg4:#1a2030;
+  --bdr:#1e2531;--bdr2:#2a3340;
+  --tx:#e6e9ef;--tx2:#8a93a3;--tx3:#5b6373;
+  --accent:#4f8cff;--accent2:#2d6be4;
+  --green:#22c55e;--red:#ef4444;--amber:#f59e0b;--blue:#4f8cff;
+  --gold:#f59e0b;
+  --locked:#1e2531;--locked-tx:#8a93a3;
+  --draft-bg:#163d28;--draft-tx:#6ee2a3;
+  --submitted-bg:#0f1d3a;--submitted-tx:#93b6ff;
+  --locked-bg:#151a23;--locked-tx2:#5b6373;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg2:#ffffff;--bg3:#f0f3f7;--bg4:#e8edf4;
+  --bdr:#e5e8ed;--bdr2:#d1d6de;
+  --tx:#1a1f29;--tx2:#5b6373;--tx3:#8a93a3;
+  --locked:#e5e7eb;--locked-tx:#6b7280;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);font-size:13px;display:flex;height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
+body.in-shell{height:100vh}
+
+/* ── LAYOUT ── */
+.qs-left{width:260px;min-width:260px;background:var(--bg2);border-right:1px solid var(--bdr);display:flex;flex-direction:column;overflow:hidden}
+.qs-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+
+/* ── LEFT PANEL ── */
+.lp-head{padding:14px 14px 10px;border-bottom:1px solid var(--bdr)}
+.lp-title{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin-bottom:8px}
+.lp-search{width:100%;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;color:var(--tx);font-size:12px;outline:none}
+.lp-search:focus{border-color:var(--accent)}
+.lp-add{margin-top:8px;width:100%;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
+.lp-add:hover{background:var(--accent2)}
+.lp-list{flex:1;overflow-y:auto;padding:6px}
+.scope-card{padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:4px;border:1px solid transparent;transition:background .12s,border-color .12s}
+.scope-card:hover{background:var(--bg3);border-color:var(--bdr)}
+.scope-card.active{background:var(--bg4);border-color:var(--accent)}
+.sc-name{font-weight:600;font-size:12px;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-sub{font-size:11px;color:var(--tx2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-meta{display:flex;align-items:center;gap:6px;margin-top:4px}
+.sc-badge{font-size:10px;padding:1px 6px;border-radius:10px;font-weight:600}
+.sc-badge.draft{background:var(--draft-bg);color:var(--draft-tx)}
+.sc-badge.submitted{background:var(--submitted-bg);color:var(--submitted-tx)}
+.sc-badge.locked{background:var(--locked-bg);color:var(--locked-tx2)}
+.sc-badge.none{background:var(--bg4);color:var(--tx3)}
+.lp-empty{padding:24px 16px;text-align:center;color:var(--tx3);font-size:12px}
+
+/* ── MAIN — NO SCOPE ── */
+.no-scope{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--tx3)}
+.no-scope svg{opacity:.3}
+.no-scope p{font-size:13px}
+
+/* ── SCOPE HEADER ── */
+.scope-hdr{padding:14px 20px;border-bottom:1px solid var(--bdr);background:var(--bg2);display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-shrink:0}
+.sh-info{display:flex;flex-direction:column;gap:2px}
+.sh-title{font-size:15px;font-weight:700;color:var(--tx)}
+.sh-sub{font-size:12px;color:var(--tx2)}
+.sh-meta{font-size:11px;color:var(--tx3)}
+.sh-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.btn{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent2)}
+.btn-ghost{background:transparent;color:var(--tx2);border-color:var(--bdr)}
+.btn-ghost:hover{background:var(--bg3);color:var(--tx)}
+.btn-danger{background:#7f1d1d;color:#fca5a5;border-color:#991b1b}
+.btn-danger:hover{background:#991b1b}
+.btn-amber{background:#78350f;color:#fde68a;border-color:#92400e}
+.btn-amber:hover{background:#92400e}
+.btn-green{background:#14532d;color:#86efac;border-color:#166534}
+.btn-green:hover{background:#166534}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── PC BAR ── */
+.pc-bar{padding:10px 20px;border-bottom:1px solid var(--bdr);background:var(--bg2);display:flex;align-items:center;gap:8px;overflow-x:auto;flex-shrink:0}
+.pc-bar::-webkit-scrollbar{height:4px}
+.pc-bar::-webkit-scrollbar-track{background:transparent}
+.pc-bar::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:2px}
+.pc-chip{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid var(--bdr);background:var(--bg3);color:var(--tx2);white-space:nowrap;transition:all .15s}
+.pc-chip:hover{border-color:var(--accent);color:var(--tx)}
+.pc-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.pc-chip .pc-status{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px}
+.pc-chip .pc-status.draft{background:var(--draft-tx)}
+.pc-chip .pc-status.submitted{background:var(--submitted-tx)}
+.pc-chip .pc-status.locked{background:var(--locked-tx2)}
+.pc-new-btn{padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px dashed var(--bdr);background:transparent;color:var(--tx3);white-space:nowrap;flex-shrink:0;transition:all .15s}
+.pc-new-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pc-none{font-size:12px;color:var(--tx3);padding:0 4px}
+
+/* ── TABS ── */
+.qs-tabs{display:flex;gap:0;border-bottom:1px solid var(--bdr);background:var(--bg2);flex-shrink:0;padding:0 20px}
+.qs-tab{padding:10px 18px;font-size:12px;font-weight:600;cursor:pointer;color:var(--tx3);border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+.qs-tab:hover{color:var(--tx)}
+.qs-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.qs-tab-content{display:none;flex:1;overflow:hidden}
+.qs-tab-content.active{display:flex;flex-direction:column}
+
+/* ── PROGRESS SHEET ── */
+.ps-toolbar{padding:10px 20px;display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg2);border-bottom:1px solid var(--bdr)}
+.ps-locked-banner{background:#1a1008;border:1px solid #78350f;color:#fde68a;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px}
+.ps-wrap{flex:1;overflow:auto;padding:0}
+.ps-table{border-collapse:collapse;width:max-content;min-width:100%}
+.ps-table th,.ps-table td{border:1px solid var(--bdr);padding:0;white-space:nowrap;font-size:13px}
+.ps-table th{background:var(--bg3);color:var(--tx2);font-weight:700;text-align:center;padding:7px 12px;position:sticky;top:0;z-index:10}
+.ps-table th.group-hdr{background:var(--bg4);color:var(--tx);font-size:10px;letter-spacing:.05em;text-transform:uppercase}
+.ps-table td{padding:4px 8px;text-align:center;color:var(--tx)}
+.ps-table td.left{text-align:left}
+.ps-table tr:hover td{background:rgba(99,102,241,.06)}
+.ps-table tr.ps-locked td{opacity:.8}
+
+/* activity cells */
+.act-cell{width:52px;cursor:pointer;border-radius:4px;font-weight:700;font-size:13px;padding:6px 4px;text-align:center;display:block;margin:0 auto;line-height:1}
+.act-cell.approved{background:#14532d;color:#86efac}
+.act-cell.not-approved{background:#1c1c24;color:var(--tx3)}
+.act-cell.override-on{background:#78350f;color:#fde68a}
+.act-cell.override-off{background:#4c0519;color:#fca5a5}
+.act-cell.prev-billed{background:#1e3a5f;color:#93c5fd;cursor:default}
+.act-cell.readonly{cursor:default}
+
+/* workdone columns */
+.wd-cell{font-weight:700;font-size:11px}
+.wd-prev{color:#93c5fd}
+.wd-cur{color:#86efac}
+.wd-date{color:var(--tx)}
+.aed-cell{font-size:12px;text-align:right!important;padding:6px 12px!important}
+.aed-prev{color:#93c5fd}
+.aed-cur{color:#86efac}
+.aed-date{color:var(--tx);font-weight:600}
+.rate-cell{color:var(--gold);font-weight:600;font-size:12px;text-align:right!important;padding:6px 12px!important}
+
+/* sticky columns */
+.ps-table td.sticky,.ps-table th.sticky{position:sticky;z-index:5;background:var(--bg2)}
+.ps-table th.sticky{background:var(--bg3);z-index:15}
+.col-sr{left:0;min-width:44px}
+.col-villa{left:44px;min-width:76px}
+.col-type{left:120px;min-width:100px}
+.col-cluster{left:220px;min-width:64px;text-align:center}
+
+/* ── PAYMENT SUMMARY ── */
+.psum-wrap{flex:1;overflow:auto;padding:20px}
+.psum-inner{max-width:1100px;margin:0 auto}
+.psum-hdr-block{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:16px 20px;margin-bottom:16px}
+.psum-hdr-row{display:flex;gap:8px;margin-bottom:4px;font-size:12px}
+.psum-hdr-label{color:var(--tx3);min-width:130px;font-weight:600}
+.psum-hdr-val{color:var(--tx);font-weight:700}
+.psum-hdr-right{margin-left:auto;text-align:right}
+.psum-section-title{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid var(--bdr)}
+.psum-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px}
+.psum-table th,.psum-table td{border:1px solid var(--bdr);padding:7px 10px}
+.psum-table th{background:var(--bg3);color:var(--tx2);font-weight:700;text-align:center;white-space:nowrap}
+.psum-table td{color:var(--tx)}
+.psum-table td.right{text-align:right}
+.psum-table td.center{text-align:center}
+.psum-table td.bold{font-weight:700}
+.psum-table tr.total-row td{background:var(--bg4);font-weight:700;border-top:2px solid var(--bdr2)}
+.psum-table tr.section-row td{background:var(--bg3);font-weight:700;color:var(--accent);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.psum-table .green{color:var(--green)}
+.psum-table .blue{color:var(--blue)}
+.psum-table .gold{color:var(--gold)}
+
+/* financial footer */
+.fin-block{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:16px 20px;margin-bottom:16px}
+.fin-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr);font-size:12px}
+.fin-row:last-child{border-bottom:none}
+.fin-label{color:var(--tx2);font-weight:600}
+.fin-vals{display:flex;gap:40px}
+.fin-val{text-align:right;min-width:120px;font-weight:600;color:var(--tx)}
+.fin-val.prev{color:#93c5fd}
+.fin-val.cur{color:#86efac}
+.fin-val.total{color:var(--tx);font-weight:800}
+.fin-val.grand{color:var(--gold);font-size:13px}
+.fin-input{background:var(--bg3);border:1px solid var(--bdr);border-radius:4px;padding:3px 8px;color:var(--tx);font-size:12px;width:120px;text-align:right}
+.fin-input:focus{outline:none;border-color:var(--accent)}
+.fin-row-label-group{display:flex;align-items:center;gap:10px}
+.fin-toggle{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--tx3);cursor:pointer}
+.fin-toggle input{cursor:pointer}
+
+/* signature block */
+.sig-block{background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:16px 20px;margin-bottom:16px}
+.sig-block-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sig-block-title span{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3)}
+.sig-grid{display:flex;gap:16px;flex-wrap:wrap}
+.sig-item{flex:1;min-width:110px;text-align:center;padding:8px 6px;border:1px dashed var(--bdr2);border-radius:6px}
+.sig-line{border-top:1px solid var(--bdr2);margin:18px 6px 6px;min-height:20px}
+.sig-position{font-size:10px;font-weight:700;color:var(--tx2);margin-bottom:2px}
+.sig-name{font-size:10px;color:var(--tx3)}
+.sig-company{font-size:9px;color:var(--tx3);margin-top:1px}
+
+/* print actions */
+.psum-actions{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+
+/* ── MODALS ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.modal{background:var(--bg2);border:1px solid var(--bdr2);border-radius:12px;width:100%;padding:24px;position:relative;max-height:90vh;overflow-y:auto}
+.modal-sm{max-width:460px}
+.modal-md{max-width:640px}
+.modal-lg{max-width:860px}
+.modal-xl{max-width:1000px}
+.modal-title{font-size:16px;font-weight:700;color:var(--tx);margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+.modal-close{background:none;border:none;color:var(--tx3);cursor:pointer;font-size:18px;line-height:1;padding:0 2px}
+.modal-close:hover{color:var(--tx)}
+.modal-body{display:flex;flex-direction:column;gap:12px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--bdr)}
+.form-row{display:flex;flex-direction:column;gap:4px}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+label{font-size:11px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.05em}
+input[type=text],input[type=number],input[type=date],select,textarea{background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px;color:var(--tx);font-size:12px;width:100%;outline:none;transition:border-color .15s;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px}
+.form-hint{font-size:10px;color:var(--tx3);margin-top:2px}
+.form-msg{font-size:11px;font-weight:600;padding:6px 10px;border-radius:4px;display:none}
+.form-msg.ok{background:#14532d;color:#86efac;display:block}
+.form-msg.err{background:#7f1d1d;color:#fca5a5;display:block}
+
+/* activity groups editor */
+.ag-group{background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:8px}
+.ag-group-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ag-group-name{flex:1;font-weight:700;font-size:12px;color:var(--tx)}
+.ag-weight-badge{background:var(--bg4);border:1px solid var(--bdr);border-radius:4px;padding:2px 8px;font-size:11px;font-weight:700;color:var(--gold);font-family:monospace}
+.ag-acts{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.ag-act-row{display:flex;align-items:center;gap:8px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;padding:6px 10px}
+.ag-act-code{font-family:monospace;font-size:11px;color:var(--accent);min-width:44px;font-weight:700}
+.ag-act-name{flex:1;font-size:12px;color:var(--tx2)}
+.ag-act-weight{font-size:11px;color:var(--gold);font-family:monospace;min-width:44px;text-align:right}
+.ag-act-actions{display:flex;gap:4px}
+.icon-btn{background:none;border:none;cursor:pointer;color:var(--tx3);padding:2px 4px;border-radius:4px;font-size:13px;transition:color .12s}
+.icon-btn:hover{color:var(--tx);background:var(--bg4)}
+.icon-btn.del:hover{color:#ef4444}
+
+/* villa assignment */
+.villa-assign-list{max-height:280px;overflow-y:auto;border:1px solid var(--bdr);border-radius:6px}
+.va-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--bdr);font-size:12px}
+.va-row:last-child{border-bottom:none}
+.va-villa-no{font-weight:700;color:var(--tx);min-width:48px;font-family:monospace}
+.va-type-sel{flex:1}
+.va-remove{color:var(--tx3);cursor:pointer;font-size:14px;padding:0 4px}
+.va-remove:hover{color:#ef4444}
+
+/* signatory editor */
+.sig-edit-list{display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto}
+.sig-edit-row{display:grid;grid-template-columns:1fr 1fr 80px 28px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:6px 8px}
+.sig-edit-row input{padding:4px 6px;font-size:11px}
+
+/* override modal */
+.ov-info{background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:10px 12px;font-size:12px;color:var(--tx2);line-height:1.6}
+
+/* warning strip */
+.warn-strip{background:#78350f22;border:1px solid #92400e;border-radius:6px;padding:8px 12px;font-size:11px;color:#fde68a;display:flex;align-items:center;gap:8px}
+
+/* lock confirm */
+.lock-list{max-height:200px;overflow-y:auto;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:8px 12px;font-size:11px;color:var(--tx2);line-height:2}
+
+/* spinner / loading */
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--bdr2);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{text-align:center;padding:40px;color:var(--tx3);font-size:12px}
+
+/* ── PRINT ── */
+@media print{
+  .qs-left,.scope-hdr,.pc-bar,.qs-tabs,.ps-toolbar,.psum-actions,.sh-actions,.pc-bar,.psum-inner .btn{display:none!important}
+  body{display:block;height:auto;overflow:visible}
+  .qs-main{overflow:visible}
+  .psum-wrap{overflow:visible;padding:10px}
+  .psum-inner{max-width:none}
+  .modal-overlay{display:none!important}
+  .sig-item{border:1px solid #ccc}
+  .sig-line{border-top:1px solid #333}
+  .psum-hdr-block,.fin-block,.sig-block{border:1px solid #ccc;break-inside:avoid}
+  .psum-table th,.psum-table td{border:1px solid #999;color:#000;background:#fff!important}
+  .fin-input{border:1px solid #ccc;background:#fff;color:#000}
+}
+
+/* scrollbars */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ══ LEFT PANEL ══ -->
+<div class="qs-left">
+  <div class="lp-head">
+    <div class="lp-title">QS Certificates</div>
+    <input class="lp-search" id="scope-search" placeholder="Search subcontractor…" oninput="filterScopes()">
+    <button class="lp-add" id="btn-new-scope" onclick="openNewScope()" style="display:none">+ New Scope</button>
+  </div>
+  <div class="lp-list" id="scope-list"><div class="loading-row"><span class="spin"></span></div></div>
+</div>
+
+<!-- ══ MAIN PANEL ══ -->
+<div class="qs-main">
+
+  <!-- No scope selected -->
+  <div id="no-scope-msg" style="flex:1;display:flex">
+    <div class="no-scope" style="width:100%">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      <p>Select a subcontractor scope to view certificates</p>
+    </div>
+  </div>
+
+  <!-- Scope selected -->
+  <div id="scope-panel" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+
+    <!-- Scope header -->
+    <div class="scope-hdr">
+      <div class="sh-info">
+        <div class="sh-title" id="sh-title">—</div>
+        <div class="sh-sub" id="sh-sub">—</div>
+        <div class="sh-meta" id="sh-meta">—</div>
+      </div>
+      <div class="sh-actions">
+        <button class="btn btn-danger btn-sm" id="btn-delete-scope" onclick="openDeleteScope()" style="display:none">🗑 Delete Scope</button>
+        <button class="btn btn-ghost btn-sm" id="btn-edit-scope" onclick="openEditScope()" style="display:none">✎ Edit Scope</button>
+        <button class="btn btn-ghost btn-sm" id="btn-config-scope" onclick="openConfigScope()" style="display:none">⚙ Configure</button>
+        <button class="btn btn-primary btn-sm" id="btn-new-pc" onclick="openNewPC()" style="display:none">+ New PC</button>
+      </div>
+    </div>
+
+    <!-- PC bar -->
+    <div class="pc-bar" id="pc-bar">
+      <span class="pc-none">No payment certificates yet</span>
+    </div>
+
+    <!-- Tabs -->
+    <div id="pc-area" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+      <div class="qs-tabs">
+        <div class="qs-tab active" id="tab-progress" onclick="switchTab('progress')">Progress Sheet</div>
+        <div class="qs-tab" id="tab-summary" onclick="switchTab('summary')">Payment Summary</div>
+      </div>
+
+      <!-- PROGRESS SHEET TAB -->
+      <div class="qs-tab-content active" id="tc-progress">
+        <div class="ps-toolbar">
+          <div id="ps-status-strip"></div>
+          <div style="display:flex;align-items:center;gap:6px;margin-left:10px">
+            <label id="ps-cluster-label" style="font-size:11px;color:var(--tx2);display:none">Cluster:</label>
+            <select id="ps-cluster-filter" class="lp-search" style="width:auto;padding:4px 10px;font-size:11px;display:none;cursor:pointer" onchange="psClusterFilter=this.value;renderProgressSheet()">
+              <option value="all">All Clusters</option>
+            </select>
+          </div>
+          <div style="flex:1"></div>
+          <button class="btn btn-ghost btn-sm" onclick="refreshProgress()">↻ Refresh WIRs</button>
+        </div>
+        <div class="ps-wrap" id="ps-wrap">
+          <div class="loading-row"><span class="spin"></span></div>
+        </div>
+      </div>
+
+      <!-- PAYMENT SUMMARY TAB -->
+      <div class="qs-tab-content" id="tc-summary">
+        <div class="psum-wrap">
+          <div class="psum-inner" id="psum-inner">
+            <div class="loading-row"><span class="spin"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /scope-panel -->
+</div><!-- /qs-main -->
+
+<!-- ══════════════════════════ MODALS ══════════════════════════ -->
+
+<!-- New Scope Modal -->
+<div class="modal-overlay" id="modal-new-scope" style="display:none">
+  <div class="modal modal-md">
+    <div class="modal-title"><span id="ns-modal-title">New Subcontractor Scope</span> <button class="modal-close" onclick="closeModal('modal-new-scope')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label>Subcontractor *</label>
+        <div style="position:relative">
+          <input id="ns-sub-search" type="text" placeholder="Type to search subcontractors…" autocomplete="off"
+                 oninput="filterSubOptions()" onfocus="filterSubOptions()"
+                 onblur="setTimeout(()=>{const d=document.getElementById('ns-sub-dropdown');if(d)d.style.display='none'},200)">
+          <div id="ns-sub-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg3);border:1px solid var(--bdr2);border-top:none;border-radius:0 0 6px 6px;z-index:300;max-height:180px;overflow-y:auto;box-shadow:0 6px 16px rgba(0,0,0,.4)"></div>
+        </div>
+        <div class="form-hint" id="ns-sub-hint">Select from list or type a new name</div>
+      </div>
+      <div class="form-row"><label>Project</label><input id="ns-project" type="text" value="RA4104- BAGHAIYLUM VILLAS DEVELOPMENT"></div>
+      <div class="form-row"><label>Scope of Works *</label><textarea id="ns-scope" rows="2" placeholder="INSTALLATION OF HIGH-LEVEL WATER SUPPLY…"></textarea></div>
+      <div class="form-row-2">
+        <div class="form-row"><label>SCA Ref #</label><input id="ns-sca" type="text" placeholder="RA4104-SCA-048"></div>
+        <div class="form-row"><label>Package</label><input id="ns-package" type="text" placeholder="Package-2"></div>
+      </div>
+      <div class="form-msg" id="ns-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-scope')">Cancel</button>
+      <button class="btn btn-primary" id="ns-submit-btn" onclick="submitScope()">Create Scope</button>
+    </div>
+  </div>
+</div>
+
+<!-- Configure Scope Modal -->
+<div class="modal-overlay" id="modal-config-scope" style="display:none">
+  <div class="modal modal-xl">
+    <div class="modal-title">Configure Scope — <span id="cfg-scope-name">—</span><button class="modal-close" onclick="closeModal('modal-config-scope')">✕</button></div>
+    <div class="modal-body">
+      <!-- Tabs inside modal -->
+      <div style="display:flex;gap:16px;border-bottom:1px solid var(--bdr);margin-bottom:12px">
+        <div class="qs-tab active" style="padding:6px 0" id="cfg-tab-types" onclick="switchCfgTab('types')">Villa Rates</div>
+        <div class="qs-tab" style="padding:6px 0" id="cfg-tab-acts" onclick="switchCfgTab('acts')">Activities</div>
+        <div class="qs-tab" style="padding:6px 0" id="cfg-tab-villas" onclick="switchCfgTab('villas')">Detected Villas</div>
+        <div class="qs-tab" style="padding:6px 0" id="cfg-tab-sigs" onclick="switchCfgTab('sigs')">Signatories</div>
+      </div>
+
+      <!-- Villa Rates -->
+      <div id="cfg-panel-types">
+        <div id="cfg-types-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addVillaTypeRow()">+ Add Villa Type</button>
+        <div class="form-msg" id="cfg-types-msg"></div>
+      </div>
+
+      <!-- Activities -->
+      <div id="cfg-panel-acts" style="display:none">
+        <div id="cfg-acts-list"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addActivityGroup()">+ Add Activity Group</button>
+        <div class="form-msg" id="cfg-acts-msg"></div>
+      </div>
+
+      <!-- Detected Villas (read-only, auto-populated from WIR data) -->
+      <div id="cfg-panel-villas" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="form-hint" style="margin:0">Villas are <strong>automatically detected</strong> from WIR data based on the subcontractor name. No manual assignment needed.</div>
+          <button class="btn btn-ghost btn-sm" onclick="refreshDetectedVillas()">↻ Refresh</button>
+        </div>
+        <div id="cfg-villa-detect-content">
+          <div class="loading-row"><span class="spin"></span></div>
+        </div>
+      </div>
+
+      <!-- Signatories (global defaults) -->
+      <div id="cfg-panel-sigs" style="display:none">
+        <div class="form-hint" style="margin-bottom:8px">These are the global default signatories. Each PC gets its own copy which can be independently edited.</div>
+        <div class="sig-edit-list" id="cfg-sigs-list"></div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addGlobalSig()">+ Add Signatory</button>
+        <div class="form-msg" id="cfg-sigs-msg"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-config-scope')">Close</button>
+      <button class="btn btn-primary" id="cfg-save-btn" onclick="saveConfigScope()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- New PC Modal -->
+<div class="modal-overlay" id="modal-new-pc" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-title">New Payment Certificate <button class="modal-close" onclick="closeModal('modal-new-pc')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row-2">
+        <div class="form-row"><label>PC Number *</label><input id="npc-num" type="number" min="1" placeholder="3"></div>
+        <div class="form-row"><label>Period Date *</label><input id="npc-date" type="date"></div>
+      </div>
+      <div class="form-row"><label>Period Label *</label><input id="npc-label" type="text" placeholder="May-26"></div>
+      <div class="form-row"><label>Notes</label><textarea id="npc-notes" rows="2" placeholder="Optional notes…"></textarea></div>
+      <div class="form-row" style="margin-top:4px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:12px">
+          <input type="checkbox" id="npc-historical" onchange="toggleHistMode(this.checked)" style="width:14px;height:14px;accent-color:var(--amber)">
+          <span style="color:var(--amber)">Historical / Past PC</span>
+        </label>
+        <div class="form-hint">Check this for PCs that predate this system. You'll manually select which villas and activities were billed.</div>
+      </div>
+      <div class="form-msg" id="npc-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-pc')">Cancel</button>
+      <button class="btn btn-primary" id="npc-submit-btn" onclick="handleNewPC()">Create PC</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Scope Confirm Modal -->
+<div class="modal-overlay" id="modal-delete-scope" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-title" style="color:var(--red)">⚠ Delete Scope <button class="modal-close" onclick="closeModal('modal-delete-scope')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--tx);margin-bottom:10px">You are about to permanently delete:</div>
+      <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-weight:700;font-size:14px" id="del-scope-name">—</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px" id="del-scope-meta">—</div>
+      </div>
+      <div style="background:#2d0a0a;border:1px solid #7f1d1d;border-radius:6px;padding:10px 12px;font-size:12px;color:#fca5a5;line-height:1.6">
+        This will delete <strong>all Payment Certificates, billed records, overrides, activity configuration, and villa type setup</strong> for this scope. This action <strong>cannot be undone</strong>.
+      </div>
+      <div style="margin-top:12px">
+        <label style="font-size:12px;color:var(--tx2);font-weight:600">Type <strong style="color:var(--red)">DELETE</strong> to confirm:</label>
+        <input id="del-scope-confirm-input" type="text" placeholder="DELETE" style="margin-top:6px;border-color:var(--red)" oninput="document.getElementById('del-scope-btn').disabled=this.value!=='DELETE'">
+      </div>
+      <div class="form-msg" id="del-scope-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-delete-scope')">Cancel</button>
+      <button class="btn btn-danger" id="del-scope-btn" onclick="confirmDeleteScope()" disabled>Delete Everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Historical PC Activities Modal -->
+<div class="modal-overlay" id="modal-hist-pc" style="display:none">
+  <div class="modal" style="max-width:960px;width:96vw;max-height:92vh;display:flex;flex-direction:column">
+    <div class="modal-title">Historical PC — Select Billed Activities <button class="modal-close" onclick="closeModal('modal-hist-pc')">✕</button></div>
+    <div style="padding:10px 20px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:12px;color:var(--tx2)" id="hist-pc-info-bar">—</div>
+    <div style="flex:1;overflow:auto;padding:16px 20px">
+      <div style="font-size:12px;color:var(--tx2);margin-bottom:10px">
+        Tick each activity that was <strong>approved and billed</strong> in this PC. The PC will be created as <strong>Locked</strong>.
+      </div>
+      <div id="hist-pc-grid"></div>
+    </div>
+    <div class="modal-footer" style="flex-shrink:0">
+      <div style="font-size:12px;color:var(--tx2);flex:1" id="hist-pc-count">0 activities selected</div>
+      <button class="btn btn-ghost" onclick="closeModal('modal-hist-pc')">← Back</button>
+      <button class="btn btn-amber" onclick="submitHistPC()">Create Locked PC</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete PC Modal -->
+<div class="modal-overlay" id="modal-delete-pc" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-title" style="color:var(--red)">🗑 Delete Payment Certificate <button class="modal-close" onclick="closeModal('modal-delete-pc')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--tx);margin-bottom:10px">You are about to permanently delete:</div>
+      <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-weight:700;font-size:14px" id="del-pc-label">—</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px" id="del-pc-sub">—</div>
+      </div>
+      <div style="background:#2d0a0a;border:1px solid #7f1d1d;border-radius:6px;padding:10px 12px;font-size:12px;color:#fca5a5;line-height:1.6">
+        This will permanently delete the PC along with all its overrides and signatories. If this PC is locked, its billed records will also be removed — making those villa + activity combinations available for billing again. <strong>This cannot be undone.</strong>
+      </div>
+      <div class="form-msg" id="del-pc-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-delete-pc')">Cancel</button>
+      <button class="btn btn-danger" id="del-pc-btn" onclick="confirmDeletePC()">Delete PC</button>
+    </div>
+  </div>
+</div>
+
+<!-- Override Modal -->
+<div class="modal-overlay" id="modal-override" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-title">Manual Override <button class="modal-close" onclick="closeModal('modal-override')">✕</button></div>
+    <div class="modal-body">
+      <div class="ov-info" id="ov-info">—</div>
+      <div class="warn-strip" id="ov-warn" style="display:none">⚠ This activity was previously billed — overriding will not affect billing history.</div>
+      <div class="form-row">
+        <label>Mark as</label>
+        <select id="ov-complete">
+          <option value="1">✓ Complete (override WIR as approved)</option>
+          <option value="0">✗ Not Complete (override WIR as rejected)</option>
+          <option value="wir">↩ Use WIR data (remove override)</option>
+        </select>
+      </div>
+      <div class="form-row"><label>Reason *</label><textarea id="ov-reason" rows="2" placeholder="Explain why this override is needed…"></textarea></div>
+      <div class="form-msg" id="ov-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-override')">Cancel</button>
+      <button class="btn btn-amber" onclick="submitOverride()">Apply Override</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lock PC Modal -->
+<div class="modal-overlay" id="modal-lock" style="display:none">
+  <div class="modal modal-md">
+    <div class="modal-title">🔒 Lock Payment Certificate <button class="modal-close" onclick="closeModal('modal-lock')">✕</button></div>
+    <div class="modal-body">
+      <div class="warn-strip">⚠ <div>Locking this PC is <strong>permanent</strong>. All billed villa+activity combinations will be recorded and cannot appear as "Current" in future PCs.</div></div>
+      <div class="form-row"><label>Summary of what will be locked</label><div class="lock-list" id="lock-summary-list">Loading…</div></div>
+      <div class="form-msg" id="lock-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-lock')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmLock()">🔒 Confirm Lock</button>
+    </div>
+  </div>
+</div>
+
+<!-- PC Signatories Modal -->
+<div class="modal-overlay" id="modal-pc-sigs" style="display:none">
+  <div class="modal modal-lg">
+    <div class="modal-title">Edit Signatories — <span id="pcsig-pc-label">—</span><button class="modal-close" onclick="closeModal('modal-pc-sigs')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-hint" style="margin-bottom:8px">Edits here only affect this PC's printed signature block.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 80px 28px;gap:6px;padding:0 0 4px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase">
+        <span>Position / Role</span><span>Full Name</span><span>Company</span><span></span>
+      </div>
+      <div class="sig-edit-list" id="pcsig-list"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addPcSig()">+ Add Signatory</button>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="resetPcSigs()">↩ Reset to defaults</button>
+      <div class="form-msg" id="pcsig-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pc-sigs')">Cancel</button>
+      <button class="btn btn-primary" onclick="savePcSigs()">Save Signatories</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+'use strict';
+// ══════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════
+const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let currentUser = null;
+let perms = [];
+let canView = false, canManage = false, canAdmin = false, isSuperAdmin = false;
+let allScopes = [];
+let selectedScope = null;
+let selectedPC = null;
+let scopeVillaTypes = [];
+let scopeActivityGroups = [];
+let scopeActivities = []; // flat, with group info
+let scopeVillas = [];
+let pcOverrides = {};  // key: villa_id+':'+activity_code
+let billedRecords = {}; // key: villa_id+':'+activity_code → pc_id
+let wirData = {};      // key: villa_id+':'+activity_code → {approved, response_date}
+let pcSigsList = [];   // for current PC
+let globalSigs = [];
+let allVillasCache = [];
+let subcontractorsList = [];
+
+// cfg modal state
+let cfgVillaTypes = [];
+let cfgActGroups = [];
+let cfgActivities = []; // working copy for config modal (has _gi: index into cfgActGroups)
+let cfgScopeVillas = [];
+let cfgTab = 'types';
+
+// progress sheet cluster filter
+let psClusterFilter = 'all'; // 'all' or cluster_id as string
+
+// override state
+let ovPending = null; // {villa_id, activity_code, villa_no, act_name}
+
+// new/edit scope modal mode
+let editScopeMode = false;
+
+// historical PC state
+let histPCMeta = null;   // {num, date, label, notes}
+let histPCSelections = {}; // key: villa_id+':'+activity_code → true/false
+
+// villa search state
+let vsFoundVilla = null;
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function getH(extra={}) {
+  const h = { 'apikey': KEY, 'Content-Type':'application/json' };
+  if (window.__MEP_TOKEN__) h['Authorization'] = 'Bearer ' + window.__MEP_TOKEN__;
+  return Object.assign(h, extra);
+}
+async function fa(path) {
+  try {
+    const r = await fetch(`${SB}/rest/v1/${path}`, { headers: getH() });
+    const d = await r.json();
+    return Array.isArray(d) ? d : [];
+  } catch { return []; }
+}
+async function fp(path, body) {
+  const r = await fetch(`${SB}/rest/v1/${path}`, {
+    method:'POST', headers: getH({'Prefer':'return=representation'}), body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  // Supabase always returns an array; unwrap for single-object inserts
+  if (Array.isArray(d)) return !Array.isArray(body) ? (d[0] || null) : d;
+  return d;
+}
+async function fpatch(path, body) {
+  const r = await fetch(`${SB}/rest/v1/${path}`, {
+    method:'PATCH', headers: getH({'Prefer':'return=representation'}), body: JSON.stringify(body)
+  });
+  return await r.json();
+}
+async function fdel(path) {
+  await fetch(`${SB}/rest/v1/${path}`, { method:'DELETE', headers: getH() });
+}
+
+function fmtAED(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  if (n === 0) return '-';
+  return Number(n).toLocaleString('en-AE', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+function fmtPct(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return (n * 100).toFixed(2) + '%';
+}
+function fmtQty(n) {
+  if (!n) return '-';
+  return Number(n).toFixed(2);
+}
+function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ══════════════════════════════════════════════
+// PERMISSION CHECK
+// ══════════════════════════════════════════════
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', t||'dark'); }
+
+async function init() {
+  perms = (window.__MEP_USER__?.permissions) || [];
+  isSuperAdmin = perms.includes('manage_users') && perms.includes('manage_system');
+  canView   = isSuperAdmin || perms.includes('view_qs');
+  canManage = isSuperAdmin || perms.includes('manage_qs');
+  canAdmin  = isSuperAdmin || perms.includes('admin_qs');
+  currentUser = window.__MEP_USER__;
+
+  if (!canView) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg,#0d0d12);color:var(--tx,#ccc);flex-direction:column;gap:16px;font-family:inherit"><div style="font-size:48px">🔒</div><div style="font-size:22px;font-weight:700;color:#ff6b6b">Access Denied</div><div style="color:#888;font-size:14px">QS data is confidential. Contact your administrator.</div></div>';
+    return;
+  }
+
+  if (canManage || canAdmin) {
+    document.getElementById('btn-new-scope').style.display = '';
+  }
+
+  await loadScopes();
+}
+
+// ══════════════════════════════════════════════
+// SCOPES
+// ══════════════════════════════════════════════
+async function loadScopes() {
+  const scopes = await fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package&order=subcontractor_name.asc');
+  // Fetch latest PC per scope
+  const pcs = await fa('qs_payment_certificates?select=id,scope_id,pc_number,period_label,status&order=pc_number.desc');
+  const latestPcByScopeId = {};
+  pcs.forEach(p => { if (!latestPcByScopeId[p.scope_id]) latestPcByScopeId[p.scope_id] = p; });
+  allScopes = scopes.map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
+  renderScopeList();
+}
+
+function renderScopeList() {
+  const q = (document.getElementById('scope-search').value || '').toLowerCase();
+  const list = document.getElementById('scope-list');
+  const filtered = allScopes.filter(s =>
+    s.subcontractor_name.toLowerCase().includes(q) ||
+    (s.scope_title||'').toLowerCase().includes(q)
+  );
+  if (!filtered.length) { list.innerHTML = '<div class="lp-empty">No scopes found</div>'; return; }
+  list.innerHTML = filtered.map(s => {
+    const lp = s.latestPc;
+    const badgeClass = lp ? lp.status : 'none';
+    const badgeText = lp ? `PC#${lp.pc_number} · ${lp.period_label}` : 'No PCs yet';
+    return `<div class="scope-card${selectedScope?.id===s.id?' active':''}" onclick="selectScope(${s.id})">
+      <div class="sc-name">${escH(s.subcontractor_name)}</div>
+      <div class="sc-sub">${escH(s.scope_title||'')}</div>
+      <div class="sc-meta"><span class="sc-badge ${badgeClass}">${escH(badgeText)}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function filterScopes() { renderScopeList(); }
+
+async function selectScope(id) {
+  selectedScope = allScopes.find(s => s.id === id);
+  selectedPC = null;
+  renderScopeList();
+  document.getElementById('no-scope-msg').style.display = 'none';
+  document.getElementById('scope-panel').style.display = 'flex';
+  document.getElementById('sh-title').textContent = selectedScope.subcontractor_name;
+  document.getElementById('sh-sub').textContent = selectedScope.scope_title || '';
+  document.getElementById('sh-meta').textContent = [selectedScope.sca_ref, selectedScope.package].filter(Boolean).join(' · ');
+  document.getElementById('btn-delete-scope').style.display = isSuperAdmin ? '' : 'none';
+  document.getElementById('btn-edit-scope').style.display = canAdmin ? '' : 'none';
+  document.getElementById('btn-config-scope').style.display = canAdmin ? '' : 'none';
+  document.getElementById('btn-new-pc').style.display = (canManage||canAdmin) ? '' : 'none';
+  document.getElementById('pc-area').style.display = 'none';
+  await loadScopeConfig();
+  await loadPCs();
+}
+
+async function loadScopeConfig() {
+  scopeVillaTypes = await fa(`qs_scope_villa_types?scope_id=eq.${selectedScope.id}&order=sort_order.asc`);
+  scopeActivityGroups = await fa(`qs_scope_activity_groups?scope_id=eq.${selectedScope.id}&order=sort_order.asc`);
+  const groupIds = scopeActivityGroups.map(g => g.id);
+  scopeActivities = groupIds.length
+    ? await fa(`qs_scope_activities?group_id=in.(${groupIds.join(',')})&order=sort_order.asc`)
+    : [];
+  // Auto-detect villas from WIR data — no manual assignment needed
+  scopeVillas = await autoDetectScopeVillas();
+  updateClusterFilter();
+}
+
+// ── Auto-detect villas from WIR data for this subcontractor ──
+async function autoDetectScopeVillas() {
+  const subName = selectedScope.subcontractor_name;
+  if (!subName) return [];
+  // Collect all aliases (the raw_subcontractor strings) that map to this canonical name
+  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias`);
+  let nameFilter;
+  if (aliases.length) {
+    // Match any known alias
+    const names = [...new Set([subName, ...aliases.map(a => a.alias)])];
+    nameFilter = `raw_subcontractor=in.(${names.map(n => `"${n}"`).join(',')})`;
+  } else {
+    nameFilter = `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
+  }
+  // Activities MUST be configured first — without them we can't scope the detection
+  // (omitting the filter would return every villa the sub has touched, which is wrong)
+  const actCodes = scopeActivities.map(a => a.activity_code).filter(Boolean);
+  if (!actCodes.length) return [];
+
+  const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
+  // Get distinct villa_ids that have WIR entries for this sub + these specific activities
+  const wirRows = await fa(`v_latest_wir_status?${nameFilter}${actFilter}&select=villa_id`);
+  const villaIds = [...new Set(wirRows.map(r => r.villa_id).filter(Boolean))];
+  if (!villaIds.length) return [];
+  // Fetch villa metadata (include cluster_id for cluster filtering)
+  const villas = await fa(`villas?id=in.(${villaIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true&order=cluster_id.asc,villa_no.asc`);
+  return villas.map(v => ({
+    villa_id: v.id,
+    villa_no: v.villa_no,
+    villa_type_label: matchVillaType(v.villa_type),
+    raw_villa_type: v.villa_type,
+    cluster_id: v.cluster_id,
+  }));
+}
+
+// Map a raw villa_type string from the villas table to a configured qs_scope_villa_types label
+// Uses bedroom count extraction so "4 BEDROOM VILLA" matches "4 Bedroom Villa"
+function matchVillaType(rawType) {
+  const beds = extractBedrooms(rawType);
+  if (beds && scopeVillaTypes.length) {
+    const match = scopeVillaTypes.find(t => extractBedrooms(t.villa_type_label) === beds);
+    if (match) return match.villa_type_label;
+  }
+  // Fall back to first type or raw value
+  return scopeVillaTypes[0]?.villa_type_label || rawType || 'Unknown';
+}
+
+function extractBedrooms(typeStr) {
+  const m = (typeStr || '').match(/(\d+)/);
+  return m ? parseInt(m[1]) : 0;
+}
+
+// ══════════════════════════════════════════════
+// PAYMENT CERTIFICATES
+// ══════════════════════════════════════════════
+async function loadPCs() {
+  const pcs = await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`);
+  const bar = document.getElementById('pc-bar');
+  const addBtn = (canManage||canAdmin) ? `<button class="pc-new-btn" onclick="openNewPC()">+ New PC</button>` : '';
+  if (!pcs.length) {
+    bar.innerHTML = `<span class="pc-none">No payment certificates yet</span>${addBtn}`;
+    document.getElementById('pc-area').style.display = 'none';
+    return;
+  }
+  bar.innerHTML = pcs.map(p =>
+    `<div class="pc-chip${selectedPC?.id===p.id?' active':''}" onclick="selectPC(${p.id})">
+      <span class="pc-status ${p.status}"></span>PC #${p.pc_number} · ${escH(p.period_label)}
+    </div>`
+  ).join('') + addBtn;
+  // Auto-select latest
+  if (!selectedPC) { selectPC(pcs[pcs.length - 1].id, pcs); }
+}
+
+async function selectPC(id, pcsCache) {
+  const pcs = pcsCache || await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`);
+  selectedPC = pcs.find(p => p.id === id);
+  // Re-render bar
+  const bar = document.getElementById('pc-bar');
+  const addBtn = (canManage||canAdmin) ? `<button class="pc-new-btn" onclick="openNewPC()">+ New PC</button>` : '';
+  bar.innerHTML = pcs.map(p =>
+    `<div class="pc-chip${selectedPC?.id===p.id?' active':''}" onclick="selectPC(${p.id})">
+      <span class="pc-status ${p.status}"></span>PC #${p.pc_number} · ${escH(p.period_label)}
+    </div>`
+  ).join('') + addBtn;
+  document.getElementById('pc-area').style.display = 'flex';
+  await loadPCData();
+}
+
+async function loadPCData() {
+  showTab('progress');
+  document.getElementById('ps-wrap').innerHTML = '<div class="loading-row"><span class="spin"></span></div>';
+  document.getElementById('psum-inner').innerHTML = '<div class="loading-row"><span class="spin"></span></div>';
+
+  // Status strip
+  const isLocked = selectedPC.status === 'locked';
+  const strip = document.getElementById('ps-status-strip');
+  if (isLocked) {
+    strip.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
+      <div class="ps-locked-banner">🔒 Locked · ${escH(selectedPC.period_label)} · This PC is read-only</div>
+      ${canAdmin ? '<button class="btn btn-danger btn-sm" onclick="openDeletePC()">🗑 Delete PC</button>' : ''}
+    </div>`;
+  } else {
+    const canLock = canManage || canAdmin;
+    const canSubmit = canManage || canAdmin;
+    strip.innerHTML = `
+      <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em">${selectedPC.status.toUpperCase()}</span>
+      ${canSubmit && selectedPC.status==='draft' ? '<button class="btn btn-ghost btn-sm" onclick="submitPC()">Submit</button>' : ''}
+      ${canLock && selectedPC.status==='submitted' ? '<button class="btn btn-danger btn-sm" onclick="openLock()">🔒 Lock PC</button>' : ''}
+      ${canAdmin ? '<button class="btn btn-danger btn-sm" onclick="openDeletePC()">🗑 Delete PC</button>' : ''}
+    `;
+  }
+
+  // Load WIRs, overrides, billed records in parallel
+  const villaIds = scopeVillas.map(v => v.villa_id);
+  const actCodes = scopeActivities.map(a => a.activity_code);
+
+  if (!villaIds.length || !actCodes.length) {
+    document.getElementById('ps-wrap').innerHTML = '<div class="loading-row">No villas or activities configured for this scope.<br><small>Use ⚙ Configure to set up the scope.</small></div>';
+    renderPaymentSummary();
+    return;
+  }
+
+  const villaIdsStr = villaIds.join(',');
+  const actCodesStr = actCodes.map(c => `"${c}"`).join(',');
+
+  const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
+    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${actCodesStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
+    fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason`),
+    fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id`),
+    fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
+  ]);
+
+  // Index WIR data
+  wirData = {};
+  wirRows.forEach(w => {
+    const key = w.villa_id + ':' + w.raw_activity_code;
+    const existing = wirData[key];
+    if (!existing || (w.normalised_status === 'approved')) {
+      wirData[key] = { approved: w.normalised_status === 'approved', response_date: w.response_date };
+    }
+  });
+
+  // Index overrides
+  pcOverrides = {};
+  overrideRows.forEach(o => { pcOverrides[o.villa_id + ':' + o.activity_code] = o; });
+
+  // Index billed records
+  billedRecords = {};
+  billedRows.forEach(b => { billedRecords[b.villa_id + ':' + b.activity_code] = b.locked_pc_id; });
+
+  // PC signatories
+  pcSigsList = pcSigs;
+
+  renderProgressSheet();
+  renderPaymentSummary();
+}
+
+// ══════════════════════════════════════════════
+// CALCULATION ENGINE
+// ══════════════════════════════════════════════
+function getActivityStatus(villa_id, activity_code) {
+  const key = villa_id + ':' + activity_code;
+  const billedPcId = billedRecords[key];
+  const override = pcOverrides[key];
+  const wir = wirData[key];
+
+  // Determine if approved to-date
+  let isCompleteToDate;
+  let source; // 'wir' | 'override-on' | 'override-off' | 'prev-billed'
+  if (override !== undefined) {
+    isCompleteToDate = override.is_complete;
+    source = override.is_complete ? 'override-on' : 'override-off';
+  } else {
+    isCompleteToDate = wir?.approved === true;
+    source = isCompleteToDate ? 'approved' : 'not-approved';
+  }
+
+  // If billed in a PREVIOUS locked PC → always PREV, never CURRENT
+  const wasBilledPrev = billedPcId !== undefined && billedPcId !== selectedPC.id;
+  const isBilledNow   = billedPcId !== undefined && billedPcId === selectedPC.id;
+
+  return { isCompleteToDate, wasBilledPrev, isBilledNow, source, override, wir };
+}
+
+function calcVillaWorkdone(villa_id) {
+  let prev = 0, current = 0, toDate = 0;
+  scopeActivityGroups.forEach(grp => {
+    const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+    grpActs.forEach(act => {
+      const { isCompleteToDate, wasBilledPrev } = getActivityStatus(villa_id, act.activity_code);
+      const contrib = grp.group_weight * act.activity_weight;
+      if (wasBilledPrev) { prev += contrib; toDate += contrib; }
+      else if (isCompleteToDate) { current += contrib; toDate += contrib; }
+    });
+  });
+  return { prev, current, toDate };
+}
+
+function getVillaRate(villa_type_label) {
+  const vt = scopeVillaTypes.find(t => t.villa_type_label === villa_type_label);
+  return vt ? parseFloat(vt.rate_aed) : 0;
+}
+
+// ══════════════════════════════════════════════
+// PROGRESS SHEET RENDER
+// ══════════════════════════════════════════════
+function renderProgressSheet() {
+  if (!scopeVillas.length || !scopeActivities.length) {
+    document.getElementById('ps-wrap').innerHTML = '<div class="loading-row">No villas or activities configured.<br><small>Use ⚙ Configure to set up the scope.</small></div>';
+    return;
+  }
+
+  const isLocked = selectedPC.status === 'locked';
+  const canEdit = !isLocked && (canManage || canAdmin);
+
+  // Build column headers
+  let thGroups = '<th class="sticky col-sr" rowspan="2">Sr.</th><th class="sticky col-villa" rowspan="2">Villa</th><th class="sticky col-type" rowspan="2">Type</th><th class="sticky col-cluster" rowspan="2">Cluster</th>';
+  let thActs = ''; // Sr/Villa/Type/Cluster are rowspan=2 in thGroups — no placeholder cells needed in row 2
+  scopeActivityGroups.forEach(grp => {
+    const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+    thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${(grp.group_weight*100).toFixed(0)}%)</th>`;
+    grpActs.forEach(act => {
+      thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${(act.activity_weight*100).toFixed(0)}%</div></th>`;
+    });
+  });
+  thGroups += '<th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
+  thActs += '<th class="aed-prev">PREV</th><th class="aed-cur">CURRENT</th><th class="aed-date">TO DATE</th>';
+
+  // Apply cluster filter
+  const visibleVillas = psClusterFilter === 'all'
+    ? scopeVillas
+    : scopeVillas.filter(v => String(v.cluster_id) === String(psClusterFilter));
+
+  // Build rows
+  let rows = '';
+  if (!visibleVillas.length) {
+    rows = `<tr><td colspan="100" style="text-align:center;color:var(--tx3);padding:24px;font-size:12px">No villas in Cluster ${psClusterFilter}.</td></tr>`;
+  }
+  visibleVillas.forEach((sv, idx) => {
+    const { prev, current, toDate } = calcVillaWorkdone(sv.villa_id);
+    const rate = getVillaRate(sv.villa_type_label);
+    const prevAed = prev * rate;
+    const curAed = current * rate;
+    const todAed = toDate * rate;
+
+    let actCells = '';
+    scopeActivityGroups.forEach(grp => {
+      const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+      grpActs.forEach(act => {
+        const { isCompleteToDate, wasBilledPrev, source } = getActivityStatus(sv.villa_id, act.activity_code);
+        let cls = 'act-cell';
+        let label = '—';
+        if (wasBilledPrev) { cls += ' prev-billed readonly'; label = '✓ₚ'; }
+        else if (source === 'override-on') { cls += ' override-on'; label = '✓ᵒ'; }
+        else if (source === 'override-off') { cls += ' override-off'; label = '✗ᵒ'; }
+        else if (source === 'approved') { cls += ' approved'; label = '✓'; }
+        else { cls += ' not-approved'; label = '—'; }
+        if (!wasBilledPrev && canEdit) cls += '';
+        const click = (!wasBilledPrev && canEdit) ? `onclick="openOverride(${sv.villa_id},'${escH(act.activity_code)}','${escH(sv.villa_no)}','${escH(act.activity_name)}')"` : '';
+        actCells += `<td style="text-align:center;vertical-align:middle;padding:5px 8px"><div class="${cls}" ${click} title="${escH(act.activity_name)}">${label}</div></td>`;
+      });
+    });
+
+    rows += `<tr>
+      <td class="left sticky col-sr" style="font-size:12px">${idx+1}</td>
+      <td class="left sticky col-villa" style="font-weight:700;font-size:13px;padding:6px 10px">VI-${escH(sv.villa_no)}</td>
+      <td class="left sticky col-type" style="font-size:12px;padding:6px 10px">${escH(sv.villa_type_label)}</td>
+      <td class="sticky col-cluster" style="font-size:12px;font-weight:600;color:var(--tx2)">${sv.cluster_id != null ? 'C'+sv.cluster_id : '—'}</td>
+      ${actCells}
+      <td class="rate-cell">${fmtAED(rate)}</td>
+      <td class="aed-cell aed-prev">${fmtAED(prevAed)}</td>
+      <td class="aed-cell aed-cur">${fmtAED(curAed)}</td>
+      <td class="aed-cell aed-date">${fmtAED(todAed)}</td>
+    </tr>`;
+  });
+
+  document.getElementById('ps-wrap').innerHTML = `
+    <table class="ps-table">
+      <thead><tr>${thGroups}</tr><tr>${thActs}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+async function refreshProgress() { await loadPCData(); }
+
+// Populate the cluster filter dropdown based on clusters present in scopeVillas
+function updateClusterFilter() {
+  const sel = document.getElementById('ps-cluster-filter');
+  const lbl = document.getElementById('ps-cluster-label');
+  if (!sel) return;
+  const clusters = [...new Set(scopeVillas.map(v => v.cluster_id).filter(c => c != null))].sort((a,b)=>a-b);
+  sel.innerHTML = '<option value="all">All Clusters</option>' + clusters.map(c => `<option value="${c}">Cluster ${c}</option>`).join('');
+  sel.value = 'all';
+  psClusterFilter = 'all';
+  const show = clusters.length > 1;
+  sel.style.display = show ? '' : 'none';
+  if (lbl) lbl.style.display = show ? '' : 'none';
+}
+
+// ══════════════════════════════════════════════
+// PAYMENT SUMMARY RENDER
+// ══════════════════════════════════════════════
+function renderPaymentSummary() {
+  // Aggregate by villa type
+  const typeMap = {};
+  scopeVillaTypes.forEach(t => {
+    typeMap[t.villa_type_label] = { type: t, prev:0, current:0, toDate:0, rate: parseFloat(t.rate_aed), qty: parseInt(t.qty_contracted) };
+  });
+  scopeVillas.forEach(sv => {
+    const { prev, current, toDate } = calcVillaWorkdone(sv.villa_id);
+    const tm = typeMap[sv.villa_type_label];
+    if (!tm) return;
+    tm.prev    += prev;
+    tm.current += current;
+    tm.toDate  += toDate;
+  });
+
+  const typeEntries = Object.values(typeMap);
+  const totPrevQty  = typeEntries.reduce((a,t)=>a+t.prev, 0);
+  const totCurQty   = typeEntries.reduce((a,t)=>a+t.current, 0);
+  const totTodQty   = typeEntries.reduce((a,t)=>a+t.toDate, 0);
+  const totSubconAmt = typeEntries.reduce((a,t)=>a+t.qty*t.rate, 0);
+  const totPrevAmt  = typeEntries.reduce((a,t)=>a+t.prev*t.rate, 0);
+  const totCurAmt   = typeEntries.reduce((a,t)=>a+t.current*t.rate, 0);
+  const totTodAmt   = typeEntries.reduce((a,t)=>a+t.toDate*t.rate, 0);
+
+  // Financial calculations
+  const ded   = parseFloat(selectedPC.deduction_aed)||0;
+  const ret   = selectedPC.retention_applicable ? (parseFloat(selectedPC.retention_aed)||0) : 0;
+  const vr    = parseFloat(selectedPC.vat_rate)||0.05;
+  const certified = totTodAmt - ded - ret;
+  const vat   = certified * vr;
+  const net   = certified + vat;
+  const certPrev = totPrevAmt - ded - ret;
+  const vatPrev  = certPrev * vr;
+  const netPrev  = certPrev + vatPrev;
+
+  const isLocked = selectedPC.status === 'locked';
+  const canEditFin = !isLocked || canAdmin;
+  const canEditSigs = canManage || canAdmin;
+
+  // Items table rows
+  let itemRows = typeEntries.map((t,i) => `
+    <tr>
+      <td class="center">${i+2}</td>
+      <td>${escH(t.type.villa_type_label)}</td>
+      <td class="center">${escH(t.type.unit||'Villa')}</td>
+      <td class="center">${t.qty}</td>
+      <td class="right">${fmtAED(t.rate)}</td>
+      <td class="right bold">${fmtAED(t.qty*t.rate)}</td>
+      <td class="center">${fmtQty(t.prev)}</td>
+      <td class="center">${fmtQty(t.current)}</td>
+      <td class="center bold">${fmtQty(t.toDate)}</td>
+      <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td>
+      <td class="right">${fmtAED(t.prev*t.rate)}</td>
+      <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td>
+      <td class="right">${fmtAED(t.current*t.rate)}</td>
+      <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td>
+      <td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+    </tr>`).join('');
+
+  // Summary table rows
+  let sumRows = typeEntries.map(t => `
+    <tr>
+      <td>${escH(t.type.villa_type_label)}</td>
+      <td class="center">${escH(t.type.unit||'Villa')}</td>
+      <td class="center">${t.qty}</td>
+      <td class="right">${fmtAED(t.rate)}</td>
+      <td class="right">${fmtAED(t.qty*t.rate)}</td>
+      <td class="center">${fmtQty(t.prev)}</td>
+      <td class="center">${fmtQty(t.current)}</td>
+      <td class="center bold">${fmtQty(t.toDate)}</td>
+      <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td>
+      <td class="right">${fmtAED(t.prev*t.rate)}</td>
+      <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td>
+      <td class="right">${fmtAED(t.current*t.rate)}</td>
+      <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td>
+      <td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+    </tr>`).join('');
+
+  // Signature block
+  const sigItems = pcSigsList.map(s => `
+    <div class="sig-item">
+      <div class="sig-position">${escH(s.position_title)}</div>
+      <div class="sig-line"></div>
+      <div class="sig-name">${escH(s.full_name)}</div>
+      <div class="sig-company">${escH(s.company||'')}</div>
+    </div>`).join('');
+
+  const finInputAttr = canEditFin ? '' : 'disabled';
+  const retCheck = selectedPC.retention_applicable ? 'checked' : '';
+
+  document.getElementById('psum-inner').innerHTML = `
+    <!-- Actions -->
+    <div class="psum-actions">
+      <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+      ${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit Signatories</button>` : ''}
+    </div>
+
+    <!-- Header block -->
+    <div class="psum-hdr-block">
+      <div style="display:flex;gap:40px;flex-wrap:wrap">
+        <div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">PROJECT:</span><span class="psum-hdr-val">${escH(selectedScope.project||'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT')}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">SUBCONTRACTOR:</span><span class="psum-hdr-val">${escH(selectedScope.subcontractor_name)}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">SCOPE OF WORKS:</span><span class="psum-hdr-val">${escH(selectedScope.scope_title||'')}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">SCA REF #:</span><span class="psum-hdr-val">${escH(selectedScope.sca_ref||'—')}</span></div>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div class="psum-hdr-row"><span class="psum-hdr-label">PC NO:</span><span class="psum-hdr-val">${selectedPC.pc_number}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">PERIOD:</span><span class="psum-hdr-val">${escH(selectedPC.period_label)}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="psum-section-title">Subcontractor Interim Payment Summary</div>
+
+    <!-- Items table -->
+    <table class="psum-table">
+      <thead>
+        <tr>
+          <th rowspan="2">Item</th>
+          <th rowspan="2">Description</th>
+          <th rowspan="2">Unit</th>
+          <th rowspan="2">QTY (No)</th>
+          <th rowspan="2">Rate (AED)</th>
+          <th rowspan="2">Subcontract Amount (AED)</th>
+          <th colspan="3">Progress QTY</th>
+          <th colspan="6">Amount (AED)</th>
+        </tr>
+        <tr>
+          <th>Prev</th><th>Current</th><th>To Date</th>
+          <th>% Prev</th><th>Prev</th><th>% Cur</th><th>Current</th><th>% ToDate</th><th>To Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="center">1</td><td colspan="14">${escH(selectedScope.scope_title||'')}</td></tr>
+        ${itemRows}
+        <tr class="total-row">
+          <td colspan="2" class="bold">SUBTOTAL</td>
+          <td></td>
+          <td class="center bold">${typeEntries.reduce((a,t)=>a+t.qty,0)}</td>
+          <td></td>
+          <td class="right bold">${fmtAED(totSubconAmt)}</td>
+          <td class="center">${fmtQty(totPrevQty)}</td>
+          <td class="center">${fmtQty(totCurQty)}</td>
+          <td class="center bold">${fmtQty(totTodQty)}</td>
+          <td></td><td class="right">${fmtAED(totPrevAmt)}</td>
+          <td></td><td class="right">${fmtAED(totCurAmt)}</td>
+          <td></td><td class="right bold">${fmtAED(totTodAmt)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="psum-section-title">Summary</div>
+    <table class="psum-table">
+      <thead>
+        <tr>
+          <th>Description</th><th>Unit</th><th>QTY</th><th>Rate</th><th>Subcon Amt</th>
+          <th>QTY-Prev</th><th>QTY-Cur</th><th>QTY-ToDate</th>
+          <th>%-Prev</th><th>Amt-Prev</th>
+          <th>%-Cur</th><th>Amt-Cur</th>
+          <th>%-ToDate</th><th>Amt-ToDate</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${sumRows}
+        <tr class="total-row">
+          <td colspan="2" class="bold">TOTAL — WORK DONE</td>
+          <td class="center bold">${typeEntries.reduce((a,t)=>a+t.qty,0)}</td>
+          <td></td>
+          <td class="right bold">${fmtAED(totSubconAmt)}</td>
+          <td class="center">${fmtQty(totPrevQty)}</td>
+          <td class="center">${fmtQty(totCurQty)}</td>
+          <td class="center bold">${fmtQty(totTodQty)}</td>
+          <td></td><td class="right">${fmtAED(totPrevAmt)}</td>
+          <td></td><td class="right">${fmtAED(totCurAmt)}</td>
+          <td></td><td class="right bold">${fmtAED(totTodAmt)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Financial Footer -->
+    <div class="psum-section-title">Financial Summary</div>
+    <div class="fin-block">
+      <div class="fin-row">
+        <span class="fin-label">Gross Total</span>
+        <div class="fin-vals">
+          <span class="fin-val prev">${fmtAED(totPrevAmt)}</span>
+          <span class="fin-val cur">${fmtAED(totCurAmt)}</span>
+          <span class="fin-val total">${fmtAED(totTodAmt)}</span>
+        </div>
+      </div>
+      <div class="fin-row">
+        <div class="fin-row-label-group">
+          <span class="fin-label">Deductions</span>
+          ${canEditFin ? `<input class="fin-input" id="fin-ded" type="number" value="${ded}" min="0" onchange="saveFinancials()" ${finInputAttr}>` : `<span class="fin-val">${fmtAED(ded)}</span>`}
+        </div>
+        <div class="fin-vals">
+          <span class="fin-val prev">—</span>
+          <span class="fin-val cur">—</span>
+          <span class="fin-val total">${fmtAED(ded)}</span>
+        </div>
+      </div>
+      <div class="fin-row">
+        <div class="fin-row-label-group">
+          <label class="fin-toggle"><input type="checkbox" id="fin-ret-toggle" ${retCheck} onchange="saveFinancials()" ${canEditFin?'':'disabled'}> Retention</label>
+          ${canEditFin ? `<input class="fin-input" id="fin-ret" type="number" value="${selectedPC.retention_aed||0}" min="0" ${retCheck?'':'disabled'} onchange="saveFinancials()">` : `<span class="fin-val">${fmtAED(ret)}</span>`}
+        </div>
+        <div class="fin-vals">
+          <span class="fin-val prev">—</span>
+          <span class="fin-val cur">—</span>
+          <span class="fin-val total">${selectedPC.retention_applicable?fmtAED(ret):'Not Applicable'}</span>
+        </div>
+      </div>
+      <div class="fin-row" style="border-top:2px solid var(--bdr2)">
+        <span class="fin-label">Total Certified Amount</span>
+        <div class="fin-vals">
+          <span class="fin-val prev">${fmtAED(certPrev)}</span>
+          <span class="fin-val cur">—</span>
+          <span class="fin-val total">${fmtAED(certified)}</span>
+        </div>
+      </div>
+      <div class="fin-row">
+        <div class="fin-row-label-group">
+          <span class="fin-label">VAT</span>
+          ${canEditFin ? `<input class="fin-input" id="fin-vat" type="number" value="${(vr*100).toFixed(1)}" min="0" max="100" step="0.1" onchange="saveFinancials()" ${finInputAttr}> %` : `<span class="fin-val">${(vr*100).toFixed(1)}%</span>`}
+        </div>
+        <div class="fin-vals">
+          <span class="fin-val prev">${fmtAED(vatPrev)}</span>
+          <span class="fin-val cur">—</span>
+          <span class="fin-val total">${fmtAED(vat)}</span>
+        </div>
+      </div>
+      <div class="fin-row" style="border-top:2px solid var(--bdr2)">
+        <span class="fin-label" style="font-size:13px;color:var(--gold)">Net Total</span>
+        <div class="fin-vals">
+          <span class="fin-val prev grand">${fmtAED(netPrev)}</span>
+          <span class="fin-val cur grand">—</span>
+          <span class="fin-val total grand">${fmtAED(net)}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signature Block -->
+    <div class="sig-block">
+      <div class="sig-block-title">
+        <span>Signatures</span>
+        ${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit</button>` : ''}
+      </div>
+      <div class="sig-grid">${sigItems || '<div style="color:var(--tx3);font-size:12px">No signatories configured. Click Edit to add.</div>'}</div>
+    </div>
+  `;
+
+  // Wire up retention toggle
+  const retToggle = document.getElementById('fin-ret-toggle');
+  if (retToggle) {
+    retToggle.addEventListener('change', () => {
+      const retInput = document.getElementById('fin-ret');
+      if (retInput) retInput.disabled = !retToggle.checked;
+    });
+  }
+}
+
+async function saveFinancials() {
+  if (!selectedPC) return;
+  const ded  = parseFloat(document.getElementById('fin-ded')?.value)||0;
+  const retT = document.getElementById('fin-ret-toggle')?.checked||false;
+  const ret  = parseFloat(document.getElementById('fin-ret')?.value)||0;
+  const vatPct = parseFloat(document.getElementById('fin-vat')?.value)||5;
+  await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
+    deduction_aed: ded, retention_applicable: retT, retention_aed: ret, vat_rate: vatPct/100
+  });
+  audit('qs_payment_certificates', 'UPDATE_FINANCIALS', selectedPC.id, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, deduction_aed: ded, retention_applicable: retT, retention_aed: ret, vat_rate: vatPct/100 });
+  selectedPC.deduction_aed = ded;
+  selectedPC.retention_applicable = retT;
+  selectedPC.retention_aed = ret;
+  selectedPC.vat_rate = vatPct/100;
+  renderPaymentSummary();
+}
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(t) {
+  document.querySelectorAll('.qs-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.qs-tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('tc-'+t).classList.add('active');
+}
+function showTab(t) { switchTab(t); }
+
+function switchCfgTab(t) {
+  cfgTab = t;
+  ['types','acts','villas','sigs'].forEach(k => {
+    document.getElementById('cfg-tab-'+k).classList.toggle('active', k===t);
+    document.getElementById('cfg-panel-'+k).style.display = k===t ? '' : 'none';
+  });
+  // Detected Villas is read-only — hide Save button; also lazy-render when switching to it
+  const saveBtn = document.getElementById('cfg-save-btn');
+  if (saveBtn) saveBtn.style.display = t === 'villas' ? 'none' : '';
+  if (t === 'villas') renderDetectedVillas();
+}
+
+// ══════════════════════════════════════════════
+// OVERRIDE MODAL
+// ══════════════════════════════════════════════
+function openOverride(villa_id, activity_code, villa_no, act_name) {
+  if (!canManage && !canAdmin) return;
+  ovPending = { villa_id: parseInt(villa_id), activity_code, villa_no, act_name };
+  const key = villa_id + ':' + activity_code;
+  const billed = billedRecords[key];
+  const ovExisting = pcOverrides[key];
+  const wir = wirData[key];
+
+  document.getElementById('ov-info').innerHTML = `
+    <b>Villa:</b> VI-${escH(villa_no)} &nbsp;|&nbsp; <b>Activity:</b> ${escH(activity_code)} — ${escH(act_name)}<br>
+    <b>WIR Status:</b> ${wir?.approved ? '✓ Approved' : '— Not approved'}<br>
+    ${ovExisting ? `<b>Current Override:</b> ${ovExisting.is_complete ? '✓ Override: Complete' : '✗ Override: Not Complete'} — ${escH(ovExisting.override_reason||'')}` : '<b>Current Override:</b> None (using WIR data)'}`;
+
+  document.getElementById('ov-warn').style.display = billed ? '' : 'none';
+  document.getElementById('ov-complete').value = ovExisting ? (ovExisting.is_complete ? '1' : '0') : 'wir';
+  document.getElementById('ov-reason').value = '';
+  document.getElementById('ov-msg').className = 'form-msg';
+  document.getElementById('modal-override').style.display = 'flex';
+}
+
+async function submitOverride() {
+  if (!ovPending) return;
+  const val = document.getElementById('ov-complete').value;
+  const reason = document.getElementById('ov-reason').value.trim();
+  const msg = document.getElementById('ov-msg');
+
+  if (val !== 'wir' && !reason) { showMsg(msg, 'err', 'Reason is required for an override.'); return; }
+
+  const key = ovPending.villa_id + ':' + ovPending.activity_code;
+  try {
+    if (val === 'wir') {
+      // Remove override
+      await fdel(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`);
+      audit('qs_pc_overrides', 'REMOVE_OVERRIDE', selectedPC.id, null, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
+      delete pcOverrides[key];
+    } else {
+      const isComplete = val === '1';
+      const body = { pc_id: selectedPC.id, villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, is_complete: isComplete, override_reason: reason, created_by: currentUser?.full_name || '' };
+      const existing = pcOverrides[key];
+      if (existing) {
+        await fpatch(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`, { is_complete: isComplete, override_reason: reason });
+      } else {
+        await fp('qs_pc_overrides', body);
+      }
+      audit('qs_pc_overrides', existing ? 'UPDATE_OVERRIDE' : 'CREATE_OVERRIDE', selectedPC.id, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, is_complete: isComplete, reason, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
+      pcOverrides[key] = { villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, is_complete: isComplete, override_reason: reason };
+    }
+    closeModal('modal-override');
+    renderProgressSheet();
+    renderPaymentSummary();
+  } catch(e) { showMsg(msg, 'err', 'Save failed: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════
+// PC STATUS ACTIONS
+// ══════════════════════════════════════════════
+async function submitPC() {
+  if (!selectedPC || selectedPC.status !== 'draft') return;
+  await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'submitted', submitted_at: new Date().toISOString() });
+  audit('qs_payment_certificates', 'SUBMIT_PC', selectedPC.id, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, period_label: selectedPC.period_label });
+  selectedPC.status = 'submitted';
+  await loadPCs();
+  await loadPCData();
+}
+
+async function openLock() {
+  if (!selectedPC) return;
+  // Build summary of what will be billed
+  let summary = '';
+  let count = 0;
+  scopeVillas.forEach(sv => {
+    scopeActivities.forEach(act => {
+      const { isCompleteToDate, wasBilledPrev } = getActivityStatus(sv.villa_id, act.activity_code);
+      if (isCompleteToDate && !wasBilledPrev) {
+        summary += `<div>VI-${escH(sv.villa_no)} · ${escH(act.activity_code)}</div>`;
+        count++;
+      }
+    });
+  });
+  document.getElementById('lock-summary-list').innerHTML = count
+    ? `<div style="margin-bottom:4px;font-weight:700;color:var(--tx)">${count} new billing records will be created:</div>${summary}`
+    : '<div style="color:var(--tx3)">No new billable items in this PC.</div>';
+  document.getElementById('lock-msg').className = 'form-msg';
+  document.getElementById('modal-lock').style.display = 'flex';
+}
+
+async function confirmLock() {
+  const msg = document.getElementById('lock-msg');
+  try {
+    // 1. Write billed records (ON CONFLICT DO NOTHING)
+    const newBilledItems = [];
+    scopeVillas.forEach(sv => {
+      scopeActivities.forEach(act => {
+        const { isCompleteToDate, wasBilledPrev } = getActivityStatus(sv.villa_id, act.activity_code);
+        if (isCompleteToDate && !wasBilledPrev) {
+          newBilledItems.push({ scope_id: selectedScope.id, villa_id: sv.villa_id, activity_code: act.activity_code, locked_pc_id: selectedPC.id });
+        }
+      });
+    });
+    if (newBilledItems.length) {
+      await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
+        method:'POST',
+        headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+        body: JSON.stringify(newBilledItems)
+      });
+    }
+    // 2. Update PC status
+    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString() });
+    audit('qs_payment_certificates', 'LOCK_PC', selectedPC.id, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, period_label: selectedPC.period_label, billed_count: newBilledItems.length });
+    selectedPC.status = 'locked';
+    closeModal('modal-lock');
+    await loadPCs();
+    await loadPCData();
+  } catch(e) { showMsg(msg, 'err', 'Lock failed: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════
+// NEW SCOPE
+// ══════════════════════════════════════════════
+async function _loadSubsList() {
+  // Always reload fresh so newly added entries appear immediately
+  subcontractorsList = await fa('subcontractors?select=id,name&order=name.asc');
+  if (!subcontractorsList.length) {
+    // Fallback: derive distinct names from WIR data when table is unpopulated
+    const wirRows = await fa('v_latest_wir_status?select=raw_subcontractor&raw_subcontractor=not.is.null');
+    const seen = new Set();
+    const names = [];
+    wirRows.forEach(r => {
+      const n = (r.raw_subcontractor || '').trim();
+      const key = n.toLowerCase();
+      if (n && !seen.has(key)) { seen.add(key); names.push(n); }
+    });
+    names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    subcontractorsList = names.map((n, i) => ({ id: -(i + 1), name: n }));
+  }
+}
+
+async function openNewScope() {
+  await _loadSubsList();
+  editScopeMode = false;
+  document.getElementById('ns-modal-title').textContent = 'New Subcontractor Scope';
+  document.getElementById('ns-submit-btn').textContent = 'Create Scope';
+  document.getElementById('ns-sub-search').value = '';
+  document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-scope').value = '';
+  document.getElementById('ns-sca').value = '';
+  document.getElementById('ns-package').value = '';
+  document.getElementById('ns-msg').className = 'form-msg';
+  document.getElementById('modal-new-scope').style.display = 'flex';
+  setTimeout(() => {
+    document.getElementById('ns-sub-search').focus();
+    filterSubOptions(); // explicitly show full list on open
+  }, 80);
+}
+
+async function openEditScope() {
+  if (!canAdmin) return;
+  await _loadSubsList();
+  editScopeMode = true;
+  document.getElementById('ns-modal-title').textContent = 'Edit Scope';
+  document.getElementById('ns-submit-btn').textContent = 'Save Changes';
+  document.getElementById('ns-sub-search').value = selectedScope.subcontractor_name || '';
+  document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-scope').value = selectedScope.scope_title || '';
+  document.getElementById('ns-sca').value = selectedScope.sca_ref || '';
+  document.getElementById('ns-package').value = selectedScope.package || '';
+  document.getElementById('ns-msg').className = 'form-msg';
+  document.getElementById('modal-new-scope').style.display = 'flex';
+}
+
+function filterSubOptions() {
+  const q = (document.getElementById('ns-sub-search').value || '').toLowerCase().trim();
+  const dd = document.getElementById('ns-sub-dropdown');
+  if (!subcontractorsList.length) {
+    dd.innerHTML = `<div style="padding:8px 14px;font-size:12px;color:var(--tx3)">No subcontractors loaded — type the name directly and it will be saved as entered.</div>`;
+    dd.style.display = '';
+    return;
+  }
+  const matches = subcontractorsList.filter(s => !q || s.name.toLowerCase().includes(q)).slice(0, 40);
+  if (!matches.length) {
+    dd.innerHTML = `<div style="padding:8px 12px;font-size:12px;color:var(--tx3)">No match — name will be used as typed</div>`;
+    dd.style.display = '';
+    return;
+  }
+  dd.innerHTML = matches.map(s =>
+    `<div style="padding:8px 14px;cursor:pointer;font-size:13px;color:var(--tx);border-bottom:1px solid var(--bdr)"
+          onmousedown="selectSubcontractor('${escH(s.name).replace(/'/g,"\\'")}');"
+          onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''">
+       ${escH(s.name)}
+     </div>`
+  ).join('');
+  dd.style.display = '';
+}
+
+function selectSubcontractor(name) {
+  document.getElementById('ns-sub-search').value = name;
+  document.getElementById('ns-sub-dropdown').style.display = 'none';
+}
+
+async function submitScope() {
+  const name = (document.getElementById('ns-sub-search').value || '').trim();
+  const scope = (document.getElementById('ns-scope').value || '').trim();
+  const msg = document.getElementById('ns-msg');
+  if (!name) { showMsg(msg,'err','Subcontractor name is required.'); return; }
+  if (!scope) { showMsg(msg,'err','Scope of Works is required.'); return; }
+  const body = {
+    subcontractor_name: name,
+    project: (document.getElementById('ns-project').value || '').trim() || 'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT',
+    scope_title: scope,
+    sca_ref: (document.getElementById('ns-sca').value || '').trim(),
+    package: (document.getElementById('ns-package').value || '').trim(),
+  };
+  const saveBtn = document.getElementById('ns-submit-btn');
+  if (saveBtn) saveBtn.disabled = true;
+
+  if (editScopeMode) {
+    // ── EDIT existing scope ──
+    const _oldScopeData = { subcontractor_name: selectedScope.subcontractor_name, scope_title: selectedScope.scope_title, sca_ref: selectedScope.sca_ref, package: selectedScope.package };
+    const res = await fpatch(`qs_scopes?id=eq.${selectedScope.id}`, body);
+    if (saveBtn) saveBtn.disabled = false;
+    if (Array.isArray(res) && res.length > 0) {
+      audit('qs_scopes', 'UPDATE_SCOPE', selectedScope.id, body, _oldScopeData);
+      closeModal('modal-new-scope');
+      // Update local state + header immediately
+      Object.assign(selectedScope, body);
+      document.getElementById('sh-title').textContent = selectedScope.subcontractor_name;
+      document.getElementById('sh-sub').textContent = selectedScope.scope_title || '';
+      document.getElementById('sh-meta').textContent = [selectedScope.sca_ref, selectedScope.package].filter(Boolean).join(' · ');
+      await loadScopes(); // refresh sidebar list
+    } else {
+      const detail = (Array.isArray(res) && !res.length) ? 'No rows updated — check permissions.' : (res?.message || res?.hint || JSON.stringify(res));
+      showMsg(msg, 'err', 'Save failed: ' + (detail || 'unknown error'));
+    }
+  } else {
+    // ── CREATE new scope ──
+    const res = await fp('qs_scopes', body);
+    if (saveBtn) saveBtn.disabled = false;
+    if (res?.id) {
+      audit('qs_scopes', 'CREATE_SCOPE', res.id, { subcontractor_name: body.subcontractor_name, scope_title: body.scope_title, sca_ref: body.sca_ref, package: body.package });
+      closeModal('modal-new-scope');
+      await loadScopes();
+      selectScope(res.id);
+    } else {
+      const detail = res?.message || res?.hint || JSON.stringify(res);
+      showMsg(msg, 'err', 'Save failed: ' + (detail || 'unknown error'));
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+// DELETE SCOPE (super admin only)
+// ══════════════════════════════════════════════
+function openDeleteScope() {
+  if (!isSuperAdmin) return;
+  document.getElementById('del-scope-name').textContent = selectedScope.subcontractor_name;
+  document.getElementById('del-scope-meta').textContent = [selectedScope.scope_title, selectedScope.sca_ref].filter(Boolean).join(' · ');
+  document.getElementById('del-scope-confirm-input').value = '';
+  document.getElementById('del-scope-btn').disabled = true;
+  document.getElementById('del-scope-msg').className = 'form-msg';
+  document.getElementById('modal-delete-scope').style.display = 'flex';
+}
+
+async function confirmDeleteScope() {
+  if (!isSuperAdmin) return;
+  if (document.getElementById('del-scope-confirm-input').value !== 'DELETE') return;
+  const btn = document.getElementById('del-scope-btn');
+  const msg = document.getElementById('del-scope-msg');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const sid = selectedScope.id;
+    // Cascade delete in safe order
+    // 1. Get PC ids for this scope
+    const pcs = await fa(`qs_payment_certificates?scope_id=eq.${sid}&select=id`);
+    if (pcs.length) {
+      const pcIds = pcs.map(p => p.id).join(',');
+      await fdel(`qs_pc_signatories?pc_id=in.(${pcIds})`);
+    }
+    await fdel(`qs_billed_records?scope_id=eq.${sid}`);
+    await fdel(`qs_pc_overrides?scope_id=eq.${sid}`);
+    await fdel(`qs_payment_certificates?scope_id=eq.${sid}`);
+    // Get group ids
+    const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${sid}&select=id`);
+    if (grps.length) await fdel(`qs_scope_activities?group_id=in.(${grps.map(g=>g.id).join(',')})`);
+    await fdel(`qs_scope_activity_groups?scope_id=eq.${sid}`);
+    await fdel(`qs_scope_villa_types?scope_id=eq.${sid}`);
+    await fdel(`qs_scopes?id=eq.${sid}`);
+    audit('qs_scopes', 'DELETE_SCOPE', sid, null, { subcontractor_name: selectedScope.subcontractor_name, scope_title: selectedScope.scope_title, sca_ref: selectedScope.sca_ref });
+    closeModal('modal-delete-scope');
+    // Reset to no scope selected
+    selectedScope = null;
+    selectedPC = null;
+    document.getElementById('scope-panel').style.display = 'none';
+    document.getElementById('no-scope-msg').style.display = '';
+    await loadScopes();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Delete Everything';
+    showMsg(msg, 'err', 'Delete failed: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// DELETE PC (admin_qs)
+// ══════════════════════════════════════════════
+function openDeletePC() {
+  if (!canAdmin) return;
+  document.getElementById('del-pc-label').textContent = `PC #${selectedPC.pc_number} · ${selectedPC.period_label}`;
+  document.getElementById('del-pc-sub').textContent =
+    selectedScope.subcontractor_name + (selectedPC.status === 'locked' ? ' — Locked (billed records will be cleared)' : ` — ${selectedPC.status.charAt(0).toUpperCase()+selectedPC.status.slice(1)}`);
+  document.getElementById('del-pc-msg').className = 'form-msg';
+  const btn = document.getElementById('del-pc-btn');
+  btn.disabled = false;
+  btn.textContent = 'Delete PC';
+  document.getElementById('modal-delete-pc').style.display = 'flex';
+}
+
+async function confirmDeletePC() {
+  if (!canAdmin) return;
+  const btn = document.getElementById('del-pc-btn');
+  const msg = document.getElementById('del-pc-msg');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const pid = selectedPC.id;
+    // Cascade delete: signatories → billed records → overrides → PC
+    await fdel(`qs_pc_signatories?pc_id=eq.${pid}`);
+    await fdel(`qs_billed_records?locked_pc_id=eq.${pid}`);
+    await fdel(`qs_pc_overrides?pc_id=eq.${pid}`);
+    await fdel(`qs_payment_certificates?id=eq.${pid}`);
+    audit('qs_payment_certificates', 'DELETE_PC', pid, null, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, period_label: selectedPC.period_label, status: selectedPC.status });
+    closeModal('modal-delete-pc');
+    selectedPC = null;
+    document.getElementById('pc-area').style.display = 'none';
+    await loadPCs();
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Delete PC';
+    showMsg(msg, 'err', 'Delete failed: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// NEW PC
+// ══════════════════════════════════════════════
+function openNewPC() {
+  document.getElementById('npc-date').value = new Date().toISOString().slice(0,7) + '-01';
+  document.getElementById('npc-label').value = '';
+  document.getElementById('npc-num').value = '';
+  document.getElementById('npc-notes').value = '';
+  document.getElementById('npc-msg').className = 'form-msg';
+  document.getElementById('npc-historical').checked = false;
+  document.getElementById('npc-submit-btn').textContent = 'Create PC';
+  document.getElementById('modal-new-pc').style.display = 'flex';
+}
+
+async function submitNewPC() {
+  const num   = parseInt(document.getElementById('npc-num').value);
+  const date  = document.getElementById('npc-date').value;
+  const label = document.getElementById('npc-label').value.trim();
+  const msg   = document.getElementById('npc-msg');
+  if (!num || !date || !label) { showMsg(msg,'err','PC number, date and label are required.'); return; }
+
+  const body = { scope_id: selectedScope.id, pc_number: num, period_date: date, period_label: label,
+    notes: document.getElementById('npc-notes').value.trim(),
+    created_by: currentUser?.full_name || '', status:'draft' };
+  const res = await fp('qs_payment_certificates', body);
+  if (!res?.id) { showMsg(msg,'err','Save failed — PC number may already exist.'); return; }
+
+  // Copy global signatories to this PC
+  const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+  if (globalSigsCopy.length) {
+    const sigCopies = globalSigsCopy.map(s => ({ pc_id: res.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: s.sort_order }));
+    await fp('qs_pc_signatories', sigCopies);
+  }
+
+  audit('qs_payment_certificates', 'CREATE_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: num, period_label: label, status: 'draft' });
+  closeModal('modal-new-pc');
+  await loadPCs();
+  selectPC(res.id, await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`));
+}
+
+function toggleHistMode(on) {
+  const btn = document.getElementById('npc-submit-btn');
+  btn.textContent = on ? 'Next: Set Activities →' : 'Create PC';
+}
+
+function handleNewPC() {
+  if (document.getElementById('npc-historical').checked) {
+    // validate first
+    const num   = parseInt(document.getElementById('npc-num').value);
+    const date  = document.getElementById('npc-date').value;
+    const label = document.getElementById('npc-label').value.trim();
+    const msg   = document.getElementById('npc-msg');
+    if (!num || !date || !label) { showMsg(msg,'err','PC number, date and label are required.'); return; }
+    histPCMeta = { num, date, label, notes: document.getElementById('npc-notes').value.trim() };
+    openHistPCSetup();
+  } else {
+    submitNewPC();
+  }
+}
+
+function openHistPCSetup() {
+  histPCSelections = {};
+  document.getElementById('hist-pc-info-bar').textContent =
+    `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}`;
+  renderHistGrid();
+  document.getElementById('modal-hist-pc').style.display = 'flex';
+}
+
+function renderHistGrid() {
+  const grid = document.getElementById('hist-pc-grid');
+  if (!scopeVillas.length || !scopeActivities.length) {
+    grid.innerHTML = '<div style="color:var(--tx3);padding:16px">No villas or activities configured for this scope. Set up the scope configuration first.</div>';
+    return;
+  }
+
+  // Build column headers from activity groups + activities
+  let headCols = '<th style="text-align:left;padding:6px 10px;position:sticky;left:0;background:var(--bg3);z-index:5;min-width:72px">Villa</th>' +
+                 '<th style="text-align:center;padding:6px 8px;position:sticky;left:72px;background:var(--bg3);z-index:5;min-width:56px">Cluster</th>' +
+                 '<th style="text-align:left;padding:6px 10px;min-width:100px;position:sticky;left:128px;background:var(--bg3);z-index:5">Type</th>';
+  scopeActivityGroups.forEach(grp => {
+    const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+    grpActs.forEach(act => {
+      headCols += `<th style="white-space:normal;min-width:72px;padding:5px 8px;text-align:center;vertical-align:top">
+        <div style="font-size:11px;font-weight:600;color:var(--tx)">${escH(act.activity_name)}</div>
+        <div style="font-size:10px;color:var(--tx3)">${escH(act.activity_code)}</div>
+        <div style="margin-top:4px">
+          <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 6px"
+            onclick="histSelectAllAct('${escH(act.activity_code)}', true)">All</button>
+          <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 6px"
+            onclick="histSelectAllAct('${escH(act.activity_code)}', false)">None</button>
+        </div>
+      </th>`;
+    });
+  });
+  headCols += '<th style="padding:6px 8px;text-align:center;white-space:nowrap">Select<br>Row</th>';
+
+  // Group villas by cluster for separator rows
+  let lastCluster = null;
+  let rows = scopeVillas.map(sv => {
+    const totalCols = 3 + scopeActivities.length + 1;
+    let separator = '';
+    if (sv.cluster_id !== lastCluster) {
+      lastCluster = sv.cluster_id;
+      separator = `<tr><td colspan="${totalCols}" style="background:var(--bg4);padding:4px 12px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);border-top:2px solid var(--bdr2)">Cluster ${sv.cluster_id ?? '—'}</td></tr>`;
+    }
+    const clusterBg = 'var(--bg2)';
+    let cells = `<td style="font-weight:700;padding:5px 10px;white-space:nowrap;position:sticky;left:0;background:${clusterBg};z-index:2;font-size:13px">VI-${escH(sv.villa_no)}</td>` +
+                `<td style="font-size:12px;font-weight:600;padding:5px 8px;text-align:center;white-space:nowrap;color:var(--accent);position:sticky;left:72px;background:${clusterBg};z-index:2">C${sv.cluster_id ?? '—'}</td>` +
+                `<td style="font-size:11px;padding:5px 10px;white-space:nowrap;color:var(--tx2);position:sticky;left:128px;background:${clusterBg};z-index:2">${escH(sv.villa_type_label)}</td>`;
+    scopeActivityGroups.forEach(grp => {
+      scopeActivities.filter(a => a.group_id === grp.id).forEach(act => {
+        const key = `${sv.villa_id}:${act.activity_code}`;
+        const chk = histPCSelections[key] ? 'checked' : '';
+        cells += `<td style="text-align:center;padding:4px">
+          <input type="checkbox" ${chk} style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"
+            onchange="histToggle('${sv.villa_id}','${escH(act.activity_code)}',this.checked)"
+            id="hpk_${sv.villa_id}_${escH(act.activity_code)}">
+        </td>`;
+      });
+    });
+    // Row toggle button
+    cells += `<td style="text-align:center;padding:4px">
+      <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 8px"
+        onclick="histSelectRow(${sv.villa_id})">All</button>
+    </td>`;
+    return separator + `<tr>${cells}</tr>`;
+  }).join('');
+
+  grid.innerHTML = `
+    <table style="border-collapse:collapse;width:max-content;min-width:100%">
+      <thead><tr style="background:var(--bg3)">${headCols}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  updateHistCount();
+}
+
+function histToggle(villaId, actCode, val) {
+  histPCSelections[`${villaId}:${actCode}`] = val;
+  updateHistCount();
+}
+
+function histSelectAllAct(actCode, val) {
+  scopeVillas.forEach(sv => {
+    histPCSelections[`${sv.villa_id}:${actCode}`] = val;
+    const el = document.getElementById(`hpk_${sv.villa_id}_${actCode}`);
+    if (el) el.checked = val;
+  });
+  updateHistCount();
+}
+
+function histSelectRow(villaId) {
+  const allOn = scopeActivities.every(act => histPCSelections[`${villaId}:${act.activity_code}`]);
+  scopeActivities.forEach(act => {
+    const val = !allOn;
+    histPCSelections[`${villaId}:${act.activity_code}`] = val;
+    const el = document.getElementById(`hpk_${villaId}_${act.activity_code}`);
+    if (el) el.checked = val;
+  });
+  updateHistCount();
+}
+
+function updateHistCount() {
+  const n = Object.values(histPCSelections).filter(Boolean).length;
+  document.getElementById('hist-pc-count').textContent = `${n} activit${n===1?'y':'ies'} selected across ${scopeVillas.length} villas`;
+}
+
+async function submitHistPC() {
+  const btn = document.querySelector('#modal-hist-pc .btn-amber');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    // 1. Create the PC as locked
+    const body = {
+      scope_id: selectedScope.id,
+      pc_number: histPCMeta.num,
+      period_date: histPCMeta.date,
+      period_label: histPCMeta.label,
+      notes: histPCMeta.notes,
+      created_by: currentUser?.full_name || '',
+      status: 'locked'
+    };
+    const res = await fp('qs_payment_certificates', body);
+    if (!res?.id) throw new Error('Failed to create PC — number may already exist.');
+
+    // Copy global signatories
+    const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+    if (globalSigsCopy.length) {
+      await fp('qs_pc_signatories', globalSigsCopy.map(s => ({
+        pc_id: res.id, position_title: s.position_title,
+        full_name: s.full_name, company: s.company, sort_order: s.sort_order
+      })));
+    }
+
+    // 2. Insert billed records for all checked (villa, activity) pairs
+    const billedItems = [];
+    scopeVillas.forEach(sv => {
+      scopeActivities.forEach(act => {
+        if (histPCSelections[`${sv.villa_id}:${act.activity_code}`]) {
+          billedItems.push({
+            scope_id: selectedScope.id,
+            locked_pc_id: res.id,
+            villa_id: sv.villa_id,
+            activity_code: act.activity_code
+          });
+        }
+      });
+    });
+    if (billedItems.length) {
+      await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
+        method: 'POST',
+        headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+        body: JSON.stringify(billedItems)
+      });
+    }
+
+    audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
+    closeModal('modal-hist-pc');
+    closeModal('modal-new-pc');
+    await loadPCs();
+    selectPC(res.id, await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`));
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Create Locked PC';
+    alert('Error: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+// CONFIGURE SCOPE (admin_qs)
+// ══════════════════════════════════════════════
+async function openConfigScope() {
+  if (!canAdmin) return;
+  document.getElementById('cfg-scope-name').textContent = selectedScope.subcontractor_name;
+  cfgVillaTypes = JSON.parse(JSON.stringify(scopeVillaTypes));
+  cfgActGroups  = JSON.parse(JSON.stringify(scopeActivityGroups));
+  // Build cfgActivities working copy with _gi = index into cfgActGroups
+  cfgActivities = scopeActivities.map(a => {
+    const gi = cfgActGroups.findIndex(g => g.id === a.group_id);
+    return { ...a, _gi: gi };
+  });
+  switchCfgTab('types');
+  renderCfgTypes();
+  renderCfgActs();
+  renderDetectedVillas();
+  await loadGlobalSigs();
+  renderCfgSigs();
+  document.getElementById('modal-config-scope').style.display = 'flex';
+}
+
+function getVillaTypeOptions() {
+  // Derive distinct bedroom counts from detected scope villas + already-configured labels
+  const bedCounts = new Set();
+  scopeVillas.forEach(sv => { const b = extractBedrooms(sv.raw_villa_type); if (b) bedCounts.add(b); });
+  cfgVillaTypes.forEach(t => { const b = extractBedrooms(t.villa_type_label); if (b) bedCounts.add(b); });
+  const sorted = [...bedCounts].sort((a, b) => a - b);
+  // Fall back to standard 4/5/6 if nothing detected yet
+  return sorted.length ? sorted.map(b => `${b} Bedroom Villa`) : ['4 Bedroom Villa', '5 Bedroom Villa', '6 Bedroom Villa'];
+}
+
+function renderCfgTypes() {
+  const list = document.getElementById('cfg-types-list');
+  const opts = getVillaTypeOptions();
+  const header = `
+    <div style="display:grid;grid-template-columns:1fr 80px 100px 120px 28px;gap:6px;padding:0 10px 4px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
+      <span>Villa Type</span>
+      <span>Unit</span>
+      <span>QTY Contracted</span>
+      <span>Rate per Villa (AED)</span>
+      <span></span>
+    </div>`;
+  const rows = cfgVillaTypes.map((t,i) => {
+    const optHtml = opts.map(o => `<option value="${escH(o)}"${t.villa_type_label===o?' selected':''}>${escH(o)}</option>`).join('');
+    return `
+    <div style="display:grid;grid-template-columns:1fr 80px 100px 120px 28px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px">
+      <select onchange="cfgVillaTypes[${i}].villa_type_label=this.value" style="width:100%">${optHtml}</select>
+      <input type="text" value="${escH(t.unit||'Villa')}" placeholder="Villa" title="Unit of measure printed on the certificate" onchange="cfgVillaTypes[${i}].unit=this.value">
+      <input type="number" value="${t.qty_contracted}" placeholder="0" min="0" title="Total number of villas of this type in the subcontract" onchange="cfgVillaTypes[${i}].qty_contracted=+this.value">
+      <input type="number" value="${t.rate_aed}" placeholder="0.00" min="0" step="0.01" title="Payment rate per villa (AED)" onchange="cfgVillaTypes[${i}].rate_aed=+this.value">
+      <button class="icon-btn del" title="Remove this villa type" onclick="cfgVillaTypes.splice(${i},1);renderCfgTypes()">🗑</button>
+    </div>`;
+  }).join('');
+  list.innerHTML = cfgVillaTypes.length
+    ? header + rows
+    : '<div style="color:var(--tx3);font-size:12px;padding:8px">No villa types yet. Click "+ Add Villa Type" to add one.</div>';
+}
+
+function addVillaTypeRow() {
+  const opts = getVillaTypeOptions();
+  // Default to first option not already used, or first option
+  const used = new Set(cfgVillaTypes.map(t => t.villa_type_label));
+  const defaultLabel = opts.find(o => !used.has(o)) || opts[0];
+  cfgVillaTypes.push({ scope_id: selectedScope.id, villa_type_label: defaultLabel, unit:'Villa', qty_contracted:0, rate_aed:0, sort_order: cfgVillaTypes.length });
+  renderCfgTypes();
+}
+
+function renderCfgActs() {
+  const list = document.getElementById('cfg-acts-list');
+  if (!cfgActGroups.length) {
+    list.innerHTML = '<div style="color:var(--tx3);font-size:12px;padding:8px 4px">No activity groups yet. Click "+ Add Activity Group" to create one.</div>';
+    return;
+  }
+  // Weight totals hint
+  const grpTotal = cfgActGroups.reduce((s,g)=>s+g.group_weight,0);
+  const grpPct   = (grpTotal*100).toFixed(1);
+  const grpOk    = Math.abs(grpTotal-1)<0.005;
+  const hintHtml = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:11px">
+      <span style="color:var(--tx3)">Each group weight is its share of the total contract. Activities within a group share that group's weight.</span>
+      <span style="font-weight:700;color:${grpOk?'var(--green)':'var(--amber)'}">Groups total: ${grpPct}% ${grpOk?'✓':'(should be 100%)'}</span>
+    </div>`;
+  list.innerHTML = hintHtml + cfgActGroups.map((grp, gi) => {
+    const grpActs = cfgActivities.filter(a => a._gi === gi);
+    const actTotal = grpActs.reduce((s,a)=>s+a.activity_weight,0);
+    const actPct   = (actTotal*100).toFixed(1);
+    const actOk    = !grpActs.length || Math.abs(actTotal-1)<0.005;
+    return `<div class="ag-group">
+      <div class="ag-group-hdr">
+        <input type="text" value="${escH(grp.group_name)}" placeholder="Group name (e.g. High Level Drain)"
+               style="flex:1;padding:4px 8px;font-size:12px"
+               onchange="cfgActGroups[${gi}].group_name=this.value">
+        <span style="font-size:11px;color:var(--tx3);white-space:nowrap">Group weight:</span>
+        <input type="number" value="${(grp.group_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
+               style="width:64px;padding:4px 6px;font-size:12px;text-align:right"
+               onchange="cfgActGroups[${gi}].group_weight=+this.value/100">
+        <span style="font-size:11px;color:var(--tx2)">%</span>
+        <button class="icon-btn del" title="Remove this group and all its activities" onclick="removeCfgGroup(${gi})">🗑</button>
+      </div>
+      <div class="ag-acts">
+        <div style="display:grid;grid-template-columns:90px 1fr 80px 24px;gap:4px;padding:4px 2px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bdr);margin-bottom:4px">
+          <span>WIR Code</span><span>Activity Name</span>
+          <span style="text-align:right;padding-right:18px">Weight</span><span></span>
+        </div>
+        ${grpActs.map(act => {
+          const ai = cfgActivities.indexOf(act);
+          return `<div class="ag-act-row">
+            <input type="text" value="${escH(act.activity_code)}" placeholder="e.g. 3060"
+                   style="width:90px;font-family:monospace;font-size:11px"
+                   onchange="cfgActivities[${ai}].activity_code=this.value">
+            <input type="text" value="${escH(act.activity_name)}" placeholder="Activity description"
+                   style="flex:1;font-size:11px"
+                   onchange="cfgActivities[${ai}].activity_name=this.value">
+            <input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
+                   style="width:64px;text-align:right;font-size:11px"
+                   onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
+            <span style="font-size:11px;color:var(--tx2);align-self:center">%</span>
+            <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
+          </div>`;
+        }).join('')}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+          <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="addCfgActivity(${gi})">+ Add Activity</button>
+          ${grpActs.length ? `<span style="font-size:10px;font-weight:700;color:${actOk?'var(--green)':'var(--amber)'}">${actPct}% ${actOk?'✓':'≠ 100%'}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addCfgActivity(gi) {
+  cfgActivities.push({ _gi: gi, group_id: cfgActGroups[gi]?.id, activity_code:'', activity_name:'', activity_weight:0, sort_order: cfgActivities.filter(a=>a._gi===gi).length });
+  renderCfgActs();
+}
+
+function removeCfgGroup(gi) {
+  // Remove all activities for this group and shift _gi for later groups
+  cfgActivities = cfgActivities.filter(a => a._gi !== gi).map(a => ({ ...a, _gi: a._gi > gi ? a._gi - 1 : a._gi }));
+  cfgActGroups.splice(gi, 1);
+  renderCfgActs();
+}
+
+function addActivityGroup() {
+  cfgActGroups.push({ scope_id: selectedScope.id, group_name:'New Group', group_weight:0, sort_order: cfgActGroups.length });
+  renderCfgActs();
+}
+
+function renderCfgVillas() {
+  const list = document.getElementById('va-list');
+  const q = (document.getElementById('va-search')?.value||'').toLowerCase();
+  const filtered = cfgScopeVillas.filter(v => String(v.villa_no).includes(q));
+  document.getElementById('va-count').textContent = cfgScopeVillas.length;
+  if (!filtered.length) { list.innerHTML = '<div class="va-row" style="color:var(--tx3);font-size:11px">No villas assigned</div>'; return; }
+  list.innerHTML = filtered.map((v,i) => `
+    <div class="va-row">
+      <span class="va-villa-no">VI-${escH(v.villa_no)}</span>
+      <select class="va-type-sel" onchange="cfgScopeVillas.find(x=>x.villa_id===${v.villa_id}).villa_type_label=this.value">
+        ${['4 Bedroom Villa','5 Bedroom Villa','6 Bedroom Villa'].map(t=>`<option ${t===v.villa_type_label?'selected':''}>${t}</option>`).join('')}
+      </select>
+      <span class="va-remove" onclick="cfgScopeVillas.splice(cfgScopeVillas.findIndex(x=>x.villa_id===${v.villa_id}),1);renderCfgVillas()">✕</span>
+    </div>`).join('');
+}
+
+function filterVillaAssign() { renderCfgVillas(); }
+
+async function loadGlobalSigs() {
+  globalSigs = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+}
+
+function renderCfgSigs() {
+  const list = document.getElementById('cfg-sigs-list');
+  list.innerHTML = globalSigs.map((s,i) => `
+    <div class="sig-edit-row">
+      <input type="text" value="${escH(s.position_title)}" placeholder="Position" onchange="globalSigs[${i}].position_title=this.value">
+      <input type="text" value="${escH(s.full_name)}" placeholder="Full Name" onchange="globalSigs[${i}].full_name=this.value">
+      <input type="text" value="${escH(s.company||'RA')}" placeholder="Company" onchange="globalSigs[${i}].company=this.value">
+      <button class="icon-btn del" onclick="globalSigs.splice(${i},1);renderCfgSigs()">🗑</button>
+    </div>`).join('') || '<div style="color:var(--tx3);font-size:12px">No signatories yet.</div>';
+}
+
+function addGlobalSig() {
+  globalSigs.push({ position_title:'', full_name:'', company:'RA', sort_order: globalSigs.length, is_active:true });
+  renderCfgSigs();
+}
+
+async function saveConfigScope() {
+  const msg1 = document.getElementById('cfg-types-msg');
+  const msg2 = document.getElementById('cfg-acts-msg');
+  const msg3 = document.getElementById('cfg-sigs-msg');
+  const sid = selectedScope.id;
+
+  try {
+    if (cfgTab === 'types') {
+      // Upsert villa types
+      await fdel(`qs_scope_villa_types?scope_id=eq.${sid}`);
+      if (cfgVillaTypes.length) {
+        const rows = cfgVillaTypes.map((t,i) => ({ scope_id:sid, villa_type_label:t.villa_type_label, unit:t.unit||'Villa', qty_contracted:t.qty_contracted||0, rate_aed:t.rate_aed||0, sort_order:i }));
+        await fp('qs_scope_villa_types', rows);
+      }
+      audit('qs_scope_villa_types', 'UPDATE_VILLA_TYPES', sid, { scope: selectedScope.subcontractor_name, types_count: cfgVillaTypes.length });
+      showMsg(msg1,'ok','Villa rates saved.');
+      await loadScopeConfig(); renderCfgTypes(); cfgVillaTypes = JSON.parse(JSON.stringify(scopeVillaTypes));
+    }
+    else if (cfgTab === 'acts') {
+      // Delete all existing groups (cascades to activities via FK)
+      await fdel(`qs_scope_activity_groups?scope_id=eq.${sid}`);
+      for (let gi = 0; gi < cfgActGroups.length; gi++) {
+        const grp = cfgActGroups[gi];
+        const grpRes = await fp('qs_scope_activity_groups', {
+          scope_id: sid, group_name: grp.group_name, group_weight: grp.group_weight, sort_order: gi
+        });
+        const newGrpId = grpRes?.id;
+        // Get activities that belong to this group by _gi index
+        const grpActs = cfgActivities.filter(a => a._gi === gi);
+        if (newGrpId && grpActs.length) {
+          const actRows = grpActs.map((a, ai) => ({
+            group_id: newGrpId,
+            activity_code: a.activity_code,
+            activity_name: a.activity_name,
+            activity_weight: a.activity_weight,
+            sort_order: ai
+          }));
+          await fp('qs_scope_activities', actRows);
+        }
+      }
+      audit('qs_scope_activity_groups', 'UPDATE_ACTIVITIES', sid, { scope: selectedScope.subcontractor_name, groups_count: cfgActGroups.length, activities_count: cfgActivities.length });
+      showMsg(msg2, 'ok', 'Activities saved.');
+      await loadScopeConfig();
+      cfgActGroups = JSON.parse(JSON.stringify(scopeActivityGroups));
+      cfgActivities = scopeActivities.map(a => ({
+        ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id)
+      }));
+      renderCfgActs();
+    }
+    else if (cfgTab === 'villas') {
+      // Detected Villas tab is read-only — refresh from WIR data
+      await loadScopeConfig();
+      renderDetectedVillas();
+    }
+    else if (cfgTab === 'sigs') {
+      // Upsert global sigs
+      await fdel('qs_signatories');
+      if (globalSigs.length) {
+        const rows = globalSigs.map((s,i) => ({ position_title:s.position_title, full_name:s.full_name, company:s.company||'RA', sort_order:i, is_active:true }));
+        await fp('qs_signatories', rows);
+      }
+      audit('qs_signatories', 'UPDATE_GLOBAL_SIGS', sid, { scope: selectedScope.subcontractor_name, sigs_count: globalSigs.length });
+      showMsg(msg3,'ok','Global signatories saved.');
+      await loadGlobalSigs(); renderCfgSigs();
+    }
+  } catch(e) {
+    const m = [msg1,msg2,msg3].find(Boolean);
+    if(m) showMsg(m,'err','Save failed: '+e.message);
+  }
+}
+
+// ── Detected Villas panel (read-only, auto from WIR) ──
+function renderDetectedVillas() {
+  const el = document.getElementById('cfg-villa-detect-content');
+  if (!el) return;
+  if (!scopeVillas.length) {
+    el.innerHTML = `<div style="color:var(--tx3);font-size:12px;padding:12px 4px">
+      No villas detected yet. This means no WIR submissions have been recorded for
+      <strong>${escH(selectedScope.subcontractor_name)}</strong> in the system.
+      Once WIR data is imported with this subcontractor's name, villas will appear here automatically.
+    </div>`;
+    return;
+  }
+  // Group by cluster then villa_type_label
+  const byClusters = {};
+  scopeVillas.forEach(v => {
+    const c = v.cluster_id != null ? String(v.cluster_id) : 'Unknown';
+    if (!byClusters[c]) byClusters[c] = {};
+    const t = v.villa_type_label || 'Unknown';
+    if (!byClusters[c][t]) byClusters[c][t] = [];
+    byClusters[c][t].push(v);
+  });
+  const clusterKeys = Object.keys(byClusters).sort((a,b)=> isNaN(a)||isNaN(b) ? a.localeCompare(b) : +a - +b);
+  const hasMultipleClusters = clusterKeys.length > 1;
+  const rows = clusterKeys.map(clusterKey => {
+    const byType = byClusters[clusterKey];
+    const clusterHeader = hasMultipleClusters
+      ? `<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bdr)">Cluster ${clusterKey}</div>`
+      : '';
+    const typeRows = Object.entries(byType).map(([type, villas]) => {
+      const contracted = scopeVillaTypes.find(t => t.villa_type_label === type)?.qty_contracted || 0;
+      const detected = villas.length;
+      const balance = contracted - detected;
+      const villaList = villas.map(v => `<span style="display:inline-block;background:var(--bg4);border:1px solid var(--bdr);border-radius:4px;padding:1px 6px;font-size:10px;font-family:monospace;margin:1px">VI-${escH(v.villa_no)}</span>`).join('');
+      return `
+        <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:13px;color:var(--tx)">${escH(type)}</span>
+            <span style="font-size:11px;color:var(--tx2)">Detected: <strong style="color:var(--green)">${detected}</strong></span>
+            <span style="font-size:11px;color:var(--tx2)">Contracted QTY: <strong>${contracted||'—'}</strong></span>
+            <span style="font-size:11px;color:var(--tx2)">Balance: <strong style="color:${balance>0?'var(--amber)':balance<0?'var(--red)':'var(--green)'}">${contracted?balance:'—'}</strong></span>
+          </div>
+          <div style="line-height:2">${villaList}</div>
+        </div>`;
+    }).join('');
+    return `<div style="margin-bottom:${hasMultipleClusters?'14px':'0'}">${clusterHeader}${typeRows}</div>`;
+  }).join('');
+  // Count totals
+  const totalByType = {};
+  scopeVillas.forEach(v => { const t = v.villa_type_label||'Unknown'; totalByType[t]=(totalByType[t]||0)+1; });
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <span style="font-size:12px;color:var(--tx2)">
+        <strong style="color:var(--tx)">${scopeVillas.length}</strong> villas detected across
+        <strong style="color:var(--tx)">${Object.keys(totalByType).length}</strong> types
+        ${hasMultipleClusters ? `in <strong style="color:var(--tx)">${clusterKeys.length}</strong> clusters` : ''}
+      </span>
+      <span style="font-size:10px;color:var(--tx3)">Source: WIR / scope activities</span>
+    </div>
+    ${rows}`;
+}
+
+async function refreshDetectedVillas() {
+  const el = document.getElementById('cfg-villa-detect-content');
+  if (el) el.innerHTML = '<div class="loading-row"><span class="spin"></span></div>';
+  scopeVillas = await autoDetectScopeVillas();
+  renderDetectedVillas();
+}
+
+// ══════════════════════════════════════════════
+// PC SIGNATORIES
+// ══════════════════════════════════════════════
+function openPcSigs() {
+  document.getElementById('pcsig-pc-label').textContent = `PC #${selectedPC.pc_number} · ${selectedPC.period_label}`;
+  renderPcSigsList();
+  document.getElementById('pcsig-msg').className = 'form-msg';
+  document.getElementById('modal-pc-sigs').style.display = 'flex';
+}
+
+function renderPcSigsList() {
+  const list = document.getElementById('pcsig-list');
+  list.innerHTML = pcSigsList.map((s,i) => `
+    <div class="sig-edit-row">
+      <input type="text" value="${escH(s.position_title)}" placeholder="Position" onchange="pcSigsList[${i}].position_title=this.value">
+      <input type="text" value="${escH(s.full_name)}" placeholder="Full Name" onchange="pcSigsList[${i}].full_name=this.value">
+      <input type="text" value="${escH(s.company||'RA')}" placeholder="Company" onchange="pcSigsList[${i}].company=this.value">
+      <button class="icon-btn del" onclick="pcSigsList.splice(${i},1);renderPcSigsList()">🗑</button>
+    </div>`).join('') || '<div style="color:var(--tx3);font-size:12px">No signatories yet.</div>';
+}
+
+function addPcSig() {
+  pcSigsList.push({ position_title:'', full_name:'', company:'RA', sort_order: pcSigsList.length });
+  renderPcSigsList();
+}
+
+async function resetPcSigs() {
+  const defaults = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+  pcSigsList = defaults.map(s => ({ pc_id: selectedPC.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: s.sort_order }));
+  renderPcSigsList();
+}
+
+async function savePcSigs() {
+  const msg = document.getElementById('pcsig-msg');
+  try {
+    await fdel(`qs_pc_signatories?pc_id=eq.${selectedPC.id}`);
+    if (pcSigsList.length) {
+      const rows = pcSigsList.map((s,i) => ({ pc_id: selectedPC.id, position_title: s.position_title, full_name: s.full_name, company: s.company||'RA', sort_order: i }));
+      await fp('qs_pc_signatories', rows);
+    }
+    audit('qs_pc_signatories', 'UPDATE_PC_SIGS', selectedPC.id, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, sigs_count: pcSigsList.length });
+    closeModal('modal-pc-sigs');
+    renderPaymentSummary();
+  } catch(e) { showMsg(msg,'err','Save failed: '+e.message); }
+}
+
+// ══════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'none';
+}
+
+function showMsg(el, type, txt) {
+  el.textContent = txt;
+  el.className = 'form-msg ' + type;
+  setTimeout(() => { el.className = 'form-msg'; }, 5000);
+}
+
+// ══════════════════════════════════════════════
+// AUDIT LOGGING
+// ══════════════════════════════════════════════
+function audit(tableName, action, recordId, newData, oldData) {
+  // Fire-and-forget — never blocks the main action, fails silently
+  fp('audit_log', {
+    table_name: tableName,
+    action: action,
+    record_id: recordId != null ? String(recordId) : null,
+    changed_by_name: currentUser?.full_name || null,
+    changed_by_user_id: currentUser?.id || null,
+    changed_by_auth_id: currentUser?.auth_id || null,
+    new_data: newData || null,
+    old_data: oldData || null,
+  }).catch(() => {});
+}
+
+// ══════════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      if (m.style.display !== 'none') m.style.display = 'none';
+    });
+  }
+});
+
+// ══════════════════════════════════════════════
+// SESSION BRIDGE
+// ══════════════════════════════════════════════
+var _initCalled = false;
+function _tryInit() { if (_initCalled) return; _initCalled = true; init(); }
+window.addEventListener('message', function(e) {
+  if (!e.data || typeof e.data !== 'object') return;
+  if (e.data.type === 'theme') applyTheme(e.data.theme);
+  if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; _tryInit(); }
+});
+if (window.self !== window.top) {
+  document.body.classList.add('in-shell');
+  try { window.parent.postMessage({ type:'child_ready' }, '*'); } catch(e) {}
+  setTimeout(_tryInit, 1200);
+} else { _tryInit(); }
+</script>
+</body>
+</html>

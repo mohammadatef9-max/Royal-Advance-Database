@@ -83,9 +83,9 @@ body.space-down #map-viewport{cursor:grab}
   transition:filter 0.15s, box-shadow 0.15s;
   transform-origin:center center;
   box-shadow:0 1px 3px rgba(0,0,0,0.25)}
-.villa.is-priority{box-shadow:0 0 0 2px #f59e0b,0 0 6px rgba(245,158,11,0.5)!important}
 .pri-star{position:absolute;font-size:11px;line-height:1;z-index:400;pointer-events:none;
   text-shadow:0 0 3px #000,0 0 3px #000,1px 1px 2px #000;transform-origin:center center}
+
 .villa:hover{z-index:300;box-shadow:0 0 18px rgba(79,140,255,0.65);filter:brightness(1.15)}
 .villa .vinner{display:flex;flex-direction:column;align-items:center;justify-content:center;
   width:100%;height:100%;
@@ -106,6 +106,31 @@ body.space-down #map-viewport{cursor:grab}
 
 .villa.is-front{box-shadow:0 0 0 3px #ec4899, 0 0 12px rgba(236,72,153,0.6), 0 1px 3px rgba(0,0,0,0.4);animation:of-pulse 1.8s ease-in-out infinite}
 @keyframes of-pulse{0%,100%{box-shadow:0 0 0 3px #ec4899,0 0 8px rgba(236,72,153,0.5)}50%{box-shadow:0 0 0 3px #ec4899,0 0 18px rgba(236,72,153,0.9),0 0 30px rgba(236,72,153,0.4)}}
+.villa.is-ncr{background:#0d0404!important;border-color:#ff4444!important;animation:ncr-pulse 2s ease-in-out infinite}
+@keyframes ncr-pulse{0%,100%{box-shadow:0 0 0 2px rgba(255,68,68,0.5),0 0 8px rgba(255,68,68,0.3)}50%{box-shadow:0 0 0 2px rgba(255,68,68,0.85),0 0 18px rgba(255,68,68,0.55)}}
+.villa.is-ncr .vnum{color:#ffaaaa!important;text-shadow:0 0 6px rgba(255,80,80,0.9)!important}
+#ncr-popup{position:fixed;z-index:600;background:#11151c;border:1px solid #5a1a1a;border-radius:10px;min-width:240px;max-width:340px;max-height:360px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.85);display:none;flex-direction:column}
+.np-hdr{background:#1a0c0c;border-bottom:1px solid #5a1a1a;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.np-title{font-size:12px;font-weight:700;color:#ff8888;font-family:'JetBrains Mono',monospace}
+.np-close{background:none;border:none;color:#884444;font-size:14px;cursor:pointer;padding:0 4px;line-height:1}
+.np-close:hover{color:#ff8888}
+.np-body{overflow-y:auto;flex:1;padding:4px 0}
+.np-item{padding:8px 14px;border-bottom:1px solid rgba(90,26,26,0.5);cursor:default}
+.np-item:last-child{border-bottom:none}
+.np-row1{display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
+.np-ref{font-size:10px;font-weight:700;color:#ff8888;font-family:'JetBrains Mono',monospace}
+.np-badge{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700}
+.np-badge.ncr{background:#4a1515;color:#ff9999}
+.np-badge.sor{background:#15154a;color:#9999ff}
+.np-st{font-size:9px;margin-left:auto;font-weight:600}
+.np-st.open{color:#ff8888}.np-st.in_progress{color:#f4c95a}.np-st.closed{color:#6ee2a3}
+.np-itemtitle{font-size:11px;color:#d1d5db;line-height:1.4;word-break:break-word}
+.np-act{font-size:10px;color:#475569;margin-top:2px}
+.ncr-block{background:#1a0c0c;border-radius:6px;padding:8px;display:none;border:1px solid #5a1a1a;margin-top:4px}
+.ncr-block.visible{display:block}
+.ncr-block-title{font-size:9px;color:#ff8888;text-transform:uppercase;letter-spacing:1px;font-weight:800;margin-bottom:4px}
+.ncr-stat-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;padding:2px 0}
+.ncr-val{font-family:'JetBrains Mono',monospace;font-weight:800;font-size:14px;color:#ff8888}
 #tooltip{position:fixed;display:none;z-index:500;background:var(--bg-elev);
   border:1px solid var(--border);border-radius:8px;padding:10px 14px;min-width:180px;
   box-shadow:0 8px 32px rgba(0,0,0,0.5);pointer-events:none}
@@ -201,7 +226,6 @@ body.space-down #map-viewport{cursor:grab}
     <option value="A4">A4 Landscape</option>
     <option value="A3">A3 Landscape</option>
   </select>
-  <input type="number" id="print-scale" value="100" min="50" max="150" step="5" title="Print map scale %" class="tbtn" style="width:54px;text-align:center;padding:4px 5px;font-size:11px"><span class="tl" style="font-size:11px;margin-left:-4px">%</span>
   <button class="tbtn" onclick="doPrint()">🖨 Print</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="zoomBy(1.25)" title="Zoom in (Ctrl+wheel)">🔍+</button>
@@ -248,6 +272,11 @@ body.space-down #map-viewport{cursor:grab}
       <div class="of-row" style="font-size:9px;color:var(--muted);margin-top:2px">
         <span id="of-rule">(clearance code 1 + 2)</span>
       </div>
+    </div>
+    <div id="ncr-block" class="ncr-block">
+      <div class="ncr-block-title">&#9888; Open NCR / SOR</div>
+      <div class="ncr-stat-row"><span>Active</span><span class="ncr-val" id="ncr-count">0</span></div>
+      <div class="ncr-stat-row" style="font-size:9px;color:#884444;margin-top:2px"><span>Click a black villa for details</span></div>
     </div>
     <!-- Compare mode act2 legend -->
     <div id="cmp-leg2" style="display:none">
@@ -320,6 +349,13 @@ body.space-down #map-viewport{cursor:grab}
   <div class="tt-row"><span class="tt-lbl">Villa Type</span><span class="tt-val" id="tt-type">—</span></div>
   <div class="tt-row"><span class="tt-lbl">Activity</span><span class="tt-val" id="tt-act" style="font-size:10px">—</span></div>
   <div class="tt-row" id="tt-front-row" style="display:none"><span class="tt-lbl">Open Front?</span><span class="tt-val" id="tt-front" style="color:var(--open-front);font-weight:800">—</span></div>
+  <div id="tt-ncr-sep" style="display:none;border-top:1px solid rgba(255,68,68,0.3);margin:6px 0 2px"></div>
+  <div class="tt-row" id="tt-ncr-row" style="display:none"><span class="tt-lbl" style="color:#ff8888">&#9888; NCR/SOR</span><span class="tt-val" id="tt-ncr" style="color:#ff8888;font-weight:700">—</span></div>
+  <div id="tt-ncr-hint" style="display:none;font-size:9px;color:#884444;margin-top:2px;text-align:right">click for details</div>
+</div>
+<div id="ncr-popup">
+  <div class="np-hdr"><span class="np-title" id="np-title">Villa &#8212;</span><button class="np-close" id="np-close-btn">&#10005;</button></div>
+  <div class="np-body" id="np-body"></div>
 </div>
 <script>
 var VILLAS_DEFAULT={"1":{"x":721,"y":884},"2":{"x":700,"y":908},"3":{"x":678,"y":931},"4":{"x":657,"y":955},"5":{"x":636,"y":979},"6":{"x":614,"y":1002},"7":{"x":593,"y":1026},"8":{"x":542,"y":1067},"9":{"x":568,"y":1088},"10":{"x":596,"y":1111},"11":{"x":625,"y":1132},"12":{"x":656,"y":1148},"13":{"x":690,"y":1161},"14":{"x":725,"y":1172},"15":{"x":761,"y":1179},"16":{"x":795,"y":1182},"17":{"x":825,"y":1182},"18":{"x":855,"y":1182},"19":{"x":885,"y":1182},"20":{"x":915,"y":1182},"21":{"x":944,"y":1182},"22":{"x":974,"y":1182},"23":{"x":1004,"y":1182},"24":{"x":1034,"y":1182},"25":{"x":1064,"y":1182},"26":{"x":1094,"y":1182},"27":{"x":1128,"y":1182},"28":{"x":1162,"y":1179},"29":{"x":1203,"y":1164},"30":{"x":1231,"y":1127},"31":{"x":1227,"y":1091},"32":{"x":1223,"y":1055},"33":{"x":1215,"y":1016},"34":{"x":1184,"y":984},"35":{"x":1145,"y":979},"36":{"x":1114,"y":979},"37":{"x":1083,"y":979},"38":{"x":1051,"y":979},"39":{"x":1020,"y":979},"40":{"x":989,"y":979},"41":{"x":958,"y":979},"42":{"x":926,"y":979},"43":{"x":895,"y":979},"44":{"x":688,"y":1019},"45":{"x":719,"y":1039},"46":{"x":758,"y":1051},"47":{"x":823,"y":1055},"48":{"x":854,"y":1055},"49":{"x":884,"y":1056},"50":{"x":915,"y":1056},"51":{"x":946,"y":1056},"52":{"x":977,"y":1056},"53":{"x":1007,"y":1057},"54":{"x":1038,"y":1057},"55":{"x":1069,"y":1057},"56":{"x":1100,"y":1057},"57":{"x":1130,"y":1058},"58":{"x":1161,"y":1058},"59":{"x":1163,"y":1105},"60":{"x":1132,"y":1105},"61":{"x":1101,"y":1105},"62":{"x":1070,"y":1105},"63":{"x":1039,"y":1105},"64":{"x":1008,"y":1105},"65":{"x":978,"y":1105},"66":{"x":947,"y":1105},"67":{"x":916,"y":1105},"68":{"x":885,"y":1105},"69":{"x":854,"y":1105},"70":{"x":823,"y":1105},"71":{"x":788,"y":1105},"72":{"x":753,"y":1104},"73":{"x":717,"y":1094},"74":{"x":684,"y":1077},"75":{"x":656,"y":1056},"76":{"x":727,"y":990},"77":{"x":746,"y":968},"78":{"x":765,"y":946},"79":{"x":785,"y":924},"80":{"x":804,"y":901},"81":{"x":823,"y":879},"82":{"x":842,"y":857},"83":{"x":861,"y":835},"84":{"x":880,"y":813},"85":{"x":900,"y":791},"86":{"x":919,"y":768},"87":{"x":938,"y":746},"88":{"x":957,"y":724},"89":{"x":986,"y":696},"90":{"x":1006,"y":671},"91":{"x":1026,"y":645},"92":{"x":1082,"y":653},"93":{"x":1062,"y":677},"94":{"x":1042,"y":701},"95":{"x":1022,"y":725},"96":{"x":1002,"y":761},"97":{"x":982,"y":783},"98":{"x":962,"y":805},"99":{"x":942,"y":827},"100":{"x":922,"y":849},"101":{"x":901,"y":871},"102":{"x":881,"y":893},"103":{"x":861,"y":915},"104":{"x":841,"y":937},"105":{"x":821,"y":959},"106":{"x":1001,"y":866},"107":{"x":1023,"y":841},"108":{"x":1045,"y":816},"109":{"x":1067,"y":792},"110":{"x":1088,"y":767},"111":{"x":1110,"y":742},"112":{"x":1132,"y":717},"113":{"x":1127,"y":797},"114":{"x":1107,"y":823},"115":{"x":1086,"y":849},"116":{"x":950,"y":927},"117":{"x":983,"y":927},"118":{"x":1016,"y":927},"119":{"x":1049,"y":927},"120":{"x":1082,"y":927},"121":{"x":1142,"y":898},"122":{"x":1168,"y":870},"123":{"x":1193,"y":842},"124":{"x":1208,"y":805},"125":{"x":1207,"y":768},"126":{"x":1199,"y":733},"127":{"x":1191,"y":697},"128":{"x":1180,"y":662},"129":{"x":1159,"y":629},"130":{"x":1138,"y":600},"131":{"x":1109,"y":572},"132":{"x":1070,"y":556},"133":{"x":1029,"y":554},"134":{"x":995,"y":570},"135":{"x":971,"y":597},"136":{"x":946,"y":623},"137":{"x":927,"y":645},"138":{"x":908,"y":667},"139":{"x":888,"y":688},"140":{"x":869,"y":710},"141":{"x":850,"y":732},"142":{"x":831,"y":754},"143":{"x":812,"y":776},"144":{"x":792,"y":797},"145":{"x":773,"y":819},"146":{"x":754,"y":841},"147":{"x":473,"y":582},"148":{"x":449,"y":561},"149":{"x":425,"y":541},"150":{"x":402,"y":520},"151":{"x":378,"y":500},"152":{"x":354,"y":479},"153":{"x":314,"y":443},"154":{"x":293,"y":467},"155":{"x":272,"y":490},"156":{"x":251,"y":514},"157":{"x":230,"y":538},"158":{"x":209,"y":561},"159":{"x":189,"y":585},"160":{"x":168,"y":608},"161":{"x":147,"y":632},"162":{"x":126,"y":656},"163":{"x":105,"y":679},"164":{"x":84,"y":703},"165":{"x":163,"y":729},"166":{"x":187,"y":751},"167":{"x":211,"y":773},"168":{"x":235,"y":795},"169":{"x":259,"y":817},"170":{"x":283,"y":839},"171":{"x":306,"y":861},"172":{"x":330,"y":883},"173":{"x":354,"y":905},"174":{"x":378,"y":927},"175":{"x":402,"y":949},"176":{"x":433,"y":902},"177":{"x":455,"y":877},"178":{"x":477,"y":851},"179":{"x":499,"y":826},"180":{"x":521,"y":800},"181":{"x":543,"y":775},"182":{"x":565,"y":749},"183":{"x":396,"y":849},"184":{"x":370,"y":827},"185":{"x":345,"y":805},"186":{"x":319,"y":783},"187":{"x":293,"y":761},"188":{"x":267,"y":739},"189":{"x":242,"y":717},"190":{"x":216,"y":695},"191":{"x":190,"y":673},"192":{"x":221,"y":633},"193":{"x":248,"y":656},"194":{"x":275,"y":679},"195":{"x":301,"y":702},"196":{"x":328,"y":725},"197":{"x":355,"y":747},"198":{"x":382,"y":770},"199":{"x":408,"y":793},"200":{"x":435,"y":816},"201":{"x":484,"y":754},"202":{"x":460,"y":734},"203":{"x":437,"y":715},"204":{"x":413,"y":695},"205":{"x":389,"y":675},"206":{"x":366,"y":656},"207":{"x":342,"y":636},"208":{"x":318,"y":616},"209":{"x":295,"y":597},"210":{"x":271,"y":577},"211":{"x":306,"y":540},"212":{"x":329,"y":559},"213":{"x":352,"y":579},"214":{"x":376,"y":598},"215":{"x":399,"y":617},"216":{"x":422,"y":637},"217":{"x":445,"y":656},"218":{"x":469,"y":675},"219":{"x":492,"y":695},"220":{"x":515,"y":714},"221":{"x":759,"y":707},"222":{"x":780,"y":683},"223":{"x":801,"y":660},"224":{"x":822,"y":636},"225":{"x":843,"y":613},"226":{"x":865,"y":589},"227":{"x":886,"y":566},"228":{"x":907,"y":542},"229":{"x":928,"y":519},"230":{"x":949,"y":495},"231":{"x":970,"y":460},"232":{"x":970,"y":410},"233":{"x":940,"y":380},"234":{"x":910,"y":350},"235":{"x":880,"y":330},"236":{"x":840,"y":320},"237":{"x":790,"y":330},"238":{"x":750,"y":300},"239":{"x":740,"y":260},"240":{"x":730,"y":220},"241":{"x":700,"y":190},"242":{"x":670,"y":160},"243":{"x":640,"y":140},"244":{"x":590,"y":140},"245":{"x":560,"y":160},"246":{"x":530,"y":190},"247":{"x":510,"y":213},"248":{"x":490,"y":237},"249":{"x":470,"y":260},"250":{"x":450,"y":283},"251":{"x":430,"y":307},"252":{"x":410,"y":330},"253":{"x":390,"y":353},"254":{"x":370,"y":377},"255":{"x":350,"y":400},"256":{"x":401,"y":436},"257":{"x":426,"y":458},"258":{"x":452,"y":482},"259":{"x":477,"y":504},"260":{"x":504,"y":525},"261":{"x":445,"y":396},"262":{"x":467,"y":370},"263":{"x":490,"y":346},"264":{"x":513,"y":319},"265":{"x":538,"y":294},"266":{"x":562,"y":265},"267":{"x":587,"y":240},"268":{"x":607,"y":215},"269":{"x":646,"y":248},"270":{"x":623,"y":274},"271":{"x":598,"y":300},"272":{"x":574,"y":325},"273":{"x":551,"y":351},"274":{"x":528,"y":377},"275":{"x":504,"y":401},"276":{"x":482,"y":426},"277":{"x":653,"y":322},"278":{"x":679,"y":344},"279":{"x":705,"y":367},"280":{"x":730,"y":389},"281":{"x":756,"y":412},"282":{"x":782,"y":434},"283":{"x":748,"y":471},"284":{"x":722,"y":449},"285":{"x":696,"y":426},"286":{"x":670,"y":404},"287":{"x":644,"y":381},"288":{"x":618,"y":359},"289":{"x":570,"y":420},"290":{"x":596,"y":442},"291":{"x":622,"y":464},"292":{"x":648,"y":486},"293":{"x":674,"y":508},"294":{"x":700,"y":530},"295":{"x":665,"y":565},"296":{"x":640,"y":544},"297":{"x":615,"y":523},"298":{"x":590,"y":502},"299":{"x":565,"y":481},"300":{"x":540,"y":460},"301":{"x":672,"y":636},"302":{"x":693,"y":612},"303":{"x":714,"y":588},"304":{"x":735,"y":564},"305":{"x":756,"y":540},"306":{"x":776,"y":517},"307":{"x":797,"y":493},"308":{"x":818,"y":469},"309":{"x":839,"y":445},"310":{"x":860,"y":421},"311":{"x":902,"y":453},"312":{"x":881,"y":477},"313":{"x":860,"y":500},"314":{"x":839,"y":524},"315":{"x":818,"y":548},"316":{"x":797,"y":571},"317":{"x":776,"y":595},"318":{"x":755,"y":619},"319":{"x":734,"y":642},"320":{"x":713,"y":666}};
@@ -339,6 +375,7 @@ var currentMode='wir', currentActivity='', showSubLabels=false;
 var hiddenStatus=[], hiddenSubs=[], subColorMap={}, subRenameMap={};
 var compareMode=false, currentActivity2='';
 var openFrontVillas=new Set();
+var ncrVillaMap={};
 
 function getH(){
   var t=window.__MEP_TOKEN__;
@@ -405,7 +442,7 @@ function renderVillas(dm, dm2){
       var cls='villa s-'+st;
       if(color)cls+=' has-sub';
       if(openFrontVillas.has(vNum))cls+=' is-front';
-      if(priorityVillas.has(vNum))cls+=' is-priority';
+
       if(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub)))cls+=' filter-hidden';
       var style=baseStyle;
       var innerStyle='transform:rotate('+(-angle)+'deg);';
@@ -413,26 +450,21 @@ function renderVillas(dm, dm2){
         '<span class="vnum">'+vNum+'</span>'+
         '</div>'+(color&&showSubLabels?'<div class="vsub-stripe" style="background:'+color+'"></div>':'');
       var attrs=' data-v="'+vNum+'" data-s="'+st+'" data-sub="'+(sub||'—').replace(/"/g,'&quot;')+'" data-type="'+(d?(d.type||'—'):'—').replace(/"/g,'&quot;')+'"';
-      html+='<div class="villa s-'+st+(color?' has-sub':'')+(openFrontVillas.has(vNum)?' is-front':'')+(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub))?' filter-hidden':'')+'" style="'+style+'"'+attrs+'>'+inner+'</div>';
+      html+='<div class="villa s-'+st+(color?' has-sub':'')+(openFrontVillas.has(vNum)?' is-front':'')+(priorityVillas.has(vNum)?' is-priority':'')+(ncrVillaMap[vNum]&&ncrVillaMap[vNum].length>0?' is-ncr':'')+(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub))?' filter-hidden':'')+'" style="'+style+'"'+attrs+'>'+inner+'</div>';
     }
   }
   layer.innerHTML=html;
-  // Overlay priority stars as separate absolutely-positioned spans (avoids flex clipping)
   if(priorityVillas.size>0){
     Object.keys(VILLAS).forEach(function(vNum){
       if(!priorityVillas.has(vNum)) return;
       var pos=VILLAS[vNum];
       var angle=VILLA_ANGLES[parseInt(vNum)]||0;
-      var star=document.createElement('span');
-      star.className='pri-star';
-      // Position at top-right corner of the villa box
-      // Villa is 46x32, centered at pos.x,pos.y, rotated by angle
-      // Place star at top-right of the box before rotation
       var rad=angle*Math.PI/180;
-      // Offset from center to top-right corner (23, -16) then rotate
       var ox=23, oy=-16;
       var rx=ox*Math.cos(rad)-oy*Math.sin(rad);
       var ry=ox*Math.sin(rad)+oy*Math.cos(rad);
+      var star=document.createElement('span');
+      star.className='pri-star';
       star.style.left=(pos.x+rx-6)+'px';
       star.style.top=(pos.y+ry-6)+'px';
       star.textContent='⭐';
@@ -602,15 +634,40 @@ document.getElementById('villa-layer').addEventListener('mouseover',function(e){
   document.getElementById('tt-act').textContent=currentActivity||'—';
   var isFront=openFrontVillas.has(vNum);
   document.getElementById('tt-front-row').style.display=openFrontVillas.size>0?'flex':'none';
-  // Priority villas indicator in sidebar
+
   var priRow=document.getElementById('tt-pri-row');
   if(priRow) priRow.style.display=priorityVillas.size>0?'flex':'none';
   var priEl=document.getElementById('pri-count');
   if(priEl) priEl.textContent=priorityVillas.size;
   document.getElementById('tt-front').textContent=isFront?'✓ Yes':'No';
   document.getElementById('tt-front').style.color=isFront?'var(--open-front)':'var(--muted)';
+  var ncrRecs=ncrVillaMap[vNum]||[];
+  var ncrSep=document.getElementById('tt-ncr-sep');var ncrRow=document.getElementById('tt-ncr-row');var ncrHint=document.getElementById('tt-ncr-hint');
+  if(ncrRecs.length>0){
+    var openC=ncrRecs.filter(function(r){return r.status==='open';}).length;
+    var ipC=ncrRecs.filter(function(r){return r.status==='in_progress';}).length;
+    var parts=[];if(openC)parts.push(openC+' Open');if(ipC)parts.push(ipC+' In Progress');
+    document.getElementById('tt-ncr').textContent=(parts.join(', ')||ncrRecs.length+' active')+' — click';
+    ncrSep.style.display='';ncrRow.style.display='flex';ncrHint.style.display='block';
+  }else{ncrSep.style.display='none';ncrRow.style.display='none';ncrHint.style.display='none';}
   tip.style.display='block';
 });
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+document.getElementById('villa-layer').addEventListener('click',function(e){
+  var v=e.target.closest('.villa');if(!v||v.classList.contains('filter-hidden'))return;
+  var vNum=v.getAttribute('data-v');var recs=ncrVillaMap[vNum];if(!recs||!recs.length)return;
+  e.stopPropagation();tip.style.display='none';
+  var pop=document.getElementById('ncr-popup');
+  document.getElementById('np-title').textContent='Villa '+vNum+' — NCR / SOR';
+  var stLabels={open:'Open',in_progress:'In Progress',closed:'Closed'};
+  document.getElementById('np-body').innerHTML=recs.map(function(r){
+    var stCls=r.status.replace('_','');
+    return '<div class="np-item"><div class="np-row1"><span class="np-ref">'+(r.reference_no||'&#8212;')+'</span><span class="np-badge '+r.record_type.toLowerCase()+'">'+r.record_type+'</span><span class="np-st '+stCls+'">'+(stLabels[r.status]||r.status)+'</span></div><div class="np-itemtitle">'+escHtml(r.title)+'</div>'+(r.activity_code?'<div class="np-act">'+escHtml(r.activity_code+(r.activity_name?' — '+r.activity_name:''))+'</div>':'')+(r.raised_date?'<div class="np-act">Raised: '+r.raised_date+'</div>':'')+'</div>';
+  }).join('');
+  pop.style.display='flex';pop.style.left=Math.min(e.clientX+12,window.innerWidth-360)+'px';pop.style.top=Math.max(8,Math.min(e.clientY-12,window.innerHeight-380))+'px';
+});
+document.getElementById('np-close-btn').addEventListener('click',function(){document.getElementById('ncr-popup').style.display='none';});
+document.addEventListener('click',function(e){var pop=document.getElementById('ncr-popup');if(pop&&pop.style.display!=='none'&&!pop.contains(e.target))pop.style.display='none';});
 document.getElementById('villa-layer').addEventListener('mousemove',function(e){
   if(!e.target.closest('.villa')){tip.style.display='none';return;}
   tip.style.left=(e.clientX+16)+'px';tip.style.top=Math.min(e.clientY-10,window.innerHeight-180)+'px';
@@ -940,49 +997,28 @@ function doPrint(){
   // Compute scale from paper dimensions, not screen viewport.
   // #print-page is position:fixed;inset:0 in @media print, filling the @page content area.
   // @page margin:8mm + #print-page padding:8mm = 16mm inset each side.
-  var MM=96/25.4,isA3=paper==='A3';
-  var usableW=((isA3?420:297)-24)*MM,usableH=((isA3?297:210)-24)*MM,mapH=usableH-50-10-2;
-  var LAYER_W=1800,LAYER_H=1273;
-  var autoScale=Math.min(usableW/LAYER_W,(mapH-10)/LAYER_H);
-  var userPct=parseFloat(document.getElementById('print-scale')?.value)||100;
-  var _saved=_ppLoad();
-  var iS=_saved?autoScale*(_saved.pct/100):autoScale*(userPct/100);
-  var iX=_saved?_saved.ox:(usableW-LAYER_W*iS)/2, iY=_saved?_saved.oy:0;
-  _ppState={layer:null,mw:null,autoScale:autoScale,scale:iS,ox:iX,oy:iY,iS:iS,iX:iX,iY:iY,lW:LAYER_W,lH:LAYER_H,drag:null};
-  _ppShowControls(_saved?_saved.pct:userPct);
+  var MM=96/25.4, isA3=paper==='A3';
+  var usableW=((isA3?420:297)-24)*MM, usableH=((isA3?297:210)-24)*MM;
+  var mapH=usableH-90; // ~60px header + ~30px legend
+  // Compute exact bounding box from actual villa positions
+  var vXs=Object.values(VILLAS).map(function(v){return v.x;});
+  var vYs=Object.values(VILLAS).map(function(v){return v.y;});
+  var pad=30;
+  var vMinX=Math.min.apply(null,vXs)-pad, vMaxX=Math.max.apply(null,vXs)+pad;
+  var vMinY=Math.min.apply(null,vYs)-pad, vMaxY=Math.max.apply(null,vYs)+pad;
+  var vW=vMaxX-vMinX, vH=vMaxY-vMinY;
+  // Scale to fit exactly within usableW × mapH, then center
+  var scale=Math.min(usableW/vW, mapH/vH);
+  var ox=(usableW-vW*scale)/2-vMinX*scale;
+  var oy=(mapH-vH*scale)/2-vMinY*scale;
   requestAnimationFrame(function(){
     var layer=document.getElementById('pp-layer-inner'),mw=document.getElementById('pp-map-inner');
-    _ppState.layer=layer;_ppState.mw=mw;
-    applyPPTransform();
-    mw.style.cursor='grab';mw.style.userSelect='none';
-    mw.addEventListener('mousedown',onPPDragStart);
+    if(layer){layer.style.transformOrigin='0 0';layer.style.transform='translate('+ox.toFixed(1)+'px,'+oy.toFixed(1)+'px) scale('+scale.toFixed(5)+')';}
+    if(mw){mw.style.height=mapH+'px';mw.style.flex='none';}
+    window.print();
+    setTimeout(function(){var p=document.getElementById('print-page');if(p)p.parentNode.removeChild(p);},1500);
   });
 }
-var _ppState=null;
-function _ppShowControls(pct){
-  var old=document.getElementById('pp-controls');if(old)old.parentNode.removeChild(old);
-  if(!document.getElementById('_pp_ctrl_style')){var s=document.createElement('style');s.id='_pp_ctrl_style';s.textContent='@media print{#pp-controls{display:none!important}}';document.head.appendChild(s);}
-  var c=document.createElement('div');c.id='pp-controls';
-  c.style.cssText='position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(11,14,20,.93);border:1px solid #2a3340;border-radius:12px;padding:10px 18px;display:flex;align-items:center;gap:14px;z-index:99999;color:#e6e9ef;font-family:Inter,sans-serif;font-size:12px;box-shadow:0 8px 32px rgba(0,0,0,.7);backdrop-filter:blur(8px);white-space:nowrap';
-  c.innerHTML='<span style="font-weight:700;color:#93b6ff">&#128424; Print Preview</span>'
-    +'<div style="display:flex;align-items:center;gap:7px"><span style="color:#8a93a3">Scale</span>'
-    +'<button onclick="ppScaleAdj(-5)" style="width:26px;height:26px;background:#1a2030;border:1px solid #2a3340;color:#e6e9ef;border-radius:5px;cursor:pointer;font-size:17px;line-height:1;padding:0">&#8722;</button>'
-    +'<span id="pp-scale-val" style="font-family:monospace;width:42px;text-align:center;color:#93b6ff;font-weight:700">'+(Math.round(pct)||100)+'%</span>'
-    +'<button onclick="ppScaleAdj(5)" style="width:26px;height:26px;background:#1a2030;border:1px solid #2a3340;color:#e6e9ef;border-radius:5px;cursor:pointer;font-size:17px;line-height:1;padding:0">+</button></div>'
-    +'<span style="color:#5b6373;font-size:11px">&#8645; Drag map to reposition</span>'
-    +'<button onclick="resetPrintPreview()" style="padding:5px 11px;background:#1a2030;border:1px solid #2a3340;color:#8a93a3;border-radius:6px;cursor:pointer;font-size:11px">&#8635; Reset</button>'
-    +'<button onclick="executePrint()" style="padding:5px 14px;background:#14532d;border:1px solid #15803d;color:#6ee2a3;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700">&#128424; Print</button>'
-    +'<button onclick="closePrintPreview()" style="padding:5px 11px;background:#1a2030;border:1px solid #2a3340;color:#ff8a99;border-radius:6px;cursor:pointer;font-size:11px">&#10005; Cancel</button>';
-  document.body.appendChild(c);
-}
-function _ppSave(){if(!_ppState)return;try{localStorage.setItem('kp_pp_adj_'+CLUSTER,JSON.stringify({pct:Math.round(_ppState.scale/_ppState.autoScale*100),ox:Math.round(_ppState.ox),oy:Math.round(_ppState.oy)}));}catch(e){}}
-function _ppLoad(){try{var s=JSON.parse(localStorage.getItem('kp_pp_adj_'+CLUSTER)||'null');return(s&&s.pct)?s:null;}catch(e){return null;}}
-function applyPPTransform(){if(!_ppState||!_ppState.layer)return;_ppState.layer.style.transformOrigin='0 0';_ppState.layer.style.transform='translate('+_ppState.ox.toFixed(1)+'px,'+_ppState.oy.toFixed(1)+'px) scale('+_ppState.scale.toFixed(5)+')';_ppSave();}
-function ppScaleAdj(delta){if(!_ppState)return;var pct=Math.round(_ppState.scale/_ppState.autoScale*100)+delta;pct=Math.max(30,Math.min(200,pct));var nS=_ppState.autoScale*(pct/100),cx=_ppState.ox+_ppState.lW*_ppState.scale/2,cy=_ppState.oy+_ppState.lH*_ppState.scale/2;_ppState.scale=nS;_ppState.ox=cx-_ppState.lW*nS/2;_ppState.oy=cy-_ppState.lH*nS/2;var el=document.getElementById('pp-scale-val');if(el)el.textContent=pct+'%';applyPPTransform();}
-function resetPrintPreview(){if(!_ppState)return;_ppState.scale=_ppState.iS;_ppState.ox=_ppState.iX;_ppState.oy=_ppState.iY;var el=document.getElementById('pp-scale-val');if(el)el.textContent=Math.round(_ppState.iS/_ppState.autoScale*100)+'%';try{localStorage.removeItem('kp_pp_adj_'+CLUSTER);}catch(e){}applyPPTransform();}
-function onPPDragStart(e){if(!_ppState)return;_ppState.drag={sx:e.clientX,sy:e.clientY,ox:_ppState.ox,oy:_ppState.oy};_ppState.mw.style.cursor='grabbing';function mv(ev){if(!_ppState||!_ppState.drag)return;_ppState.ox=_ppState.drag.ox+(ev.clientX-_ppState.drag.sx);_ppState.oy=_ppState.drag.oy+(ev.clientY-_ppState.drag.sy);applyPPTransform();}function up(){if(_ppState){_ppState.drag=null;if(_ppState.mw)_ppState.mw.style.cursor='grab';}document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);}document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);e.preventDefault();}
-function executePrint(){window.print();setTimeout(closePrintPreview,1500);}
-function closePrintPreview(){var p=document.getElementById('print-page');if(p)p.parentNode.removeChild(p);var c=document.getElementById('pp-controls');if(c)c.parentNode.removeChild(c);_ppState=null;}
 
 async function loadData(){
   document.getElementById('lm').textContent='Loading activities...';
@@ -1079,6 +1115,12 @@ async function loadData(){
   clrSel.innerHTML='<option value="">— Select Clearance —</option>';
   clrActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;clrSel.appendChild(o);});
   recomputeOpenFront();
+  try{
+    var ncrRows=await fetchAll('ncr_sor_records?select=id,record_type,reference_no,villa_no,activity_code,activity_name,title,status,raised_date&is_active=eq.true&cluster=eq.'+CLUSTER+'&status=in.(open,in_progress)');
+    ncrVillaMap={};ncrRows.forEach(function(r){var vn=String(r.villa_no||'');if(!ncrVillaMap[vn])ncrVillaMap[vn]=[];ncrVillaMap[vn].push(r);});
+    document.getElementById('ncr-count').textContent=ncrRows.length;
+    document.getElementById('ncr-block').classList.toggle('visible',ncrRows.length>0);
+  }catch(e){console.warn('[keyplan C3] NCR load failed:',e);}
   console.log('[keyplan v10 final] WIR:',wirCsvData.length,'rows,',wirActKeys.length,'acts | CLR:',clrCsvData.length,'rows,',clrActKeys.length,'acts | Open Fronts:',openFrontVillas.size);
   document.getElementById('hdr-info').textContent='320 Villas · '+wirCsvData.length+' WIR · '+clrCsvData.length+' CLR · '+openFrontVillas.size+' Open Fronts';
   document.getElementById('loading').style.display='none';

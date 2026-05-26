@@ -168,8 +168,11 @@ thead th.vc{min-width:200px;width:200px;background:var(--bg-panel);
   line-height:1.3;margin-bottom:2px;white-space:normal;word-break:break-word;width:100%}
 .thg{color:var(--text-faint);font-size:8px;text-align:center;margin-bottom:1px}
 .thc{color:var(--text-faint);font-size:8px;font-family:var(--font-mono);text-align:center;word-break:break-all;width:100%}
-.thf{cursor:pointer;font-size:10px;color:var(--text-faint);margin-top:1px;padding:1px 4px;border-radius:3px}
-.thf:hover{color:var(--accent-text);background:var(--accent-soft)}
+.thf{cursor:pointer;color:var(--text-faint);padding:2px 4px;border-radius:3px;
+  transition:all .1s;display:inline-flex;align-items:center;justify-content:center;margin-top:2px}
+.thf:hover{background:var(--bg-hover);color:var(--text-muted)}
+.thf.filtered{color:var(--accent-text)}
+.thf.filtered svg{fill:rgba(79,140,255,.25)}
 th.vc2,td.vc2{position:sticky;left:0;z-index:10;background:var(--bg-elev)}
 tbody tr:hover .vc{background:var(--bg-hover)!important}
 tbody tr:hover td.dc{background:var(--border)!important}
@@ -196,16 +199,17 @@ tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
 .vx:hover{color:var(--st-rejected-tx);background:var(--st-rejected-bg)}
 
 /* Status cells */
-.cw{width:88px;min-width:88px;max-width:88px;display:flex;flex-direction:column}
+.cw{width:88px;min-width:88px;max-width:88px;display:flex;flex-direction:column;min-height:54px}
 .ct{padding:3px 4px;font-size:10px;font-weight:600;line-height:1.2;text-align:center;
-  display:flex;align-items:center;justify-content:center;gap:3px}
+  display:flex;align-items:center;justify-content:center;gap:3px;flex:1}
 .ct::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0}
 .cm{padding:2px 4px;font-size:9px;line-height:1.2;
   border-top:1px solid var(--cell-divider,rgba(255,255,255,.06));text-align:center;
-  display:flex;align-items:center;justify-content:center;overflow:hidden}
+  display:flex;align-items:center;justify-content:center;overflow:hidden;flex:1}
 .csb{padding:1px 4px;font-size:8px;border-top:1px solid var(--cell-divider,rgba(255,255,255,.04));
   text-align:center;color:var(--text-muted);overflow:hidden;
-  white-space:nowrap;text-overflow:ellipsis;font-family:var(--font-mono)}
+  white-space:nowrap;text-overflow:ellipsis;font-family:var(--font-mono);
+  flex:1;display:flex;align-items:center;justify-content:center;min-width:0}
 /* ── Progress bars ── */
 .vpb{margin-top:5px;width:100%}
 .vpb-lbl{display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim);font-family:var(--font-mono);line-height:1}
@@ -228,8 +232,9 @@ tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
 .ci{background:var(--st-progress-bg);color:var(--st-progress-tx)}
 
 /* Tick / checkbox */
-.tk{width:88px;min-width:88px;max-width:88px;display:flex;align-items:center;
-  justify-content:center;padding:4px 0;cursor:pointer;user-select:none}
+td.td-tk{height:1px} /* lets .tk use height:100% to fill the row */
+.tk{width:88px;min-width:88px;max-width:88px;height:100%;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;user-select:none}
 .tk:hover{background:var(--bg-hover)}
 .tk.on{background:var(--st-approved-bg)}
 .tkb{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);
@@ -254,18 +259,26 @@ tbody tr:nth-child(even) td{background:var(--bg-cell-alt)}
 
 /* Filter popup */
 #pop{display:none;position:fixed;background:var(--bg-panel);border:1px solid var(--border);
-  border-radius:var(--radius-lg);z-index:800;width:200px;padding:8px;
+  border-radius:var(--radius-lg);z-index:800;width:210px;padding:8px;
   box-shadow:0 8px 28px rgba(0,0,0,.7)}
 #pop.on{display:block}
-#pt{font-size:10px;color:var(--text-dim);padding:2px 5px 6px;
-  border-bottom:1px solid var(--border-subtle);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
-.po{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:5px;
-  cursor:pointer;font-size:11px}
+#pop-hdr{display:flex;justify-content:space-between;align-items:center;
+  padding:2px 2px 6px;border-bottom:1px solid var(--border-subtle);margin-bottom:4px}
+#pt{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+#pop-close{cursor:pointer;color:var(--text-faint);font-size:13px;padding:0 4px;
+  border-radius:3px;line-height:1;user-select:none}
+#pop-close:hover{color:var(--text);background:var(--bg-hover)}
+.po{display:flex;align-items:center;gap:6px;padding:5px 6px;border-radius:5px;
+  cursor:pointer;font-size:11px;user-select:none}
 .po:hover,.po.sel{background:var(--bg-hover)}
 .po.sel{background:var(--accent-soft)}
 .pcb{width:14px;height:14px;border:1px solid var(--border-strong);border-radius:3px;
   display:flex;align-items:center;justify-content:center;font-size:9px;flex-shrink:0}
 .po.sel .pcb{background:var(--accent);border-color:var(--accent);color:#fff}
+.po-dot{width:7px;height:7px;border-radius:2px;flex-shrink:0}
+/* No-progress cells: WIR takes 2/3, sub takes 1/3 */
+.cw-ns .cm{flex:2}
+.cw-ns .csb{flex:1}
 #pft{display:flex;gap:5px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle)}
 #pft button{flex:1;padding:5px;font-size:10px;border-radius:5px;border:none;cursor:pointer;font-weight:600;font-family:var(--font)}
 #pft .pa{background:var(--accent);color:#fff}
@@ -485,11 +498,11 @@ body.in-shell header { display: none !important; }
 
 <!-- Filter popup -->
 <div id="pop">
-  <div id="pt"></div>
+  <div id="pop-hdr"><span id="pt"></span><span id="pop-close" onclick="clsPop()">✕</span></div>
   <div id="po2" style="max-height:200px;overflow-y:auto"></div>
   <div id="pft">
     <button class="pa" onclick="applyPop()">✓ Apply</button>
-    <button class="pc" onclick="clrPop()">✕ Clear</button>
+    <button class="pc" onclick="clrPop()">Clear</button>
   </div>
 </div>
 
@@ -1116,7 +1129,7 @@ function buildHdr(){
     h+='<th style="padding:0;vertical-align:bottom;width:88px;min-width:88px;max-width:88px">'
       +'<div class="thi"><div class="thl">'+lbl+'</div>'
       +(codes.length?'<div class="thc">'+codes.join(',')+'</div>':'')
-      +'<div class="thf" style="'+(hasF?'color:var(--accent)':'')+'" onclick="opPop(event,\''+col.key+'\',\''+esc+'\')">&#9661;</div>'
+      +'<div class="thf'+(hasF?' filtered':'')+'" onclick="opPop(event,\''+col.key+'\',\''+esc+'\')" title="Filter"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></div>'
       +'</div>'+thPb+'</th>';
   });
   h+='</tr>';
@@ -1178,7 +1191,7 @@ function buildTbl(){
       if(col.type==='div'){r+='<td class="dc"></td>';return;}
       if(col.type==='tick'){
         var tk=!!(flagsD[vid]&&flagsD[vid][col.key]);
-        r+='<td><div class="tk'+(tk?' on':'')+'" onclick="togFlag('+vid+',\''+col.key+'\',this)"><div class="tkb">'+(tk?'\u2713':'')+'</div></div></td>';
+        r+='<td class="td-tk"><div class="tk'+(tk?' on':'')+'" onclick="togFlag('+vid+',\''+col.key+'\',this)"><div class="tkb">'+(tk?'\u2713':'')+'</div></div></td>';
         return;
       }
       if(col.type==='clr'){
@@ -1199,7 +1212,7 @@ function buildTbl(){
           csubHtml='<div class="csb"'+csubStyle+'>'+csubSafe+'</div>';
         }
       }
-      r+='<td><div class="cw">'
+      r+='<td><div class="cw'+(!prg&&csub?' cw-ns':'')+'">'
         +(prg?'<div class="ct '+sc(prg)+'"'+(progHidden?' style="display:none"':'')+'>'+sl(prg)+'</div>':'')
         +'<div class="cm '+sc(wir)+'">'+sl(wir)+'</div>'
         +csubHtml
@@ -1348,9 +1361,17 @@ function opPop(e,key,lbl){
     ?['checked','unchecked']
     :['approved','under_review','rejected','not_submitted','completed','in_progress','not_started'];
   var cur=colF[key]||new Set();
+  var dotC={approved:'var(--st-approved-tx)',rejected:'var(--st-rejected-tx)',
+    under_review:'var(--st-review-tx)',not_submitted:'var(--text-faint)',
+    completed:'var(--st-approved-tx)',in_progress:'var(--st-progress-tx)',
+    not_started:'var(--text-faint)',checked:'var(--st-approved-tx)',unchecked:'var(--text-faint)'};
   document.getElementById('po2').innerHTML=opts.map(function(o){
     var s=cur.has(o);
-    return '<div class="po'+(s?' sel':'')+'" onclick="togO(this)"><div class="pcb">'+(s?'&#10003;':'')+'</div><span data-val="'+o+'">'+sl(o)+'</span></div>';
+    var dc=dotC[o]||'var(--text-faint)';
+    return '<div class="po'+(s?' sel':'')+'" onclick="togO(this)">'
+      +'<div class="pcb">'+(s?'&#10003;':'')+'</div>'
+      +'<span class="po-dot" style="background:'+dc+'"></span>'
+      +'<span data-val="'+o+'">'+sl(o)+'</span></div>';
   }).join('');
   var rect=e.currentTarget.getBoundingClientRect();
   var pop=document.getElementById('pop');

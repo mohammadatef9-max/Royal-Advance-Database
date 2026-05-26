@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>NCR / SOR Tracker</title>
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-cell:#0f1319;
+  --bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --st-approved-bg:#163d28;--st-approved-bd:#1f5a39;--st-approved-tx:#6ee2a3;
+  --st-rejected-bg:#4a1820;--st-rejected-bd:#6b2530;--st-rejected-tx:#ff8a99;
+  --st-progress-bg:#2a2410;--st-progress-bd:#4a3c14;--st-progress-tx:#f4c95a;
+  --st-review-bg:#1c2348;--st-review-bd:#2c3870;--st-review-tx:#a3b3ff;
+  --ncr-bg:#1a0e0e;--ncr-bd:#4a1515;--ncr-tx:#ff6b6b;
+  --sor-bg:#0e1a2e;--sor-bd:#1a3060;--sor-tx:#7aa8ff;
+  --font:"Inter",-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-cell:#fff;
+  --bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
+  --st-approved-bg:#e3f5ea;--st-approved-bd:#b8e0c7;--st-approved-tx:#15803d;
+  --st-rejected-bg:#fde8eb;--st-rejected-bd:#f5b8c1;--st-rejected-tx:#b91c1c;
+  --st-progress-bg:#fef5d8;--st-progress-bd:#f3dca3;--st-progress-tx:#92580a;
+  --st-review-bg:#e8eeff;--st-review-bd:#c0cdf5;--st-review-tx:#2942a8;
+  --ncr-bg:#fff0f0;--ncr-bd:#fcc;--ncr-tx:#c00;
+  --sor-bg:#f0f4ff;--sor-bd:#c8d8ff;--sor-tx:#1d4ed8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--text);
+  height:100vh;display:flex;flex-direction:column;overflow:hidden;
+  font-size:13px;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+
+/* ── HEADER ── */
+header{background:var(--bg-elev);border-bottom:1px solid var(--border);
+  padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.hdr-title{font-size:14px;font-weight:700;letter-spacing:-.02em}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tb-theme{padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  background:var(--bg-panel);color:var(--text-muted);font-size:11px;cursor:pointer}
+.tb-theme:hover{border-color:var(--accent);color:var(--accent-text)}
+
+/* ── TABS ── */
+.tabs{background:var(--bg-elev);border-bottom:1px solid var(--border);
+  display:flex;padding:0 16px;gap:0;flex-shrink:0}
+.tab{padding:12px 16px;font-size:12px;font-weight:600;color:var(--text-dim);
+  cursor:pointer;border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;user-select:none;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text-muted)}
+.tab.active{color:var(--accent-text);border-bottom-color:var(--accent)}
+.tab-badge{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd);
+  color:var(--st-rejected-tx);font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;
+  font-family:var(--font-mono)}
+
+/* ── CONTENT AREAS ── */
+.tab-content{display:none;flex:1;overflow:hidden;flex-direction:column}
+.tab-content.active{display:flex}
+
+/* ── STATS BAR ── */
+.stats-row{display:flex;gap:8px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap}
+.stat-card{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;
+  padding:10px 16px;display:flex;flex-direction:column;gap:2px;min-width:90px}
+.stat-num{font-size:20px;font-weight:800;font-family:var(--font-mono);line-height:1}
+.stat-lbl{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+.stat-card.open   .stat-num{color:var(--st-rejected-tx)}
+.stat-card.prog   .stat-num{color:var(--st-progress-tx)}
+.stat-card.closed .stat-num{color:var(--st-approved-tx)}
+.stat-card.ncr    .stat-num{color:var(--ncr-tx)}
+.stat-card.sor    .stat-num{color:var(--sor-tx)}
+.stat-card.total  .stat-num{color:var(--accent-text)}
+
+/* ── FILTER BAR ── */
+.filter-bar{display:flex;align-items:center;gap:6px;padding:0 16px 10px;flex-wrap:wrap;flex-shrink:0}
+.fb-grp{display:flex;gap:0}
+.fb-btn{padding:5px 12px;border:1px solid var(--border);background:var(--bg-panel);
+  color:var(--text-muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .1s}
+.fb-btn:first-child{border-radius:6px 0 0 6px}
+.fb-btn:last-child{border-radius:0 6px 6px 0}
+.fb-btn:not(:first-child){border-left:none}
+.fb-btn:only-child{border-radius:6px}
+.fb-btn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}
+.fb-btn:hover:not(.active){background:var(--bg-hover);color:var(--text)}
+.fb-sel{padding:5px 8px;border:1px solid var(--border);background:var(--bg-panel);
+  color:var(--text-muted);font-size:11px;border-radius:6px;cursor:pointer}
+.fb-sel:focus{outline:none;border-color:var(--accent)}
+.fb-search{flex:1;max-width:240px;padding:5px 10px;border:1px solid var(--border);
+  background:var(--bg-input);color:var(--text);font-size:11px;border-radius:6px}
+.fb-search:focus{outline:none;border-color:var(--accent)}
+.fb-search::placeholder{color:var(--text-faint)}
+.fb-spacer{flex:1}
+
+/* ── TABLE ── */
+.tbl-wrap{flex:1;overflow:auto;padding:0 16px 16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{position:sticky;top:0;z-index:2;background:var(--bg-panel);
+  padding:8px 10px;text-align:left;font-size:10px;font-weight:700;
+  color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;
+  border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid var(--border-subtle);cursor:pointer;transition:background .1s}
+tbody tr:hover{background:var(--bg-hover)}
+tbody td{padding:9px 10px;vertical-align:middle}
+.td-num{font-family:var(--font-mono);font-size:11px;color:var(--text-dim)}
+.td-ref{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--accent-text)}
+.td-title{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.td-act{font-size:10px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.td-date{font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
+.type-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:4px;
+  font-size:10px;font-weight:700;letter-spacing:.03em;font-family:var(--font-mono)}
+.type-badge.ncr{background:var(--ncr-bg);border:1px solid var(--ncr-bd);color:var(--ncr-tx)}
+.type-badge.sor{background:var(--sor-bg);border:1px solid var(--sor-bd);color:var(--sor-tx)}
+.st-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:4px;
+  font-size:10px;font-weight:600}
+.st-open{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.st-in_progress{background:var(--st-progress-bg);border:1px solid var(--st-progress-bd);color:var(--st-progress-tx)}
+.st-closed{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx)}
+.st-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.st-open .st-dot{background:var(--st-rejected-tx)}
+.st-in_progress .st-dot{background:var(--st-progress-tx)}
+.st-closed .st-dot{background:var(--st-approved-tx)}
+.cl-pill{background:var(--bg-panel);border:1px solid var(--border);
+  color:var(--text-muted);font-size:10px;font-weight:700;padding:1px 6px;
+  border-radius:4px;font-family:var(--font-mono)}
+.villa-num{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text)}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-dim)}
+.empty-state .ei{font-size:40px;margin-bottom:12px}
+.empty-state p{font-size:13px;margin-bottom:6px}
+.empty-state span{font-size:11px;color:var(--text-faint)}
+
+/* ── NEW RECORD FORM ── */
+.form-wrap{flex:1;overflow-y:auto;padding:20px 24px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:860px}
+.form-grid.full{grid-template-columns:1fr}
+.form-field{display:flex;flex-direction:column;gap:6px}
+.form-field label{font-size:11px;font-weight:600;color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.05em}
+.form-field label .req{color:var(--st-rejected-tx);margin-left:2px}
+.form-input{padding:8px 12px;border:1px solid var(--border);background:var(--bg-input);
+  color:var(--text);border-radius:7px;font-size:13px;transition:border-color .15s;width:100%}
+.form-input:focus{outline:none;border-color:var(--accent)}
+.form-input::placeholder{color:var(--text-faint)}
+.form-input.error{border-color:var(--st-rejected-bd)}
+select.form-input option{background:var(--bg-elev)}
+textarea.form-input{resize:vertical;min-height:90px}
+.type-toggle{display:flex;gap:0}
+.type-btn{flex:1;padding:10px;border:1px solid var(--border);background:var(--bg-panel);
+  color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;gap:6px}
+.type-btn:first-child{border-radius:8px 0 0 8px}
+.type-btn:last-child{border-radius:0 8px 8px 0;border-left:none}
+.type-btn.active-ncr{background:var(--ncr-bg);border-color:var(--ncr-bd);color:var(--ncr-tx)}
+.type-btn.active-sor{background:var(--sor-bg);border-color:var(--sor-bd);color:var(--sor-tx)}
+.form-hint{font-size:10px;color:var(--text-faint);margin-top:-2px}
+.form-section{font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;
+  letter-spacing:.08em;padding:16px 0 8px;border-top:1px solid var(--border-subtle);
+  grid-column:1/-1;margin-top:4px}
+.form-section:first-child{border-top:none;padding-top:0}
+.form-actions{margin-top:20px;display:flex;gap:10px;align-items:center}
+.btn-submit{padding:10px 24px;background:var(--accent);border:none;border-radius:8px;
+  color:#fff;font-size:13px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.btn-submit:hover{opacity:.85}
+.btn-submit:disabled{opacity:.4;cursor:not-allowed}
+.btn-reset{padding:10px 16px;background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:8px;color:var(--text-muted);font-size:12px;cursor:pointer}
+.btn-reset:hover{border-color:var(--border-strong);color:var(--text)}
+.form-msg{font-size:12px;padding:10px 14px;border-radius:6px;display:none}
+.form-msg.ok{background:var(--st-approved-bg);border:1px solid var(--st-approved-bd);color:var(--st-approved-tx)}
+.form-msg.err{background:var(--st-rejected-bg);border:1px solid var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.form-msg.show{display:block}
+
+/* ── MODAL ── */
+.modal-bg{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.6);
+  backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;
+  width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 64px rgba(0,0,0,.6)}
+.modal-hdr{display:flex;align-items:center;gap:10px;padding:16px 20px;
+  border-bottom:1px solid var(--border);flex-shrink:0}
+.modal-title{font-size:14px;font-weight:700;flex:1}
+.modal-close{width:28px;height:28px;border:none;background:var(--bg-panel);
+  border-radius:6px;color:var(--text-muted);font-size:15px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--bg-hover);color:var(--text)}
+.modal-body{flex:1;overflow-y:auto;padding:20px}
+.modal-ftr{padding:14px 20px;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:8px;flex-wrap:wrap}
+.detail-grid{display:grid;grid-template-columns:140px 1fr;gap:8px 16px}
+.dg-lbl{font-size:11px;font-weight:600;color:var(--text-muted);padding-top:2px;
+  text-transform:uppercase;letter-spacing:.04em}
+.dg-val{font-size:13px;color:var(--text);line-height:1.5;word-break:break-word}
+.dg-sep{grid-column:1/-1;border-top:1px solid var(--border-subtle);margin:4px 0}
+.dg-desc{grid-column:1/-1;background:var(--bg-panel);border:1px solid var(--border-subtle);
+  border-radius:6px;padding:10px 12px;font-size:12px;color:var(--text-muted);
+  line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.btn-st{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;
+  border:1px solid;cursor:pointer;transition:opacity .15s}
+.btn-st:hover{opacity:.8}
+.btn-ip{background:var(--st-progress-bg);border-color:var(--st-progress-bd);color:var(--st-progress-tx)}
+.btn-cl{background:var(--st-approved-bg);border-color:var(--st-approved-bd);color:var(--st-approved-tx)}
+.btn-re{background:var(--st-rejected-bg);border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.btn-del{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;
+  background:var(--bg-panel);border:1px solid var(--border);color:var(--text-muted);cursor:pointer}
+.btn-del:hover{border-color:var(--st-rejected-bd);color:var(--st-rejected-tx)}
+.btn-edit-mode{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;
+  background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent-text);cursor:pointer}
+.btn-save-edit{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;
+  background:var(--accent);border:none;color:#fff;cursor:pointer}
+.modal-edit-wrap{display:none}
+.modal-edit-wrap.show{display:block}
+.modal-detail-wrap.hide{display:none}
+
+/* ── EDIT INLINE FIELDS ── */
+.edit-field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.edit-field label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.edit-input{padding:7px 10px;border:1px solid var(--border);background:var(--bg-input);
+  color:var(--text);border-radius:6px;font-size:12px;width:100%}
+.edit-input:focus{outline:none;border-color:var(--accent)}
+.edit-row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="hdr-title">
+    <svg style="display:inline;vertical-align:-3px;margin-right:6px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    NCR / SOR Tracker
+  </div>
+  <div class="hdr-right">
+    <button class="tb-theme" onclick="toggleTheme()">☀ / ☾</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" id="tab-records" onclick="switchTab('records')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>
+    Records
+    <span class="tab-badge" id="open-badge" style="display:none">0</span>
+  </div>
+  <div class="tab" id="tab-new" onclick="switchTab('new')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    New Record
+  </div>
+</div>
+
+<!-- ═══════════════ RECORDS TAB ═══════════════ -->
+<div class="tab-content active" id="tc-records">
+
+  <div class="stats-row">
+    <div class="stat-card total"><div class="stat-num" id="sc-total">—</div><div class="stat-lbl">Total</div></div>
+    <div class="stat-card open" ><div class="stat-num" id="sc-open">—</div><div class="stat-lbl">Open</div></div>
+    <div class="stat-card prog" ><div class="stat-num" id="sc-prog">—</div><div class="stat-lbl">In Progress</div></div>
+    <div class="stat-card closed"><div class="stat-num" id="sc-closed">—</div><div class="stat-lbl">Closed</div></div>
+    <div style="width:1px;background:var(--border);margin:4px 0;flex-shrink:0"></div>
+    <div class="stat-card ncr"><div class="stat-num" id="sc-ncr">—</div><div class="stat-lbl">NCR</div></div>
+    <div class="stat-card sor"><div class="stat-num" id="sc-sor">—</div><div class="stat-lbl">SOR</div></div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="fb-grp" id="fb-type">
+      <button class="fb-btn active" data-v="" onclick="setFilter('type','',this)">All</button>
+      <button class="fb-btn" data-v="NCR" onclick="setFilter('type','NCR',this)">NCR</button>
+      <button class="fb-btn" data-v="SOR" onclick="setFilter('type','SOR',this)">SOR</button>
+    </div>
+    <div class="fb-grp" id="fb-status">
+      <button class="fb-btn active" data-v="" onclick="setFilter('status','',this)">All Status</button>
+      <button class="fb-btn" data-v="open" onclick="setFilter('status','open',this)">Open</button>
+      <button class="fb-btn" data-v="in_progress" onclick="setFilter('status','in_progress',this)">In Progress</button>
+      <button class="fb-btn" data-v="closed" onclick="setFilter('status','closed',this)">Closed</button>
+    </div>
+    <select class="fb-sel" id="fb-cluster" onchange="setFilter('cluster',this.value,null)">
+      <option value="">All Clusters</option>
+    </select>
+    <input class="fb-search" id="fb-search" placeholder="Search title / ref / villa…" oninput="applyFilters()">
+    <div class="fb-spacer"></div>
+    <button class="fb-btn" style="border-radius:6px" onclick="loadRecords()">↺ Refresh</button>
+  </div>
+
+  <div class="tbl-wrap">
+    <table id="ncr-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Type</th>
+          <th>Ref No</th>
+          <th>Cluster</th>
+          <th>Villa</th>
+          <th>Activity</th>
+          <th>Title</th>
+          <th>Raised By</th>
+          <th>Date</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="ncr-tbody">
+        <tr><td colspan="10" class="empty-state"><div class="ei">⏳</div><p>Loading…</p></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════ NEW RECORD TAB ═══════════════ -->
+<div class="tab-content" id="tc-new">
+  <div class="form-wrap">
+    <div id="form-msg" class="form-msg"></div>
+    <div class="form-grid" style="max-width:860px">
+
+      <div class="form-section">Record Details</div>
+
+      <!-- Type toggle full width -->
+      <div class="form-field" style="grid-column:1/-1">
+        <label>Record Type <span class="req">*</span></label>
+        <div class="type-toggle">
+          <button class="type-btn active-ncr" id="type-btn-ncr" onclick="selectType('NCR')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+            NCR — Non-Conformance Report
+          </button>
+          <button class="type-btn" id="type-btn-sor" onclick="selectType('SOR')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            SOR — Site Observation Report
+          </button>
+        </div>
+      </div>
+
+      <div class="form-field">
+        <label>Cluster <span class="req">*</span></label>
+        <select class="form-input" id="f-cluster" onchange="onClusterChange()">
+          <option value="">— Select Cluster —</option>
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>Villa No <span class="req">*</span></label>
+        <select class="form-input" id="f-villa" onchange="onVillaChange()">
+          <option value="">— Select Villa —</option>
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>Linked Activity</label>
+        <select class="form-input" id="f-activity">
+          <option value="">— None / Not Linked —</option>
+        </select>
+      </div>
+
+      <div class="form-field">
+        <label>Reference No</label>
+        <input class="form-input" id="f-refno" placeholder="e.g. NCR-C6-001" type="text">
+        <span class="form-hint" id="f-refno-hint"></span>
+      </div>
+
+      <div class="form-section">Description</div>
+
+      <div class="form-field" style="grid-column:1/-1">
+        <label>Title <span class="req">*</span></label>
+        <input class="form-input" id="f-title" placeholder="Short description of the issue" type="text">
+      </div>
+
+      <div class="form-field" style="grid-column:1/-1">
+        <label>Description</label>
+        <textarea class="form-input" id="f-desc" placeholder="Full details, location, non-conformance specifics…"></textarea>
+      </div>
+
+      <div class="form-section">Tracking</div>
+
+      <div class="form-field">
+        <label>Raised By</label>
+        <input class="form-input" id="f-raisedby" placeholder="Inspector / Engineer name" type="text">
+      </div>
+
+      <div class="form-field">
+        <label>Date Raised</label>
+        <input class="form-input" id="f-raiseddate" type="date">
+      </div>
+
+      <div class="form-field">
+        <label>Status</label>
+        <select class="form-input" id="f-status">
+          <option value="open">Open</option>
+          <option value="in_progress">In Progress</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+
+      <div class="form-field" id="f-res-field" style="display:none">
+        <label>Resolution Notes</label>
+        <textarea class="form-input" id="f-resolution" placeholder="How was this resolved?"></textarea>
+      </div>
+
+    </div><!-- /form-grid -->
+
+    <div class="form-actions">
+      <button class="btn-submit" id="btn-submit" onclick="submitRecord()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:-2px;margin-right:4px"><polyline points="20 6 9 17 4 12"/></svg>
+        Submit Record
+      </button>
+      <button class="btn-reset" onclick="resetForm()">↺ Reset</button>
+      <span id="submit-msg" style="font-size:12px;color:var(--text-dim)"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ DETAIL MODAL ═══════════════ -->
+<div class="modal-bg" id="modal-bg" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hdr">
+      <span id="modal-type-badge" class="type-badge ncr">NCR</span>
+      <span class="modal-title" id="modal-title">—</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Detail view -->
+      <div id="modal-detail-wrap" class="modal-detail-wrap">
+        <div class="detail-grid" id="detail-grid"></div>
+      </div>
+      <!-- Edit view -->
+      <div id="modal-edit-wrap" class="modal-edit-wrap">
+        <div class="edit-row2">
+          <div class="edit-field"><label>Title <span class="req">*</span></label><input class="edit-input" id="e-title"></div>
+          <div class="edit-field"><label>Reference No</label><input class="edit-input" id="e-refno"></div>
+        </div>
+        <div class="edit-field"><label>Description</label><textarea class="edit-input" id="e-desc" style="min-height:80px"></textarea></div>
+        <div class="edit-row2">
+          <div class="edit-field"><label>Raised By</label><input class="edit-input" id="e-raisedby"></div>
+          <div class="edit-field"><label>Date Raised</label><input class="edit-input" id="e-raiseddate" type="date"></div>
+        </div>
+        <div class="edit-row2">
+          <div class="edit-field"><label>Status</label>
+            <select class="edit-input" id="e-status" onchange="onEditStatusChange()">
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div class="edit-field"><label>Date Closed</label><input class="edit-input" id="e-closeddate" type="date"></div>
+        </div>
+        <div class="edit-field" id="e-res-field"><label>Resolution Notes</label><textarea class="edit-input" id="e-resolution" style="min-height:70px"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="modal-status-btns">
+        <button class="btn-st btn-ip" id="btn-set-ip" onclick="quickStatus('in_progress')">→ In Progress</button>
+        <button class="btn-st btn-cl" id="btn-set-cl" onclick="quickStatus('closed')">✓ Close</button>
+        <button class="btn-st btn-re" id="btn-set-re" onclick="quickStatus('open')">↺ Re-open</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn-del" id="btn-delete" onclick="deleteRecord()">🗑 Delete</button>
+        <button class="btn-edit-mode" id="btn-edit" onclick="toggleEditMode()">✎ Edit</button>
+        <button class="btn-save-edit" id="btn-save-edit" style="display:none" onclick="saveEdit()">✓ Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+function getH(){
+  var t=window.__MEP_TOKEN__;
+  if(!t){try{var s=localStorage.getItem('mep_session');if(s){var j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}
+  return{'apikey':KEY,'Content-Type':'application/json','Authorization':'Bearer '+(t||KEY),'Prefer':'count=none'};
+}
+async function fa(path){
+  const r=await fetch(`${SB}/rest/v1/${path}`,{headers:getH()});
+  const d=await r.json();
+  return Array.isArray(d)?d:[];
+}
+async function fp(path,body){
+  const r=await fetch(`${SB}/rest/v1/${path}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});
+  return await r.json();
+}
+async function fpatch(path,body){
+  const r=await fetch(`${SB}/rest/v1/${path}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});
+  return await r.json();
+}
+async function fdel(path){
+  await fetch(`${SB}/rest/v1/${path}`,{method:'DELETE',headers:getH()});
+}
+
+// ── STATE ──
+let allRecords = [];
+let allVillas  = [];
+let allActivities = [];
+let filters = { type:'', status:'', cluster:'' };
+let currentRecord = null;
+let editMode = false;
+let formType = 'NCR';
+
+// ── THEME ──
+function toggleTheme(){
+  const t = document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  try{localStorage.setItem('mep_theme',t);}catch(e){}
+}
+(function(){try{const t=localStorage.getItem('mep_theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+
+// ── TABS ──
+function switchTab(t){
+  if(t==='new'){
+    const perms=(window.__MEP_USER__?.permissions)||[];
+    const ok=perms.includes('manage_users')&&perms.includes('manage_system')||perms.includes('create_ncr');
+    if(!ok)return;
+  }
+  document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('tc-'+t).classList.add('active');
+}
+
+// ── FILTERS ──
+function setFilter(key, val, btn){
+  filters[key]=val;
+  if(btn){
+    const grp=btn.closest('.fb-grp');
+    if(grp)grp.querySelectorAll('.fb-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  applyFilters();
+}
+function applyFilters(){
+  const q=(document.getElementById('fb-search').value||'').toLowerCase();
+  const rows=document.getElementById('ncr-tbody').querySelectorAll('tr.ncr-row');
+  rows.forEach(tr=>{
+    const rec=allRecords.find(r=>String(r.id)===tr.getAttribute('data-id'));
+    if(!rec){tr.style.display='none';return;}
+    let show=true;
+    if(filters.type&&rec.record_type!==filters.type)show=false;
+    if(filters.status&&rec.status!==filters.status)show=false;
+    if(filters.cluster&&rec.cluster!==filters.cluster)show=false;
+    if(q){
+      const hay=[rec.title,rec.reference_no,String(rec.villa_no||''),rec.raised_by,rec.activity_name,rec.description].join(' ').toLowerCase();
+      if(!hay.includes(q))show=false;
+    }
+    tr.style.display=show?'':'none';
+  });
+}
+
+// ── LOAD RECORDS ──
+async function loadRecords(){
+  try{
+    allRecords=await fa('ncr_sor_records?select=*&is_active=eq.true&order=created_at.desc');
+    renderTable();
+    updateStats();
+    updateClusterFilter();
+  }catch(e){
+    console.error('[NCR] loadRecords',e);
+    document.getElementById('ncr-tbody').innerHTML=`<tr><td colspan="10" class="empty-state"><div class="ei">⚠️</div><p>Failed to load records</p></td></tr>`;
+  }
+}
+
+function stBadge(s){
+  const map={open:'Open',in_progress:'In Progress',closed:'Closed'};
+  return`<span class="st-badge st-${s}"><span class="st-dot"></span>${map[s]||s}</span>`;
+}
+function typeBadge(t){
+  return`<span class="type-badge ${t.toLowerCase()}">${t}</span>`;
+}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});}
+
+function renderTable(){
+  const tbody=document.getElementById('ncr-tbody');
+  if(!allRecords.length){
+    tbody.innerHTML=`<tr><td colspan="10" class="empty-state"><div class="ei">📋</div><p>No records yet</p><span>Use the New Record tab to add NCR / SOR entries</span></td></tr>`;
+    return;
+  }
+  tbody.innerHTML=allRecords.map((r,i)=>`
+    <tr class="ncr-row" data-id="${r.id}" onclick="openRecord(${r.id})">
+      <td class="td-num">${i+1}</td>
+      <td>${typeBadge(r.record_type)}</td>
+      <td class="td-ref">${r.reference_no||'—'}</td>
+      <td><span class="cl-pill">${r.cluster}</span></td>
+      <td class="villa-num">${r.villa_no||'—'}</td>
+      <td class="td-act">${r.activity_code?r.activity_code+(r.activity_name?' — '+r.activity_name:''):'—'}</td>
+      <td class="td-title" title="${esc(r.title)}">${esc(r.title)}</td>
+      <td class="td-date">${r.raised_by||'—'}</td>
+      <td class="td-date">${fmtDate(r.raised_date)}</td>
+      <td>${stBadge(r.status)}</td>
+    </tr>`).join('');
+  applyFilters();
+}
+
+function updateStats(){
+  const s={total:0,open:0,in_progress:0,closed:0,NCR:0,SOR:0};
+  allRecords.forEach(r=>{s.total++;s[r.status]=(s[r.status]||0)+1;s[r.record_type]=(s[r.record_type]||0)+1;});
+  document.getElementById('sc-total').textContent=s.total;
+  document.getElementById('sc-open').textContent=s.open||0;
+  document.getElementById('sc-prog').textContent=s.in_progress||0;
+  document.getElementById('sc-closed').textContent=s.closed||0;
+  document.getElementById('sc-ncr').textContent=s.NCR||0;
+  document.getElementById('sc-sor').textContent=s.SOR||0;
+  const openN=(s.open||0)+(s.in_progress||0);
+  const badge=document.getElementById('open-badge');
+  badge.textContent=openN;badge.style.display=openN>0?'':'none';
+}
+
+function updateClusterFilter(){
+  const clusters=[...new Set(allRecords.map(r=>r.cluster))].sort();
+  const sel=document.getElementById('fb-cluster');
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Clusters</option>'+clusters.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if(cur)sel.value=cur;
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── DETAIL MODAL ──
+function openRecord(id){
+  currentRecord=allRecords.find(r=>r.id===id);
+  if(!currentRecord)return;
+  editMode=false;
+  renderDetail();
+  document.getElementById('modal-bg').classList.add('open');
+}
+function closeModal(e){
+  if(e&&e.target!==document.getElementById('modal-bg'))return;
+  document.getElementById('modal-bg').classList.remove('open');
+  currentRecord=null;
+}
+function renderDetail(){
+  if(!currentRecord)return;
+  const r=currentRecord;
+  // Header
+  const tb=document.getElementById('modal-type-badge');
+  tb.textContent=r.record_type;
+  tb.className='type-badge '+(r.record_type==='NCR'?'ncr':'sor');
+  document.getElementById('modal-title').textContent=r.title;
+  // Status buttons
+  document.getElementById('btn-set-ip').style.display=r.status==='in_progress'?'none':'';
+  document.getElementById('btn-set-cl').style.display=r.status==='closed'?'none':'';
+  document.getElementById('btn-set-re').style.display=r.status==='open'?'none':'';
+  // Detail grid
+  const rows=[
+    ['Reference', r.reference_no||'—'],
+    ['Status', stBadge(r.status)],
+    ['sep'],
+    ['Cluster', `<span class="cl-pill">${r.cluster}</span>`],
+    ['Villa No', r.villa_no?`<span class="villa-num">${r.villa_no}</span>`:'—'],
+    ['Activity', r.activity_code?(r.activity_code+(r.activity_name?' — '+r.activity_name:'')):'—'],
+    ['sep'],
+    ['Raised By', r.raised_by||'—'],
+    ['Date Raised', fmtDate(r.raised_date)],
+    ['Date Closed', fmtDate(r.closed_date)],
+    ['sep'],
+    ['Description', 'desc:'+r.description],
+    r.resolution?['Resolution','res:'+r.resolution]:null,
+    ['sep'],
+    ['Created', fmtDate(r.created_at)],
+    ['Last Updated', fmtDate(r.updated_at)],
+  ].filter(Boolean);
+  document.getElementById('detail-grid').innerHTML=rows.map(row=>{
+    if(row[0]==='sep')return`<div class="dg-sep"></div>`;
+    if(String(row[1]).startsWith('desc:')){
+      const v=row[1].replace(/^desc:/,'');
+      return`<div class="dg-lbl">Description</div><div class="dg-val"><div class="dg-desc">${esc(v)||'<em style="color:var(--text-faint)">No description</em>'}</div></div>`;
+    }
+    if(String(row[1]).startsWith('res:')){
+      const v=row[1].replace(/^res:/,'');
+      return`<div class="dg-lbl">Resolution</div><div class="dg-val"><div class="dg-desc">${esc(v)}</div></div>`;
+    }
+    return`<div class="dg-lbl">${row[0]}</div><div class="dg-val">${row[1]}</div>`;
+  }).join('');
+  // Show detail, hide edit
+  document.getElementById('modal-detail-wrap').classList.remove('hide');
+  document.getElementById('modal-edit-wrap').classList.remove('show');
+  document.getElementById('btn-edit').style.display='';
+  document.getElementById('btn-save-edit').style.display='none';
+}
+
+async function quickStatus(s){
+  if(!currentRecord)return;
+  const body={status:s};
+  if(s==='closed')body.closed_date=new Date().toISOString().slice(0,10);
+  try{
+    await fpatch(`ncr_sor_records?id=eq.${currentRecord.id}`,body);
+    currentRecord={...currentRecord,...body};
+    const idx=allRecords.findIndex(r=>r.id===currentRecord.id);
+    if(idx>=0)allRecords[idx]={...allRecords[idx],...body};
+    renderDetail();renderTable();updateStats();
+  }catch(e){alert('Failed to update status');}
+}
+
+function toggleEditMode(){
+  editMode=!editMode;
+  if(editMode){
+    const r=currentRecord;
+    document.getElementById('e-title').value=r.title||'';
+    document.getElementById('e-refno').value=r.reference_no||'';
+    document.getElementById('e-desc').value=r.description||'';
+    document.getElementById('e-raisedby').value=r.raised_by||'';
+    document.getElementById('e-raiseddate').value=r.raised_date||'';
+    document.getElementById('e-status').value=r.status||'open';
+    document.getElementById('e-closeddate').value=r.closed_date||'';
+    document.getElementById('e-resolution').value=r.resolution||'';
+    onEditStatusChange();
+    document.getElementById('modal-detail-wrap').classList.add('hide');
+    document.getElementById('modal-edit-wrap').classList.add('show');
+    document.getElementById('btn-edit').style.display='none';
+    document.getElementById('btn-save-edit').style.display='';
+  } else {
+    renderDetail();
+  }
+}
+function onEditStatusChange(){
+  const s=document.getElementById('e-status').value;
+  document.getElementById('e-res-field').style.display=(s==='closed'||s==='in_progress')?'':'none';
+}
+async function saveEdit(){
+  if(!currentRecord)return;
+  const title=document.getElementById('e-title').value.trim();
+  if(!title){alert('Title is required.');return;}
+  const body={
+    title,
+    reference_no:document.getElementById('e-refno').value.trim()||null,
+    description:document.getElementById('e-desc').value.trim()||null,
+    raised_by:document.getElementById('e-raisedby').value.trim()||null,
+    raised_date:document.getElementById('e-raiseddate').value||null,
+    status:document.getElementById('e-status').value,
+    closed_date:document.getElementById('e-closeddate').value||null,
+    resolution:document.getElementById('e-resolution').value.trim()||null,
+  };
+  try{
+    await fpatch(`ncr_sor_records?id=eq.${currentRecord.id}`,body);
+    currentRecord={...currentRecord,...body};
+    const idx=allRecords.findIndex(r=>r.id===currentRecord.id);
+    if(idx>=0)allRecords[idx]={...allRecords[idx],...body};
+    editMode=false;
+    renderDetail();renderTable();updateStats();
+  }catch(e){alert('Failed to save changes.');}
+}
+
+async function deleteRecord(){
+  if(!currentRecord)return;
+  if(!confirm(`Delete ${currentRecord.record_type} "${currentRecord.title}"?\n\nThis will soft-delete the record (is_active = false).`))return;
+  try{
+    await fpatch(`ncr_sor_records?id=eq.${currentRecord.id}`,{is_active:false});
+    allRecords=allRecords.filter(r=>r.id!==currentRecord.id);
+    renderTable();updateStats();
+    document.getElementById('modal-bg').classList.remove('open');
+    currentRecord=null;
+  }catch(e){alert('Failed to delete record.');}
+}
+
+// ── NEW RECORD FORM ──
+function selectType(t){
+  formType=t;
+  document.getElementById('type-btn-ncr').className='type-btn'+(t==='NCR'?' active-ncr':'');
+  document.getElementById('type-btn-sor').className='type-btn'+(t==='SOR'?' active-sor':'');
+  updateRefNoHint();
+}
+
+function onClusterChange(){
+  const cluster=document.getElementById('f-cluster').value;
+  const vilSel=document.getElementById('f-villa');
+  vilSel.innerHTML='<option value="">— Select Villa —</option>';
+  if(!cluster)return;
+  const filtered=allVillas.filter(v=>v.cluster===cluster);
+  filtered.sort((a,b)=>(a.villa_no||0)-(b.villa_no||0));
+  filtered.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.id;
+    o.setAttribute('data-vno',v.villa_no);
+    o.textContent=`Villa ${v.villa_no}${v.villa_type?' ('+v.villa_type+')':''}`;
+    vilSel.appendChild(o);
+  });
+  updateRefNoHint();
+}
+
+function onVillaChange(){updateRefNoHint();}
+
+async function updateRefNoHint(){
+  const t=formType, cluster=document.getElementById('f-cluster').value;
+  if(!t||!cluster){document.getElementById('f-refno-hint').textContent='';return;}
+  // Count existing records of same type+cluster
+  try{
+    const rows=await fa(`ncr_sor_records?select=id&record_type=eq.${t}&cluster=eq.${cluster}&is_active=eq.true`);
+    const next=String(rows.length+1).padStart(3,'0');
+    const sugg=`${t}-${cluster}-${next}`;
+    document.getElementById('f-refno-hint').textContent=`Suggested: ${sugg}`;
+    if(!document.getElementById('f-refno').value)document.getElementById('f-refno').value=sugg;
+  }catch(e){}
+}
+
+document.getElementById('f-status').addEventListener('change',function(){
+  document.getElementById('f-res-field').style.display=(this.value==='closed'||this.value==='in_progress')?'':'none';
+});
+
+async function submitRecord(){
+  const btn=document.getElementById('btn-submit');
+  const msg=document.getElementById('submit-msg');
+  // Validate
+  const cluster=document.getElementById('f-cluster').value;
+  const villaEl=document.getElementById('f-villa');
+  const villaId=villaEl.value;
+  const villaNo=villaEl.options[villaEl.selectedIndex]?Number(villaEl.options[villaEl.selectedIndex].getAttribute('data-vno')):null;
+  const title=document.getElementById('f-title').value.trim();
+  if(!cluster){alert('Please select a cluster.');return;}
+  if(!villaId){alert('Please select a villa.');return;}
+  if(!title){document.getElementById('f-title').classList.add('error');alert('Title is required.');return;}
+  document.getElementById('f-title').classList.remove('error');
+  // Activity
+  const actSel=document.getElementById('f-activity');
+  const actVal=actSel.value;
+  const actOpt=actSel.options[actSel.selectedIndex];
+  const actCode=actOpt?actOpt.getAttribute('data-code')||'':'';
+  const actName=actOpt?actOpt.getAttribute('data-name')||'':'';
+  const body={
+    record_type: formType,
+    reference_no: document.getElementById('f-refno').value.trim()||null,
+    cluster,
+    villa_id: villaId?Number(villaId):null,
+    villa_no: villaNo,
+    activity_code: actCode||null,
+    activity_name: actName||null,
+    title,
+    description: document.getElementById('f-desc').value.trim()||null,
+    raised_by: document.getElementById('f-raisedby').value.trim()||null,
+    raised_date: document.getElementById('f-raiseddate').value||null,
+    status: document.getElementById('f-status').value,
+    resolution: document.getElementById('f-resolution').value.trim()||null,
+  };
+  btn.disabled=true;btn.textContent='Submitting…';msg.textContent='';
+  try{
+    const res=await fp('ncr_sor_records',body);
+    if(Array.isArray(res)&&res[0]){
+      allRecords.unshift(res[0]);
+      renderTable();updateStats();
+      msg.textContent='✓ Record submitted successfully.';
+      msg.style.color='var(--st-approved-tx)';
+      resetForm();
+      switchTab('records');
+    } else {
+      msg.textContent='⚠ Unexpected response. Check console.';
+      msg.style.color='var(--st-rejected-tx)';
+      console.error('[NCR] submit response:',res);
+    }
+  }catch(e){
+    msg.textContent='✗ Failed to submit: '+e.message;
+    msg.style.color='var(--st-rejected-tx)';
+  }finally{
+    btn.disabled=false;btn.textContent='Submit Record';
+    setTimeout(()=>{msg.textContent='';},6000);
+  }
+}
+
+function resetForm(){
+  selectType('NCR');
+  document.getElementById('f-cluster').value='';
+  document.getElementById('f-villa').innerHTML='<option value="">— Select Villa —</option>';
+  document.getElementById('f-activity').value='';
+  document.getElementById('f-refno').value='';
+  document.getElementById('f-refno-hint').textContent='';
+  document.getElementById('f-title').value='';
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-raisedby').value='';
+  document.getElementById('f-raiseddate').value=new Date().toISOString().slice(0,10);
+  document.getElementById('f-status').value='open';
+  document.getElementById('f-res-field').style.display='none';
+  document.getElementById('f-resolution').value='';
+}
+
+// ── INIT ──
+async function init(){
+  // ── Permission check ──
+  const perms=(window.__MEP_USER__?.permissions)||[];
+  const isSuperAdmin=perms.includes('manage_users')&&perms.includes('manage_system');
+  const canView=isSuperAdmin||perms.includes('view_ncr');
+  const canCreate=isSuperAdmin||perms.includes('create_ncr');
+
+  if(!canView){
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0d0d12;color:#ccc;flex-direction:column;gap:16px;font-family:inherit"><div style="font-size:48px">🚫</div><div style="font-size:22px;font-weight:700;color:#ff6b6b">Access Denied</div><div style="color:#888;font-size:14px">You do not have permission to view NCR / SOR records.</div><div style="color:#555;font-size:12px">Contact your administrator to request the <code style="background:#1a1a24;padding:2px 6px;border-radius:4px;color:#aaa">view_ncr</code> permission.</div></div>';
+    return;
+  }
+
+  if(!canCreate){
+    const tNew=document.getElementById('tab-new');
+    const cNew=document.getElementById('tc-new');
+    if(tNew)tNew.style.display='none';
+    if(cNew)cNew.style.display='none';
+  }
+
+  // Set today's date
+  document.getElementById('f-raiseddate').value=new Date().toISOString().slice(0,10);
+  // Load villas
+  try{
+    allVillas=await fa('villas?select=id,villa_no,cluster_id,villa_type,is_active&is_active=eq.true&order=cluster_id.asc,villa_no.asc');
+    // Resolve cluster labels
+    const clrRows=await fa('clusters?select=id,code&order=code.asc');
+    const clMap={};
+    clrRows.forEach(c=>{clMap[c.id]=c.code||'C'+c.id;});
+    allVillas.forEach(v=>{v.cluster=clMap[v.cluster_id]||'C'+v.cluster_id;});
+    // Populate cluster dropdown
+    const clusters=[...new Set(allVillas.map(v=>v.cluster))].sort();
+    const clSel=document.getElementById('f-cluster');
+    clusters.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;clSel.appendChild(o);});
+  }catch(e){
+    // Fallback: hardcode known clusters
+    const clusters=['C1','C2','C3','C4','C5','C6','C7'];
+    const clSel=document.getElementById('f-cluster');
+    clusters.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;clSel.appendChild(o);});
+    console.warn('[NCR] villa load failed, using hardcoded clusters',e);
+  }
+  // Load activities
+  try{
+    const acts=await fa('activities?select=activity_code,activity_name&is_active=eq.true&order=activity_code.asc');
+    allActivities=acts;
+    const actSel=document.getElementById('f-activity');
+    acts.forEach(a=>{
+      const o=document.createElement('option');
+      o.value=a.activity_code;
+      o.setAttribute('data-code',a.activity_code);
+      o.setAttribute('data-name',a.activity_name||'');
+      o.textContent=a.activity_code+(a.activity_name?' — '+a.activity_name:'');
+      actSel.appendChild(o);
+    });
+  }catch(e){console.warn('[NCR] activities load failed',e);}
+  // Load records
+  await loadRecords();
+}
+
+// ── SESSION BRIDGE ──
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t||'dark');try{localStorage.setItem('mep_theme',t);}catch(e){}}
+var _initCalled=false;
+function _tryInit(){if(_initCalled)return;_initCalled=true;init();}
+window.addEventListener('message',function(e){
+  if(!e.data||typeof e.data!=='object')return;
+  if(e.data.type==='theme')applyTheme(e.data.theme);
+  if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;_tryInit();}
+});
+if(window.self!==window.top){
+  document.body.classList.add('in-shell');
+  try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+  setTimeout(_tryInit,1000);
+}else{_tryInit();}
+</script>
+</body>
+</html>
