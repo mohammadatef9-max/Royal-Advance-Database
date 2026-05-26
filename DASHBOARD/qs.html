@@ -2001,13 +2001,13 @@ async function openConfigScope() {
 }
 
 function getVillaTypeOptions() {
-  // Derive distinct bedroom counts from detected scope villas + already-configured labels
-  const bedCounts = new Set();
-  scopeVillas.forEach(sv => { const b = extractBedrooms(sv.raw_villa_type); if (b) bedCounts.add(b); });
-  cfgVillaTypes.forEach(t => { const b = extractBedrooms(t.villa_type_label); if (b) bedCounts.add(b); });
-  const sorted = [...bedCounts].sort((a, b) => a - b);
-  // Fall back to standard 4/5/6 if nothing detected yet
-  return sorted.length ? sorted.map(b => `${b} Bedroom Villa`) : ['4 Bedroom Villa', '5 Bedroom Villa', '6 Bedroom Villa'];
+  // Always include 4/5/6 Bedroom Villa as the standard base set
+  const base = [4, 5, 6];
+  const extra = new Set();
+  // Add any additional bedroom counts found in scope villas or already-configured types
+  scopeVillas.forEach(sv => { const b = extractBedrooms(sv.raw_villa_type); if (b && !base.includes(b)) extra.add(b); });
+  cfgVillaTypes.forEach(t => { const b = extractBedrooms(t.villa_type_label); if (b && !base.includes(b)) extra.add(b); });
+  return [...base, ...[...extra].sort((a, b) => a - b)].map(b => `${b} Bedroom Villa`);
 }
 
 function renderCfgTypes() {
