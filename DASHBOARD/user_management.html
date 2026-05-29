@@ -240,6 +240,20 @@ body.in-shell .topbar{display:none!important}
 /* Level input */
 .level-preview{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--accent-text);border:1px solid rgba(79,140,255,.3)}
 
+/* ── Bot Access tab ── */
+.bot-sections{display:flex;flex-direction:column;gap:0;flex:1}
+.bot-section{padding:20px}
+.bot-section-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.bot-section-title{font-size:13px;font-weight:700;color:var(--text);flex:1}
+.bot-section-sub{font-size:11px;color:var(--text-dim);margin-top:1px}
+.bot-divider{height:1px;background:var(--border-subtle);margin:0 20px}
+.bot-role-site{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--st-approved-bg);color:var(--st-approved-tx);border:1px solid var(--st-approved-bd)}
+.bot-role-qs{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--st-progress-bg);color:var(--st-progress-tx);border:1px solid var(--st-progress-bd)}
+.bot-role-admin{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:var(--accent-soft);color:var(--accent-text);border:1px solid rgba(79,140,255,.3)}
+.bot-verified-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:var(--st-approved-bg);color:var(--st-approved-tx);border:1px solid var(--st-approved-bd)}
+.bot-unverified-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;color:var(--text-faint);background:var(--bg-panel);border:1px solid var(--border)}
+.bot-tg-badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;background:rgba(0,136,204,.15);color:#29b2e8;border:1px solid rgba(0,136,204,.3);font-family:var(--font-mono)}
+
 </style>
 </head>
 <body>
@@ -277,6 +291,10 @@ body.in-shell .topbar{display:none!important}
   <div class="tab" id="tab-roles" onclick="switchTab('roles')">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
     Roles & Permissions
+  </div>
+  <div class="tab" id="tab-bot" onclick="switchTab('bot')">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    Bot Access
   </div>
 </div>
 
@@ -363,6 +381,71 @@ body.in-shell .topbar{display:none!important}
   </div>
 </div><!-- end panel-roles -->
 
+<!-- Bot Access tab -->
+<div class="tab-panel" id="panel-bot" style="overflow-y:auto">
+  <div class="bot-sections">
+
+    <!-- Approved Phones -->
+    <div class="bot-section">
+      <div class="bot-section-head">
+        <div>
+          <div class="bot-section-title">Approved Phone Numbers</div>
+          <div class="bot-section-sub">People on this list can verify themselves on the Telegram bot via /start</div>
+        </div>
+        <span class="count-pill" id="bot-phone-count">—</span>
+        <button class="btn btn-primary btn-sm" onclick="openAddPhoneModal()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Phone
+        </button>
+      </div>
+      <table class="user-table" id="phones-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Bot Role</th>
+            <th>Verified?</th>
+            <th>Added</th>
+            <th style="text-align:right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="phones-tbody">
+          <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-faint)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="bot-divider"></div>
+
+    <!-- Verified Users -->
+    <div class="bot-section">
+      <div class="bot-section-head">
+        <div>
+          <div class="bot-section-title">Verified Bot Users</div>
+          <div class="bot-section-sub">Users who have completed phone verification on the Telegram bot</div>
+        </div>
+        <span class="count-pill" id="bot-user-count">—</span>
+      </div>
+      <table class="user-table" id="verified-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Telegram</th>
+            <th>Bot Role</th>
+            <th>Registered</th>
+            <th style="text-align:right">Status</th>
+          </tr>
+        </thead>
+        <tbody id="verified-tbody">
+          <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-faint)">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div><!-- end panel-bot -->
+
 
 <!-- ── Add / Edit User Modal ── -->
 <div class="modal-overlay" id="user-modal" onclick="if(event.target===this)closeModal()">
@@ -424,6 +507,23 @@ body.in-shell .topbar{display:none!important}
 
       <div class="section-div">Side Roles <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(job title — stack multiple)</span></div>
       <div class="side-role-grid" id="side-role-grid"></div>
+
+      <div class="section-div">Telegram Bot Access <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(optional)</span></div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>Phone Number</label>
+          <input type="tel" id="f-phone" placeholder="e.g. 0501234567 or +971501234567">
+          <div class="form-hint">Leave blank to skip. Used to verify identity on the Telegram bot.</div>
+        </div>
+        <div class="form-row">
+          <label>Bot Role</label>
+          <select id="f-bot-role">
+            <option value="site">Site — /villa /targets /status</option>
+            <option value="qs">QS — site + /pcs</option>
+            <option value="admin">Admin — all commands</option>
+          </select>
+        </div>
+      </div>
 
       <div id="status-section" style="display:none">
         <div class="section-div">Account Status</div>
@@ -527,6 +627,46 @@ body.in-shell .topbar{display:none!important}
     <div class="modal-foot">
       <button class="btn" onclick="closeSideRoleModal()">Cancel</button>
       <button class="btn btn-primary" id="side-role-save-btn" onclick="saveSideRole()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Save
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Phone Modal ── -->
+<div class="modal-overlay" id="phone-modal" onclick="if(event.target===this)closePhoneModal()">
+  <div class="modal" style="width:460px">
+    <div class="modal-head">
+      <h2 id="phone-modal-title">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        Add Phone
+      </h2>
+      <button class="btn btn-sm" onclick="closePhoneModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="phone-modal-alert"></div>
+      <div class="form-row">
+        <label>Full Name *</label>
+        <input type="text" id="ph-name" placeholder="e.g. Ahmed Al Rashidi">
+      </div>
+      <div class="form-row">
+        <label>Phone Number * <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(UAE: 05x xxxxxxx or +971 5x xxxxxxx)</span></label>
+        <input type="tel" id="ph-phone" placeholder="e.g. 0501234567 or +971501234567">
+        <div class="form-hint">Stored as international digits e.g. 971501234567 — leading 0 and + are auto-stripped</div>
+      </div>
+      <div class="form-row">
+        <label>Bot Role *</label>
+        <select id="ph-role">
+          <option value="site">Site — /villa /targets /status</option>
+          <option value="qs">QS — all site commands + /pcs</option>
+          <option value="admin">Admin — all commands</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closePhoneModal()">Cancel</button>
+      <button class="btn btn-primary" id="phone-save-btn" onclick="savePhone()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         Save
       </button>
@@ -703,9 +843,10 @@ function openAddModal() {
   document.getElementById('status-section').style.display = 'none';
 
   // Clear all fields
-  ['f-fullname','f-displayname','f-email','f-password'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-mainrole').value = '';
+  ['f-fullname','f-displayname','f-email','f-password','f-phone'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-mainrole').value  = '';
   document.getElementById('f-discipline').value = '';
+  document.getElementById('f-bot-role').value  = 'site';
   document.getElementById('pw-bar').style.width = '0';
   document.getElementById('pw-hint').textContent = 'Enter a secure password';
   document.querySelectorAll('.side-role-item').forEach(el => { el.classList.remove('checked'); el.querySelector('input').checked = false; });
@@ -730,11 +871,13 @@ async function openEditModal(userId) {
   document.getElementById('password-section').style.display = 'none'; // no pw change in edit
   document.getElementById('status-section').style.display = '';
 
-  document.getElementById('f-fullname').value  = user.full_name || '';
+  document.getElementById('f-fullname').value    = user.full_name || '';
   document.getElementById('f-displayname').value = user.display_name || '';
-  document.getElementById('f-email').value     = user.email || '';
-  document.getElementById('f-discipline').value = user.discipline || '';
-  document.getElementById('f-status').value    = String(user.is_active !== false);
+  document.getElementById('f-email').value       = user.email || '';
+  document.getElementById('f-discipline').value  = user.discipline || '';
+  document.getElementById('f-status').value      = String(user.is_active !== false);
+  document.getElementById('f-phone').value       = user.phone || '';
+  document.getElementById('f-bot-role').value    = user.bot_role || 'site';
 
   // Set main role
   const mainRoleObj = mainRoles.find(r => r.role_name === user.main_role);
@@ -793,18 +936,22 @@ async function saveUser() {
   const alertEl = document.getElementById('modal-alert');
   alertEl.innerHTML = '';
 
-  const fullName   = document.getElementById('f-fullname').value.trim();
+  const fullName    = document.getElementById('f-fullname').value.trim();
   const displayName = document.getElementById('f-displayname').value.trim() || fullName.split(' ')[0];
-  const email      = document.getElementById('f-email').value.trim().toLowerCase();
-  const discipline = document.getElementById('f-discipline').value;
-  const mainRoleId = parseInt(document.getElementById('f-mainrole').value);
-  const isActive   = document.getElementById('f-status').value !== 'false';
+  const email       = document.getElementById('f-email').value.trim().toLowerCase();
+  const discipline  = document.getElementById('f-discipline').value;
+  const mainRoleId  = parseInt(document.getElementById('f-mainrole').value);
+  const isActive    = document.getElementById('f-status').value !== 'false';
+  const rawPhone    = document.getElementById('f-phone').value.trim();
+  const botRole     = document.getElementById('f-bot-role').value || 'site';
+  const phone       = rawPhone ? normalizePhone(rawPhone) : '';
 
   // Validation
   if (!fullName) return showModalAlert('Full name is required.', 'error');
   if (!email || !email.includes('@')) return showModalAlert('A valid email is required.', 'error');
   if (!discipline) return showModalAlert('Please select a discipline.', 'error');
   if (!mainRoleId) return showModalAlert('Please select a main role.', 'error');
+  if (rawPhone && phone.length < 7) return showModalAlert('Phone number looks invalid.', 'error');
 
   // Collect selected side roles
   const selectedSideRoles = Array.from(document.querySelectorAll('.side-role-item input:checked'))
@@ -819,13 +966,11 @@ async function saveUser() {
       await fetch(`${SB}/rest/v1/users?id=eq.${editingUserId}`, {
         method: 'PATCH',
         headers: getH({ 'Prefer': 'return=minimal' }),
-        body: JSON.stringify({ full_name: fullName, display_name: displayName, email, discipline, main_role_id: mainRoleId, is_active: isActive })
+        body: JSON.stringify({ full_name: fullName, display_name: displayName, email, discipline, main_role_id: mainRoleId, is_active: isActive, phone: phone || null, bot_role: botRole })
       });
 
       // Update side roles: delete all then re-insert
-      await fetch(`${SB}/rest/v1/user_roles?user_id=eq.${editingUserId}`, {
-        method: 'DELETE', headers: getH()
-      });
+      await fetch(`${SB}/rest/v1/user_roles?user_id=eq.${editingUserId}`, { method: 'DELETE', headers: getH() });
       if (selectedSideRoles.length) {
         await fetch(`${SB}/rest/v1/user_roles`, {
           method: 'POST',
@@ -833,6 +978,9 @@ async function saveUser() {
           body: JSON.stringify(selectedSideRoles.map(rid => ({ user_id: editingUserId, role_id: rid })))
         });
       }
+
+      // Sync phone to bot_approved_phones
+      if (phone) await syncBotPhone(phone, fullName, botRole, discipline);
 
       showModalAlert('User updated successfully.', 'success');
       setTimeout(() => { closeModal(); loadAll(); }, 800);
@@ -842,24 +990,28 @@ async function saveUser() {
       const password = document.getElementById('f-password').value;
       if (!password || password.length < 8) return showModalAlert('Password must be at least 8 characters.', 'error');
 
-      // Call the create_mep_user RPC — runs server-side with SECURITY DEFINER
-      // so it can write to auth.users without needing service role key
       const rpcRes = await fetch(`${SB}/rest/v1/rpc/create_mep_user`, {
         method: 'POST',
         headers: getH(),
         body: JSON.stringify({
-          p_email: email,
-          p_password: password,
-          p_full_name: fullName,
-          p_display_name: displayName,
-          p_discipline: discipline,
-          p_main_role_id: mainRoleId,
-          p_side_role_ids: selectedSideRoles
+          p_email: email, p_password: password, p_full_name: fullName,
+          p_display_name: displayName, p_discipline: discipline,
+          p_main_role_id: mainRoleId, p_side_role_ids: selectedSideRoles
         })
       });
       const rpcData = await rpcRes.json();
       if (rpcData.error) throw new Error(rpcData.error);
       if (!rpcData.success) throw new Error('User creation failed');
+
+      // Save phone on the newly created user record
+      if (phone) {
+        await fetch(`${SB}/rest/v1/users?email=eq.${encodeURIComponent(email)}`, {
+          method: 'PATCH',
+          headers: getH({ 'Prefer': 'return=minimal' }),
+          body: JSON.stringify({ phone, bot_role: botRole })
+        });
+        await syncBotPhone(phone, fullName, botRole, discipline);
+      }
 
       showModalAlert('User created successfully!', 'success');
       setTimeout(() => { closeModal(); loadAll(); }, 800);
@@ -873,6 +1025,23 @@ async function saveUser() {
       ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Changes`
       : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Create User`;
   }
+}
+
+/** Upsert a phone into bot_approved_phones and keep bot_users in sync */
+async function syncBotPhone(phone, name, role, discipline) {
+  const disc = discipline ? String(discipline).toLowerCase() : null;
+  // Upsert approved phone (insert or update if phone already exists)
+  await fetch(`${SB}/rest/v1/bot_approved_phones?on_conflict=phone`, {
+    method: 'POST',
+    headers: getH({ 'Prefer': 'return=minimal,resolution=merge-duplicates' }),
+    body: JSON.stringify({ phone, name, role, discipline: disc })
+  });
+  // Also update bot_users row if they've already verified, so role/discipline stays in sync
+  await fetch(`${SB}/rest/v1/bot_users?phone=eq.${encodeURIComponent(phone)}`, {
+    method: 'PATCH',
+    headers: getH({ 'Prefer': 'return=minimal' }),
+    body: JSON.stringify({ name, role, discipline: disc })
+  });
 }
 
 function showModalAlert(msg, type) {
@@ -1029,9 +1198,17 @@ function switchTab(tab) {
 
   const headAddBtn = document.getElementById('head-add-btn');
   const countPill  = document.getElementById('user-count');
+
   if (tab === 'users') {
     headAddBtn.style.display = '';
+    headAddBtn.textContent   = '';
+    headAddBtn.innerHTML     = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add User`;
+    headAddBtn.onclick = openAddModal;
     countPill.style.display = '';
+  } else if (tab === 'bot') {
+    headAddBtn.style.display = 'none';
+    countPill.style.display = 'none';
+    loadBotAccess();
   } else {
     headAddBtn.style.display = 'none';
     countPill.style.display = 'none';
@@ -1357,6 +1534,251 @@ async function deleteRole(roleId, type) {
   } catch(e) { alert('Error: ' + e.message); }
 }
 
+// ════════════════════════════════════════
+// BOT ACCESS
+// ════════════════════════════════════════
+
+let allBotPhones  = [];
+let allBotUsers   = [];
+let editingPhoneId = null;
+
+function normalizePhone(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('0') && d.length === 10) d = '971' + d.slice(1);
+  return d;
+}
+
+async function loadBotAccess() {
+  document.getElementById('phones-tbody').innerHTML  = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-faint)"><span class="spin" style="border-top-color:var(--accent);border-color:var(--border-strong)"></span> Loading…</td></tr>`;
+  document.getElementById('verified-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-faint)"><span class="spin" style="border-top-color:var(--accent);border-color:var(--border-strong)"></span> Loading…</td></tr>`;
+  try {
+    const [phonesRes, usersRes] = await Promise.all([
+      fetch(`${SB}/rest/v1/bot_approved_phones?select=*&order=name`, { headers: getH() }),
+      fetch(`${SB}/rest/v1/bot_users?select=*&order=name`, { headers: getH() }),
+    ]);
+    allBotPhones = await phonesRes.json();
+    allBotUsers  = await usersRes.json();
+    if (!Array.isArray(allBotPhones)) allBotPhones = [];
+    if (!Array.isArray(allBotUsers))  allBotUsers  = [];
+    renderPhonesTable();
+    renderVerifiedTable();
+  } catch(e) {
+    document.getElementById('phones-tbody').innerHTML = `<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--st-rejected-tx)">Error: ${escH(e.message)}</td></tr>`;
+  }
+}
+
+function roleBadge(role) {
+  if (role === 'admin') return `<span class="bot-role-admin">Admin</span>`;
+  if (role === 'qs')    return `<span class="bot-role-qs">QS</span>`;
+  return `<span class="bot-role-site">Site</span>`;
+}
+
+function renderPhonesTable() {
+  document.getElementById('bot-phone-count').textContent = allBotPhones.length + ' phone' + (allBotPhones.length !== 1 ? 's' : '');
+  const verifiedPhones = new Set(allBotUsers.map(u => u.phone));
+  const tbody = document.getElementById('phones-tbody');
+  if (!allBotPhones.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h3>No phones added yet</h3><p>Click "Add Phone" to allow someone to use the Telegram bot</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allBotPhones.map(p => {
+    const isVerified = verifiedPhones.has(p.phone);
+    const verifiedBadge = isVerified
+      ? `<span class="bot-verified-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Verified</span>`
+      : `<span class="bot-unverified-badge">Not yet</span>`;
+    const addedDate = p.created_at ? new Date(p.created_at).toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'}) : '—';
+    return `<tr>
+      <td><div class="user-cell">
+        <div class="avatar" style="font-size:12px">${escH((p.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))}</div>
+        <div class="user-name">${escH(p.name || '—')}</div>
+      </div></td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">${escH(p.phone || '—')}</td>
+      <td>${roleBadge(p.role)}</td>
+      <td>${verifiedBadge}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${addedDate}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn btn-sm btn-icon" title="Edit" onclick="openEditPhoneModal(${p.id})">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-sm btn-icon btn-danger" title="Remove" onclick="promptDeletePhone(${p.id},'${escH(p.name)}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderVerifiedTable() {
+  document.getElementById('bot-user-count').textContent = allBotUsers.length + ' user' + (allBotUsers.length !== 1 ? 's' : '');
+  const tbody = document.getElementById('verified-tbody');
+  if (!allBotUsers.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><h3>No verified users yet</h3><p>Users appear here after they complete /start phone verification in Telegram</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allBotUsers.map(u => {
+    const regDate = u.registered_at ? new Date(u.registered_at).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'}) : '—';
+    const tgBadge = u.telegram_username ? `<span class="bot-tg-badge">@${escH(u.telegram_username)}</span>` : `<span class="bot-tg-badge">#${escH(String(u.telegram_id||'—'))}</span>`;
+    const statusDot = u.is_active
+      ? `<span class="status-dot dot-active"></span><span class="status-text" style="color:var(--st-approved-tx)">Active</span>`
+      : `<span class="status-dot dot-inactive"></span><span class="status-text" style="color:var(--text-faint)">Suspended</span>`;
+    return `<tr class="${u.is_active ? '' : 'inactive'}">
+      <td><div class="user-cell">
+        <div class="avatar ${u.is_active ? '' : 'inactive-av'}" style="font-size:12px">${escH((u.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2))}</div>
+        <div class="user-name">${escH(u.name || '—')}</div>
+      </div></td>
+      <td style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">${escH(u.phone || '—')}</td>
+      <td>${tgBadge}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td style="font-size:11px;color:var(--text-dim)">${regDate}</td>
+      <td>
+        <div class="actions-cell">
+          ${statusDot}
+          ${u.is_active
+            ? `<button class="btn btn-sm btn-icon btn-danger" title="Suspend bot access" onclick="toggleBotUser(${u.id},false,'${escH(u.name)}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+               </button>`
+            : `<button class="btn btn-sm btn-icon btn-success" title="Restore bot access" onclick="toggleBotUser(${u.id},true,'${escH(u.name)}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/></svg>
+               </button>`
+          }
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Phone modal ──
+function openAddPhoneModal() {
+  editingPhoneId = null;
+  document.getElementById('phone-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    Add Phone`;
+  document.getElementById('ph-name').value  = '';
+  document.getElementById('ph-phone').value = '';
+  document.getElementById('ph-role').value  = 'site';
+  document.getElementById('ph-phone').disabled = false;
+  document.getElementById('phone-modal-alert').innerHTML = '';
+  document.getElementById('phone-modal').classList.add('open');
+  setTimeout(() => document.getElementById('ph-name').focus(), 100);
+}
+
+function openEditPhoneModal(id) {
+  const p = allBotPhones.find(x => x.id === id);
+  if (!p) return;
+  editingPhoneId = id;
+  document.getElementById('phone-modal-title').innerHTML = `
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    Edit Phone`;
+  document.getElementById('ph-name').value  = p.name || '';
+  document.getElementById('ph-phone').value = p.phone || '';
+  document.getElementById('ph-phone').disabled = true; // phone is the key — don't allow change
+  document.getElementById('ph-role').value  = p.role || 'site';
+  document.getElementById('phone-modal-alert').innerHTML = '';
+  document.getElementById('phone-modal').classList.add('open');
+}
+
+function closePhoneModal() {
+  document.getElementById('phone-modal').classList.remove('open');
+  editingPhoneId = null;
+}
+
+async function savePhone() {
+  const btn     = document.getElementById('phone-save-btn');
+  const alertEl = document.getElementById('phone-modal-alert');
+  alertEl.innerHTML = '';
+
+  const name  = document.getElementById('ph-name').value.trim();
+  const raw   = document.getElementById('ph-phone').value.trim();
+  const role  = document.getElementById('ph-role').value;
+  const phone = normalizePhone(raw);
+
+  if (!name)  return alertEl.innerHTML = '<div class="alert alert-error">Name is required.</div>';
+  if (!phone || phone.length < 7) return alertEl.innerHTML = '<div class="alert alert-error">Enter a valid phone number.</div>';
+  if (!role)  return alertEl.innerHTML = '<div class="alert alert-error">Select a role.</div>';
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>Saving…';
+
+  try {
+    if (editingPhoneId) {
+      const res = await fetch(`${SB}/rest/v1/bot_approved_phones?id=eq.${editingPhoneId}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ name, role })
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(t); }
+
+      // Also update role in bot_users if they've already verified
+      await fetch(`${SB}/rest/v1/bot_users?phone=eq.${encodeURIComponent(phone)}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ name, role })
+      });
+    } else {
+      const res = await fetch(`${SB}/rest/v1/bot_approved_phones`, {
+        method: 'POST',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ phone, name, role })
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        if (t.includes('unique') || t.includes('duplicate')) throw new Error('That phone number is already in the approved list.');
+        throw new Error(t);
+      }
+    }
+    alertEl.innerHTML = '<div class="alert alert-success">Saved!</div>';
+    setTimeout(() => { closePhoneModal(); loadBotAccess(); }, 600);
+  } catch(e) {
+    alertEl.innerHTML = `<div class="alert alert-error">Error: ${escH(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save`;
+  }
+}
+
+function promptDeletePhone(id, name) {
+  document.getElementById('confirm-icon').className = 'confirm-icon danger';
+  document.getElementById('confirm-icon').textContent = '🗑';
+  document.getElementById('confirm-title').textContent = 'Remove ' + name + '?';
+  document.getElementById('confirm-desc').textContent = 'They will no longer be able to use the Telegram bot. Their verified user record is kept but set to inactive.';
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.className = 'btn btn-danger';
+  btn.textContent = 'Remove';
+  confirmCallback = () => deletePhone(id, name);
+  document.getElementById('confirm-modal').classList.add('open');
+}
+
+async function deletePhone(id, name) {
+  closeConfirm();
+  const p = allBotPhones.find(x => x.id === id);
+  try {
+    await fetch(`${SB}/rest/v1/bot_approved_phones?id=eq.${id}`, { method: 'DELETE', headers: getH() });
+    // Suspend any verified user with this phone
+    if (p?.phone) {
+      await fetch(`${SB}/rest/v1/bot_users?phone=eq.${encodeURIComponent(p.phone)}`, {
+        method: 'PATCH',
+        headers: getH({ 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ is_active: false })
+      });
+    }
+    loadBotAccess();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function toggleBotUser(id, active, name) {
+  try {
+    await fetch(`${SB}/rest/v1/bot_users?id=eq.${id}`, {
+      method: 'PATCH',
+      headers: getH({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ is_active: active })
+    });
+    loadBotAccess();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
 // ── Init (session-aware) ──
 let _initCalled = false;
 function _tryInit() { if (_initCalled) return; _initCalled = true; loadAll(); }
@@ -1384,6 +1806,42 @@ if (window.self !== window.top) {
 } else {
   _tryInit(); // running standalone
 }
+</script>
+<script>
+/* ===== Global ESC-to-close for modals & popups — v6.4 ===== */
+(function(){
+  function vis(el){
+    if(!el||el.nodeType!==1)return false;
+    var cs=getComputedStyle(el);
+    if(cs.display==='none'||cs.visibility==='hidden'||cs.visibility==='collapse'||parseFloat(cs.opacity)===0)return false;
+    return el.getClientRects().length>0;
+  }
+  function clsOf(n){var c=n.className;if(c&&typeof c!=='string'&&'baseVal'in c)c=c.baseVal;return(c||'').toString().toLowerCase();}
+  function dismisser(modal){
+    var nodes=modal.querySelectorAll('button,a,span,div,i,[onclick],[data-close]'),i,n,cl,tx;
+    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;cl=clsOf(n);tx=(n.textContent||'').trim().toLowerCase();
+      if(/(^|[\s_-])close([\s_-]|$)/.test(cl)||n.hasAttribute('data-close')||tx==='cancel'||tx==='close'||tx==='✕'||tx==='×'||tx==='✖')return n;}
+    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;
+      if(/close|cancel|dismiss|hide/.test((n.getAttribute('onclick')||'').toLowerCase()))return n;}
+    return null;
+  }
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27)return;
+    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
+    var all=document.querySelectorAll(sel),open=[],i;
+    for(i=0;i<all.length;i++){if(vis(all[i]))open.push(all[i]);}
+    if(!open.length)return;
+    var outer=open.filter(function(el){return!open.some(function(o){return o!==el&&o.contains(el);});});
+    var top=outer[outer.length-1]||open[open.length-1];
+    e.preventDefault();e.stopPropagation();
+    var btn=dismisser(top);
+    if(btn){btn.click();return;}
+    var toc=(top.getAttribute('onclick')||'').toLowerCase();
+    if(/close|cancel|dismiss|hide/.test(toc)){top.click();if(!vis(top))return;}
+    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
+    if(vis(top))top.style.display='none';
+  },true);
+})();
 </script>
 </body>
 </html>
