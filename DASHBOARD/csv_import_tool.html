@@ -856,6 +856,9 @@ async function startImport(type){
     addLog(type,`⚠ ${unmatched} rows had unmatched villa or activity code — see summary below`,'warn');
     showUnmatchedSummary(type);
   }
+  // Refresh materialized status views so trackers / release requests reflect this import immediately
+  try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); addLog(type,'🔄 Status views refreshed','info'); }
+  catch(e){ addLog(type,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
   btn.disabled=false;
 }
 
@@ -1610,6 +1613,9 @@ async function dcStartUpload(tab){
       const who=window.__MEP_USER__?.full_name||'';
       window.parent.postMessage({type:'data_updated',dataType:tab,uploadedBy:who,rows:uploaded},'*');
     }catch(e){}
+    // Refresh materialized status views so trackers / release requests reflect this import immediately
+    try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); dcAddLog(tab,'🔄 Status views refreshed','info'); }
+    catch(e){ dcAddLog(tab,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
   }
   btn.disabled=false;
 }
