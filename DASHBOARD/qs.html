@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QS Payment Certificates</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -345,6 +346,7 @@ textarea{resize:vertical;min-height:60px}
   .psum-section-title{color:#000!important;border-color:#aaa!important}
   .psum-table th,.psum-table td{border:1px solid #aaa!important;color:#000!important;background:#fff!important;font-size:8pt}
   .psum-table tr.total-row td{background:#f0f0f0!important}
+  .psum-table tr.section-row td{background:#e4e4e4!important;color:#000!important;font-weight:700!important}
   .psum-table .green,.psum-table .blue,.psum-table .gold{color:#000!important}
 
   /* financial block */
@@ -450,6 +452,7 @@ textarea{resize:vertical;min-height:60px}
       <div class="sh-actions">
         <button class="btn btn-danger btn-sm" id="btn-delete-scope" onclick="openDeleteScope()" style="display:none">🗑 Delete Scope</button>
         <button class="btn btn-ghost btn-sm" id="btn-edit-scope" onclick="openEditScope()" style="display:none">✎ Edit Scope</button>
+        <button class="btn btn-ghost btn-sm" id="btn-add-scope" onclick="openNewScope(selectedScope.subcontractor_name)" style="display:none">＋ Add Scope</button>
         <button class="btn btn-ghost btn-sm" id="btn-variations" onclick="openVariations()" style="display:none">📋 Variations</button>
         <button class="btn btn-ghost btn-sm" id="btn-config-scope" onclick="openConfigScope()" style="display:none">⚙ Configure</button>
         <button class="btn btn-primary btn-sm" id="btn-new-pc" onclick="openNewPC()" style="display:none">+ New PC</button>
@@ -481,6 +484,7 @@ textarea{resize:vertical;min-height:60px}
           <div style="flex:1"></div>
           <button class="btn btn-ghost btn-sm" onclick="refreshProgress()">↻ Refresh WIRs</button>
         </div>
+        <div id="ps-section-bar" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--bdr);background:var(--bg2)"></div>
         <div class="ps-wrap" id="ps-wrap">
           <div class="loading-row"><span class="spin"></span></div>
         </div>
@@ -586,8 +590,8 @@ textarea{resize:vertical;min-height:60px}
         <div class="form-row-2" style="margin-bottom:10px">
           <div class="form-row">
             <label>Contract Value (AED)</label>
-            <input type="number" id="cfg-contract-value" min="0" step="0.01" placeholder="0.00">
-            <div class="form-hint">Original SCA value from the contract document</div>
+            <input type="number" id="cfg-contract-value" min="0" step="0.01" placeholder="0.00" readonly tabindex="-1" style="background:var(--bg3);opacity:.85;cursor:not-allowed">
+            <div class="form-hint">Auto-calculated: Σ (QTY × rate) across all villa types. Edit the <strong>Villa Types</strong> tab to change it.</div>
           </div>
           <div class="form-row">
             <label>Retention %</label>
@@ -628,6 +632,11 @@ textarea{resize:vertical;min-height:60px}
       </div>
       <div class="form-row"><label>Period Label *</label><input id="npc-label" type="text" placeholder="May-26"></div>
       <div class="form-row"><label>Notes</label><textarea id="npc-notes" rows="2" placeholder="Optional notes…"></textarea></div>
+      <div class="form-row" id="npc-scopes-row" style="margin-top:4px;display:none">
+        <label>Scopes merged into this PC</label>
+        <div id="npc-scopes-list" style="display:flex;flex-direction:column;gap:6px;max-height:170px;overflow:auto;border:1px solid var(--bdr);border-radius:8px;padding:8px"></div>
+        <div class="form-hint">Tick every scope to combine into one certificate. The current scope is always included. Each scope keeps its own rate table; only the totals merge.</div>
+      </div>
       <div class="form-row" style="margin-top:4px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;font-size:12px">
           <input type="checkbox" id="npc-historical" onchange="toggleHistMode(this.checked)" style="width:14px;height:14px;accent-color:var(--amber)">
@@ -676,8 +685,20 @@ textarea{resize:vertical;min-height:60px}
     <div class="modal-title">Historical PC — Select Billed Activities <button class="modal-close" onclick="closeModal('modal-hist-pc')">✕</button></div>
     <div style="padding:10px 20px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:12px;color:var(--tx2)" id="hist-pc-info-bar">—</div>
     <div style="flex:1;overflow:auto;padding:16px 20px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:700;font-size:13px;color:var(--tx)">📤 Upload the PC's progress Excel</div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Reads the <strong>BOQ</strong> sheet, matches each row by <strong>Villa No + Cluster</strong>, then ticks every activity (by code) marked <strong>100%</strong> (WIR approved). Review the grid below, then create the locked PC.</div>
+        </div>
+        <label class="btn btn-primary btn-sm" style="cursor:pointer">
+          Choose Excel…
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleHistExcel(this.files[0])">
+        </label>
+        <button class="btn btn-ghost btn-sm" onclick="histClearAll()">Clear all ticks</button>
+      </div>
+      <div id="hist-pc-import-msg" style="display:none;font-size:12px;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6"></div>
       <div style="font-size:12px;color:var(--tx2);margin-bottom:10px">
-        Tick each activity that was <strong>approved and billed</strong> in this PC. The PC will be created as <strong>Locked</strong>.
+        Or tick manually. Every ticked activity is treated as <strong>approved &amp; billed</strong>. The PC is created as <strong>Locked</strong>.
       </div>
       <div id="hist-pc-grid"></div>
     </div>
@@ -872,6 +893,13 @@ let allVillasCache = [];
 let subcontractorsList = [];
 let allScopePCs = [];       // all PCs for currently selected scope (for running totals)
 let scopeVariations = [];   // VOs for current scope
+// ── Multi-scope PC state ──
+let pcSections = [];        // [{scope, ctx}] — all scopes merged into the current PC
+let isMultiPC = false;      // true when the current PC includes >1 scope
+let newPcScopeIds = [];     // scope ids ticked in the New PC modal
+let progressSectionIdx = 0; // which scope's grid is shown on the Progress tab (multi)
+let lastAdvAed = 0;         // combined advance recovery captured for saveFinancials/lock
+let scopeLockedTotals = {}; // scope_id → {gross,retention,advRec,lockedCount} from qs_pc_scopes snapshots
 let allPCsGlobal = [];      // all PCs across all scopes (for dashboard)
 let allVOsGlobal = [];      // all VOs across all scopes (for dashboard)
 let lastGrossAed = 0;       // totTodAmt captured from last renderPaymentSummary() call
@@ -977,16 +1005,28 @@ async function init() {
 // SCOPES
 // ══════════════════════════════════════════════
 async function loadScopes() {
-  const [scopes, pcs, vos] = await Promise.all([
+  const [scopes, pcs, vos, pcScopes] = await Promise.all([
     fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc'),
     fa('qs_payment_certificates?select=id,scope_id,pc_number,period_label,status,gross_aed,retention_aed,advance_recovery_aed&order=pc_number.desc'),
-    fa('qs_variation_orders?select=id,scope_id,value_aed,status&order=created_at.asc')
+    fa('qs_variation_orders?select=id,scope_id,value_aed,status&order=created_at.asc'),
+    fa('qs_pc_scopes?select=pc_id,scope_id,gross_aed,retention_aed,advance_recovery_aed')
   ]);
   allPCsGlobal = pcs;
   allVOsGlobal = vos;
   const latestPcByScopeId = {};
   pcs.forEach(p => { if (!latestPcByScopeId[p.scope_id]) latestPcByScopeId[p.scope_id] = p; });
   allScopes = scopes.map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
+  // Per-scope locked totals from section snapshots (correctly splits combined PCs by scope)
+  const pcStatusById = {}; pcs.forEach(p => pcStatusById[p.id] = p.status);
+  scopeLockedTotals = {};
+  pcScopes.forEach(r => {
+    if (pcStatusById[r.pc_id] !== 'locked') return;
+    const m = scopeLockedTotals[r.scope_id] || (scopeLockedTotals[r.scope_id] = { gross:0, retention:0, advRec:0, pcIds:new Set() });
+    m.gross     += parseFloat(r.gross_aed)||0;
+    m.retention += parseFloat(r.retention_aed)||0;
+    m.advRec    += parseFloat(r.advance_recovery_aed)||0;
+    m.pcIds.add(r.pc_id);
+  });
   renderScopeList();
   renderDashboard();
 }
@@ -1043,15 +1083,16 @@ function renderDashboard() {
       .reduce((a, v) => a + (parseFloat(v.value_aed) || 0), 0);
     totalContract += contract + approvedVOs;
 
-    const lockedPCs = allPCsGlobal.filter(p => p.scope_id === s.id && p.status === 'locked');
-    totalLockedCount += lockedPCs.length;
-    totalCertified  += lockedPCs.reduce((a, p) => a + (parseFloat(p.gross_aed) || 0), 0);
-    totalRetention  += lockedPCs.reduce((a, p) => a + (parseFloat(p.retention_aed) || 0), 0);
+    const lk = scopeLockedTotals[s.id];   // this scope's share of every locked PC (incl. combined)
+    totalCertified += lk ? lk.gross : 0;
+    totalRetention += lk ? lk.retention : 0;
 
     const advPaid = parseFloat(s.advance_amount_aed) || 0;
-    const advRec  = lockedPCs.reduce((a, p) => a + (parseFloat(p.advance_recovery_aed) || 0), 0);
+    const advRec  = lk ? lk.advRec : 0;
     totalAdvBalance += Math.max(0, advPaid - advRec);
   });
+  // Distinct locked PCs across the project (a combined PC counts once)
+  totalLockedCount = allPCsGlobal.filter(p => p.status === 'locked').length;
 
   const overallPct = totalContract > 0 ? (totalCertified / totalContract * 100).toFixed(1) : null;
 
@@ -1068,14 +1109,16 @@ function renderDashboard() {
     const submittedPCs = scopePCs.filter(p => p.status === 'submitted');
     const draftPCs     = scopePCs.filter(p => p.status === 'draft');
 
-    const certified = lockedPCs.reduce((a,p) => a + (parseFloat(p.gross_aed)||0), 0);
+    const lk = scopeLockedTotals[s.id];                 // this scope's share of every locked PC
+    const lockedCount = lk ? lk.pcIds.size : 0;          // counts combined PCs this scope is part of
+    const certified = lk ? lk.gross : 0;
     const certPct   = adjContract > 0 ? certified / adjContract : 0;
     const barPct    = Math.min(100, certPct * 100).toFixed(1);
     const barClass  = certPct >= 0.9 ? 'green' : certPct >= 0.5 ? '' : (certPct > 0 ? 'amber' : '');
 
-    const retention = lockedPCs.reduce((a,p) => a + (parseFloat(p.retention_aed)||0), 0);
+    const retention = lk ? lk.retention : 0;
     const advPaid   = parseFloat(s.advance_amount_aed) || 0;
-    const advRec    = lockedPCs.reduce((a,p) => a + (parseFloat(p.advance_recovery_aed)||0), 0);
+    const advRec    = lk ? lk.advRec : 0;
     const advBal    = Math.max(0, advPaid - advRec);
 
     const lp = s.latestPc;
@@ -1099,7 +1142,7 @@ function renderDashboard() {
       : '';
 
     const chips = [
-      lockedPCs.length    ? `<span class="sc-badge locked">${lockedPCs.length} locked</span>` : '',
+      lockedCount         ? `<span class="sc-badge locked">${lockedCount} locked</span>` : '',
       submittedPCs.length ? `<span class="sc-badge submitted">${submittedPCs.length} submitted</span>` : '',
       draftPCs.length     ? `<span class="sc-badge draft">${draftPCs.length} draft</span>` : '',
       pendingVOCount      ? `<span class="vo-badge pending">${pendingVOCount} VO pending</span>` : ''
@@ -1181,6 +1224,7 @@ async function selectScope(id) {
   document.getElementById('sh-meta').textContent = [selectedScope.sca_ref, selectedScope.package].filter(Boolean).join(' · ');
   document.getElementById('btn-delete-scope').style.display = isSuperAdmin ? '' : 'none';
   document.getElementById('btn-edit-scope').style.display = canAdmin ? '' : 'none';
+  document.getElementById('btn-add-scope').style.display = (canManage||canAdmin) ? '' : 'none';
   document.getElementById('btn-variations').style.display = (canManage||canAdmin) ? '' : 'none';
   document.getElementById('btn-config-scope').style.display = canAdmin ? '' : 'none';
   document.getElementById('btn-new-pc').style.display = (canManage||canAdmin) ? '' : 'none';
@@ -1202,7 +1246,7 @@ async function loadScopeConfig() {
 }
 
 // ── Auto-detect villas from WIR data for this subcontractor ──
-async function autoDetectScopeVillas() {
+async function _detectWirVillas() {
   const subName = selectedScope.subcontractor_name;
   if (!subName) return [];
   // Collect all aliases (the raw_subcontractor strings) that map to this canonical name
@@ -1234,6 +1278,24 @@ async function autoDetectScopeVillas() {
     raw_villa_type: v.villa_type,
     cluster_id: v.cluster_id,
   }));
+}
+
+// The scope's villa universe = WIR-detected villas ∪ any villa already billed for this scope
+// (so villas billed via a historical-PC Excel import still appear and get valued).
+async function autoDetectScopeVillas() {
+  const detected = await _detectWirVillas();
+  try {
+    const billed = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id`);
+    const billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
+    const have = new Set(detected.map(v => v.villa_id));
+    const extraIds = billedIds.filter(id => !have.has(id));
+    if (extraIds.length) {
+      const extra = await fa(`villas?id=in.(${extraIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true`);
+      extra.forEach(v => detected.push({ villa_id:v.id, villa_no:v.villa_no, villa_type_label: matchVillaType(v.villa_type), raw_villa_type:v.villa_type, cluster_id:v.cluster_id }));
+      detected.sort((a,b) => ((a.cluster_id||0)-(b.cluster_id||0)) || ((a.villa_no||0)-(b.villa_no||0)));
+    }
+  } catch(e) { /* billed-villa union is best-effort */ }
+  return detected;
 }
 
 // Map a raw villa_type string from the villas table to a configured qs_scope_villa_types label
@@ -1358,8 +1420,45 @@ async function loadPCData() {
   // PC signatories
   pcSigsList = pcSigs;
 
-  renderProgressSheet();
+  // ── Multi-scope: build a section context for every scope merged into this PC ──
+  const pcScopeRows = await fa(`qs_pc_scopes?pc_id=eq.${selectedPC.id}&order=sort_order.asc&select=scope_id`);
+  let scopeIds = pcScopeRows.map(r => r.scope_id).filter(Boolean);
+  if (!scopeIds.includes(selectedScope.id)) scopeIds = [selectedScope.id, ...scopeIds];
+  isMultiPC = scopeIds.length > 1;
+  pcSections = [];
+  progressSectionIdx = 0;
+  if (isMultiPC) {
+    const ordered = [selectedScope.id, ...scopeIds.filter(id => id !== selectedScope.id)];
+    const scopeObjs = await fa(`qs_scopes?id=in.(${ordered.join(',')})&select=*`);
+    const byId = {}; scopeObjs.forEach(s => byId[s.id] = s);
+    for (const id of ordered) {
+      const sc = byId[id]; if (!sc) continue;
+      const ctx = await buildScopeCtx(sc);
+      pcSections.push({ scope: sc, ctx });
+    }
+  }
+
+  renderProgressSection();
   renderPaymentSummary();
+}
+
+// Progress tab. The grid edits the primary scope (globals stay primary — safe for Config).
+// Other merged scopes auto-feed the combined Summary + locking from WIR data.
+function renderProgressSection() {
+  const host = document.getElementById('ps-section-bar');
+  if (isMultiPC && pcSections.length > 1 && host) {
+    host.style.display = 'flex';
+    const chips = pcSections.map((s,i) => {
+      const nm = escH(s.scope.sca_ref || s.scope.scope_title || ('Scope '+s.scope.id));
+      const primaryStyle = 'background:var(--accent-soft,rgba(79,140,255,.14));color:var(--accent-text,#93b6ff);border-color:transparent';
+      return `<span style="font-size:11px;padding:2px 9px;border:1px solid var(--bdr);border-radius:20px;${i===0?primaryStyle:'color:var(--tx2)'}">${nm}${i===0?' · editing':''}</span>`;
+    }).join(' ');
+    host.innerHTML = `<span style="font-size:11px;color:var(--tx3);font-weight:600">MERGED SCOPES:</span> ${chips}
+      <span style="font-size:11px;color:var(--tx3);margin-left:auto">Overrides on this grid apply to the first scope. All scopes auto-feed the Payment Summary &amp; locking.</span>`;
+  } else if (host) {
+    host.style.display = 'none'; host.innerHTML = '';
+  }
+  renderProgressSheet();
 }
 
 // ══════════════════════════════════════════════
@@ -1406,6 +1505,97 @@ function calcVillaWorkdone(villa_id) {
 function getVillaRate(villa_type_label) {
   const vt = scopeVillaTypes.find(t => t.villa_type_label === villa_type_label);
   return vt ? parseFloat(vt.rate_aed) : 0;
+}
+
+// ══════════════════════════════════════════════
+// MULTI-SCOPE SECTION ENGINE (parallel, context-based — does not touch the globals path)
+// ══════════════════════════════════════════════
+function ctxMatchVillaType(rawType, villaTypes) {
+  const beds = extractBedrooms(rawType);
+  if (beds && villaTypes.length) {
+    const match = villaTypes.find(t => extractBedrooms(t.villa_type_label) === beds);
+    if (match) return match.villa_type_label;
+  }
+  return villaTypes[0]?.villa_type_label || rawType || 'Unknown';
+}
+async function ctxDetectVillas(scope, villaTypes, activities) {
+  const subName = scope.subcontractor_name;
+  if (!subName) return [];
+  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias`);
+  let nameFilter = aliases.length
+    ? `raw_subcontractor=in.(${[...new Set([subName, ...aliases.map(a=>a.alias)])].map(n=>`"${n}"`).join(',')})`
+    : `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
+  const actCodes = activities.map(a => a.activity_code).filter(Boolean);
+  if (!actCodes.length) return [];
+  const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
+  const wirRows = await fa(`v_latest_wir_status?${nameFilter}${actFilter}&select=villa_id`);
+  const villaIds = [...new Set(wirRows.map(r => r.villa_id).filter(Boolean))];
+  if (!villaIds.length) return [];
+  const villas = await fa(`villas?id=in.(${villaIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true&order=cluster_id.asc,villa_no.asc`);
+  return villas.map(v => ({ villa_id:v.id, villa_no:v.villa_no, villa_type_label:ctxMatchVillaType(v.villa_type, villaTypes), raw_villa_type:v.villa_type, cluster_id:v.cluster_id }));
+}
+// Build a self-contained data context for one scope within the current PC
+async function buildScopeCtx(scope) {
+  const villaTypes = await fa(`qs_scope_villa_types?scope_id=eq.${scope.id}&order=sort_order.asc`);
+  const activityGroups = await fa(`qs_scope_activity_groups?scope_id=eq.${scope.id}&order=sort_order.asc`);
+  const groupIds = activityGroups.map(g => g.id);
+  const activities = groupIds.length ? await fa(`qs_scope_activities?group_id=in.(${groupIds.join(',')})&order=sort_order.asc`) : [];
+  const villas = await ctxDetectVillas(scope, villaTypes, activities);
+  const variations = await fa(`qs_variation_orders?scope_id=eq.${scope.id}&order=created_at.asc`);
+  const wir = {}, overrides = {}, billed = {};
+  const villaIds = villas.map(v => v.villa_id);
+  const actCodes = activities.map(a => a.activity_code);
+  if (villaIds.length && actCodes.length) {
+    const vStr = villaIds.join(','), aStr = actCodes.map(c => `"${c}"`).join(',');
+    const [wirRows, ovRows, bRows] = await Promise.all([
+      fa(`v_latest_wir_status?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
+      fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete`),
+      fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id`),
+    ]);
+    wirRows.forEach(w => { const k=w.villa_id+':'+w.raw_activity_code; if(!wir[k]||w.normalised_status==='approved') wir[k]={approved:w.normalised_status==='approved',response_date:w.response_date}; });
+    ovRows.forEach(o => { overrides[o.villa_id+':'+o.activity_code]=o; });
+    bRows.forEach(b => { billed[b.villa_id+':'+b.activity_code]=b.locked_pc_id; });
+  }
+  return { scope, villaTypes, activityGroups, activities, villas, variations, wir, overrides, billed };
+}
+function ctxActStatus(ctx, villa_id, activity_code) {
+  const key = villa_id+':'+activity_code;
+  const billedPcId = ctx.billed[key];
+  const override = ctx.overrides[key];
+  const wir = ctx.wir[key];
+  const isCompleteToDate = (override !== undefined) ? override.is_complete : (wir?.approved === true);
+  const wasBilledPrev = billedPcId !== undefined && billedPcId !== selectedPC.id;
+  const source = override!==undefined ? (override.is_complete?'override-on':'override-off') : (isCompleteToDate?'approved':'not-approved');
+  return { isCompleteToDate, wasBilledPrev, source };
+}
+function ctxWorkdone(ctx, villa_id) {
+  let prev=0, current=0, toDate=0;
+  ctx.activityGroups.forEach(grp => {
+    ctx.activities.filter(a => a.group_id === grp.id).forEach(act => {
+      const { isCompleteToDate, wasBilledPrev } = ctxActStatus(ctx, villa_id, act.activity_code);
+      const contrib = (grp.group_weight||0) * (act.activity_weight||0);
+      if (wasBilledPrev) { prev += contrib; toDate += contrib; }
+      else if (isCompleteToDate) { current += contrib; toDate += contrib; }
+    });
+  });
+  return { prev, current, toDate };
+}
+// Aggregate a scope context into per-villa-type rows + section totals
+function ctxSection(ctx) {
+  const typeMap = {};
+  ctx.villaTypes.forEach(t => { typeMap[t.villa_type_label] = { type:t, prev:0, current:0, toDate:0, rate:parseFloat(t.rate_aed)||0, qty:parseInt(t.qty_contracted)||0 }; });
+  ctx.villas.forEach(sv => {
+    const tm = typeMap[sv.villa_type_label]; if (!tm) return;
+    const w = ctxWorkdone(ctx, sv.villa_id);
+    tm.prev += w.prev; tm.current += w.current; tm.toDate += w.toDate;
+  });
+  const entries = Object.values(typeMap);
+  const subContract = entries.reduce((a,t)=>a+t.qty*t.rate, 0);
+  const subPrev = entries.reduce((a,t)=>a+t.prev*t.rate, 0);
+  const subCur  = entries.reduce((a,t)=>a+t.current*t.rate, 0);
+  const subTod  = entries.reduce((a,t)=>a+t.toDate*t.rate, 0);
+  const approvedVOs = (ctx.variations||[]).filter(v=>v.status==='approved').reduce((a,v)=>a+(parseFloat(v.value_aed)||0),0);
+  return { scope: ctx.scope, entries, subContract, subPrev, subCur, subTod, approvedVOs };
 }
 
 // ══════════════════════════════════════════════
@@ -1499,6 +1689,9 @@ function _buildPrintHeader() {
   const project = selectedScope.project || 'RA4104 — Baghaiylum Villas Development';
   const printDate = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'long', year:'numeric' });
   const statusLabel = selectedPC.status.charAt(0).toUpperCase() + selectedPC.status.slice(1);
+  const _hdrScopes = (isMultiPC && pcSections.length>1) ? pcSections.map(s=>s.scope) : [selectedScope];
+  const scaRefCombined = _hdrScopes.map(s=>s.sca_ref).filter(Boolean).join(' & ') || '—';
+  const scopeTitleCombined = _hdrScopes.map(s=>s.scope_title).filter(Boolean).join('  &  ') || '—';
   const tdL = 'style="padding:3px 10px 3px 0;width:13%;color:#555;font-weight:700;font-size:8pt;white-space:nowrap;vertical-align:middle"';
   const tdV = 'style="padding:3px 16px 3px 0;font-size:8.5pt;color:#000;vertical-align:middle"';
   ph.innerHTML = `
@@ -1525,7 +1718,7 @@ function _buildPrintHeader() {
         <td ${tdL}>PROJECT:</td>
         <td ${tdV} colspan="3">${escH(project)}</td>
         <td ${tdL} style="padding:3px 10px 3px 12px;width:10%;color:#555;font-weight:700;font-size:8pt;white-space:nowrap;vertical-align:middle">SCA REF:</td>
-        <td ${tdV} style="padding:3px 16px 3px 0;font-size:8.5pt;color:#000;vertical-align:middle;width:16%">${escH(selectedScope.sca_ref||'—')}</td>
+        <td ${tdV} style="padding:3px 16px 3px 0;font-size:8.5pt;color:#000;vertical-align:middle;width:16%">${escH(scaRefCombined)}</td>
         <td ${tdL} style="padding:3px 10px 3px 12px;width:10%;color:#555;font-weight:700;font-size:8pt;white-space:nowrap;vertical-align:middle">PACKAGE:</td>
         <td ${tdV} style="padding:3px 0 3px 0;font-size:8.5pt;color:#000;vertical-align:middle">${escH(selectedScope.package||'—')}</td>
       </tr>
@@ -1538,7 +1731,7 @@ function _buildPrintHeader() {
       </tr>
       <tr>
         <td ${tdL}>SCOPE:</td>
-        <td ${tdV} colspan="7">${escH(selectedScope.scope_title||'—')}</td>
+        <td ${tdV} colspan="7">${escH(scopeTitleCombined)}</td>
       </tr>
     </table>`;
   // Mirror to the summary page header too
@@ -1583,7 +1776,13 @@ function updateClusterFilter() {
 // ══════════════════════════════════════════════
 // PAYMENT SUMMARY RENDER
 // ══════════════════════════════════════════════
+// Dispatcher: multi-scope PCs render the merged certificate; single-scope keeps the original path.
 function renderPaymentSummary() {
+  if (isMultiPC && pcSections.length > 1) { renderPaymentSummaryMulti(); return; }
+  renderPaymentSummarySingle();
+}
+
+function renderPaymentSummarySingle() {
   // Aggregate by villa type
   const typeMap = {};
   scopeVillaTypes.forEach(t => {
@@ -1618,15 +1817,17 @@ function renderPaymentSummary() {
   const advStored = parseFloat(selectedPC.advance_recovery_aed)||0;
   const adv = advStored > 0 ? advStored : (advPct > 0 ? advAuto : 0);
 
-  // Retention: stored per-PC override OR auto-calc from scope %
-  const retPct  = parseFloat(selectedScope.retention_pct)||0;
+  // Retention: per-PC % override OR scope default %, applied to (gross − advance).
+  const scopeRetPct = parseFloat(selectedScope.retention_pct)||0;
+  const retOvr  = (selectedPC.retention_pct_override===null||selectedPC.retention_pct_override===undefined||selectedPC.retention_pct_override==='')
+                    ? null : parseFloat(selectedPC.retention_pct_override);
+  const retPct  = retOvr!==null ? retOvr : scopeRetPct;   // effective rate (fraction)
   const retBase = totTodAmt - adv;
   const retAuto = retBase * retPct;
   const retStored = parseFloat(selectedPC.retention_aed)||0;
-  // If retention_applicable is false, no retention. Otherwise use stored or auto.
-  const ret = selectedPC.retention_applicable
-    ? (retStored > 0 ? retStored : (retPct > 0 ? retAuto : 0))
-    : 0;
+  // Locked PCs keep their stored snapshot; drafts compute live from the % rate.
+  const ret = !selectedPC.retention_applicable ? 0
+              : ((selectedPC.status==='locked' && retStored>0) ? retStored : retAuto);
 
   const certified = totTodAmt - adv - ded - ret;
   const vat   = certified * vr;
@@ -1711,7 +1912,7 @@ function renderPaymentSummary() {
   const finInputAttr = canEditFin ? '' : 'disabled';
   const retCheck = selectedPC.retention_applicable ? 'checked' : '';
   const advHint  = advPct > 0 ? `<span class="fin-auto-hint">auto: ${fmtAED(advAuto)}</span>${canEditFin && advStored > 0 ? `<button class="fin-auto-btn" onclick="resetAdvAuto()">↺ Auto</button>` : ''}` : '';
-  const retHint  = retPct > 0 ? `<span class="fin-auto-hint">auto: ${fmtAED(retAuto)}</span>${canEditFin && retStored > 0 ? `<button class="fin-auto-btn" onclick="resetRetAuto()">↺ Auto</button>` : ''}` : '';
+  const retHint  = `<span class="fin-auto-hint">${retOvr!==null ? 'scope default '+(scopeRetPct*100).toFixed(1)+'%' : (scopeRetPct>0 ? 'scope rate '+(scopeRetPct*100).toFixed(1)+'%' : 'no scope rate set')}${retPct>0 ? ' · = '+fmtAED(retAuto) : ''}</span>${canEditFin && retOvr!==null ? `<button class="fin-auto-btn" onclick="resetRetAuto()">↺ Default</button>` : ''}`;
 
   document.getElementById('psum-inner').innerHTML = `
     <!-- Actions -->
@@ -1846,7 +2047,7 @@ function renderPaymentSummary() {
       <div class="fin-row">
         <div class="fin-row-label-group">
           <label class="fin-toggle"><input type="checkbox" id="fin-ret-toggle" ${retCheck} onchange="saveFinancials()" ${canEditFin?'':'disabled'}> Retention${retPct > 0 ? ` (${(retPct*100).toFixed(1)}%)` : ''}</label>
-          ${canEditFin ? `<input class="fin-input" id="fin-ret" type="number" value="${retStored||''}" min="0" placeholder="${fmtAED(retAuto)}" ${retCheck?'':'disabled'} onchange="saveFinancials()">` : `<span class="fin-val">${fmtAED(ret)}</span>`}
+          ${canEditFin ? `<span style="display:inline-flex;align-items:center;gap:4px"><input class="fin-input" id="fin-ret" type="number" value="${retOvr!==null ? +(retOvr*100).toFixed(4) : ''}" min="0" max="100" step="0.1" placeholder="${(scopeRetPct*100).toFixed(1)}" ${retCheck?'':'disabled'} onchange="saveFinancials()" title="Retention rate (%) for this PC — leave blank to use the scope default"><span style="color:var(--tx3);font-size:12px">%</span></span>` : `<span class="fin-val">${fmtAED(ret)}</span>`}
           ${retHint}
         </div>
         <div class="fin-vals">
@@ -1961,25 +2162,187 @@ function renderPaymentSummary() {
   }
 }
 
+// ── Combined certificate for a PC that spans multiple scopes ──
+function renderPaymentSummaryMulti() {
+  const sections = pcSections.map(s => ctxSection(s.ctx));
+  const totSubcon = sections.reduce((a,s)=>a+s.subContract,0);
+  const combPrev  = sections.reduce((a,s)=>a+s.subPrev,0);
+  const combCur   = sections.reduce((a,s)=>a+s.subCur,0);
+  const combTod   = sections.reduce((a,s)=>a+s.subTod,0);
+  const combVOs   = sections.reduce((a,s)=>a+s.approvedVOs,0);
+  lastGrossAed = combTod;
+
+  // Advance recovery: each scope's own % applied to its section, then summed
+  let advTod = 0, advPrev = 0, anyAdv = false;
+  pcSections.forEach((s,i) => {
+    const ap = parseFloat(s.scope.advance_recovery_pct)||0;
+    if (ap>0 || (parseFloat(s.scope.advance_amount_aed)||0)>0) anyAdv = true;
+    advTod  += sections[i].subTod * ap;
+    advPrev += sections[i].subPrev * ap;
+  });
+  lastAdvAed = advTod;
+
+  // Retention is PC-level: per-PC % override, else the primary scope's rate
+  const scopeRetPct = parseFloat(selectedScope.retention_pct)||0;
+  const retOvr = (selectedPC.retention_pct_override==null||selectedPC.retention_pct_override==='') ? null : parseFloat(selectedPC.retention_pct_override);
+  const effRetPct = retOvr!==null ? retOvr : scopeRetPct;
+  const retTod  = selectedPC.retention_applicable ? Math.max(0,(combTod-advTod)*effRetPct) : 0;
+  const retPrev = selectedPC.retention_applicable ? Math.max(0,(combPrev-advPrev)*effRetPct) : 0;
+
+  const ded = parseFloat(selectedPC.deduction_aed)||0;
+  const vr  = parseFloat(selectedPC.vat_rate)||0.05;
+  const certTod  = combTod - advTod - ded - retTod;
+  const certPrev = combPrev - advPrev - ded - retPrev;
+  const vatTod = certTod*vr, vatPrev = certPrev*vr;
+  const netTod = certTod+vatTod, netPrev = certPrev+vatPrev;
+
+  const isLocked = selectedPC.status === 'locked';
+  const canEditFin = !isLocked || canAdmin;
+  const canEditSigs = canManage || canAdmin;
+  const finInputAttr = canEditFin ? '' : 'disabled';
+  const retCheck = selectedPC.retention_applicable ? 'checked' : '';
+
+  let bodyRows = '';
+  sections.forEach((sec, si) => {
+    const sc = sec.scope;
+    const label = (sc.sca_ref ? escH(sc.sca_ref)+': ' : '') + escH(sc.scope_title || sc.subcontractor_name || ('Scope '+(si+1)));
+    bodyRows += `<tr class="section-row"><td class="center">${si+1}</td><td colspan="14">${label}</td></tr>`;
+    sec.entries.forEach(t => {
+      bodyRows += `<tr>
+        <td class="center"></td><td>${escH(t.type.villa_type_label)}</td><td class="center">${escH(t.type.unit||'Villa')}</td>
+        <td class="center">${t.qty}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(t.qty*t.rate)}</td>
+        <td class="center">${fmtQty(t.prev)}</td><td class="center">${fmtQty(t.current)}</td><td class="center bold">${fmtQty(t.toDate)}</td>
+        <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td><td class="right">${fmtAED(t.prev*t.rate)}</td>
+        <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td><td class="right">${fmtAED(t.current*t.rate)}</td>
+        <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td><td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+      </tr>`;
+    });
+    const sQty = sec.entries.reduce((a,t)=>a+t.qty,0);
+    bodyRows += `<tr class="total-row">
+      <td colspan="2" class="bold">SUB TOTAL</td><td></td><td class="center bold">${sQty}</td><td></td>
+      <td class="right bold">${fmtAED(sec.subContract)}</td><td></td><td></td><td></td>
+      <td></td><td class="right">${fmtAED(sec.subPrev)}</td><td></td><td class="right">${fmtAED(sec.subCur)}</td>
+      <td></td><td class="right bold">${fmtAED(sec.subTod)}</td>
+    </tr>`;
+  });
+  bodyRows += `<tr class="total-row" style="border-top:3px double var(--bdr2)">
+    <td colspan="2" class="bold gold">GROSS TOTAL</td><td></td><td></td><td></td>
+    <td class="right bold">${fmtAED(totSubcon)}</td><td></td><td></td><td></td>
+    <td></td><td class="right bold">${fmtAED(combPrev)}</td><td></td><td class="right bold">${fmtAED(combCur)}</td>
+    <td></td><td class="right bold gold">${fmtAED(combTod)}</td>
+  </tr>`;
+
+  const sigItems = pcSigsList.map(s => `
+    <div class="sig-item"><div class="sig-position">${escH(s.position_title)}</div><div class="sig-line"></div><div class="sig-name">${escH(s.full_name)}</div><div class="sig-company">${escH(s.company||'')}</div></div>`).join('');
+
+  document.getElementById('psum-inner').innerHTML = `
+    <div class="psum-actions">
+      <button class="btn btn-primary btn-sm" onclick="printCertificate()">🖨 Print Certificate</button>
+      <button class="btn btn-ghost btn-sm" onclick="printProgressSheet()">📋 Print Progress Sheet</button>
+      ${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit Signatories</button>` : ''}
+    </div>
+    <div class="warn-strip" style="margin-bottom:12px">📑 Combined certificate — <strong>${sections.length} scopes</strong> merged. Each scope keeps its own rate table; totals merge below.</div>
+    <div class="psum-section-title">Subcontractor Interim Payment Summary</div>
+    <table class="psum-table">
+      <thead>
+        <tr>
+          <th rowspan="2">Item</th><th rowspan="2">Description</th><th rowspan="2">Unit</th>
+          <th rowspan="2">QTY (No)</th><th rowspan="2">Rate (AED)</th><th rowspan="2">Subcontract Amount (AED)</th>
+          <th colspan="3">Progress QTY</th><th colspan="6">Amount (AED)</th>
+        </tr>
+        <tr><th>Prev</th><th>Current</th><th>To Date</th><th>% Prev</th><th>Prev</th><th>% Cur</th><th>Current</th><th>% ToDate</th><th>To Date</th></tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+
+    <div class="psum-section-title">Financial Summary (Combined)</div>
+    <div class="fin-block">
+      <div class="fin-row">
+        <span class="fin-label">Gross Total</span>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(combPrev)}</span><span class="fin-val cur">${fmtAED(combCur)}</span><span class="fin-val total">${fmtAED(combTod)}</span></div>
+      </div>
+      ${anyAdv ? `
+      <div class="fin-row">
+        <div class="fin-row-label-group"><span class="fin-label">Advance Recovery</span><span class="fin-auto-hint">auto · per scope</span></div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(advPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(advTod)}</span></div>
+      </div>` : ''}
+      <div class="fin-row">
+        <div class="fin-row-label-group"><span class="fin-label">Deductions</span>
+          ${canEditFin ? `<input class="fin-input" id="fin-ded" type="number" value="${ded}" min="0" onchange="saveFinancials()" ${finInputAttr}>` : `<span class="fin-val">${fmtAED(ded)}</span>`}
+        </div>
+        <div class="fin-vals"><span class="fin-val prev">—</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(ded)}</span></div>
+      </div>
+      <div class="fin-row">
+        <div class="fin-row-label-group">
+          <label class="fin-toggle"><input type="checkbox" id="fin-ret-toggle" ${retCheck} onchange="saveFinancials()" ${canEditFin?'':'disabled'}> Retention${effRetPct>0?` (${(effRetPct*100).toFixed(1)}%)`:''}</label>
+          ${canEditFin ? `<span style="display:inline-flex;align-items:center;gap:4px"><input class="fin-input" id="fin-ret" type="number" value="${retOvr!==null?+(retOvr*100).toFixed(4):''}" min="0" max="100" step="0.1" placeholder="${(scopeRetPct*100).toFixed(1)}" ${retCheck?'':'disabled'} onchange="saveFinancials()" title="Retention rate (%) — blank uses the primary scope default"><span style="color:var(--tx3);font-size:12px">%</span></span>` : `<span class="fin-val">${fmtAED(retTod)}</span>`}
+        </div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(retPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${selectedPC.retention_applicable?fmtAED(retTod):'Not Applicable'}</span></div>
+      </div>
+      <div class="fin-row" style="border-top:2px solid var(--bdr2)">
+        <span class="fin-label">Total Certified Amount</span>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(certPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(certTod)}</span></div>
+      </div>
+      <div class="fin-row">
+        <div class="fin-row-label-group"><span class="fin-label">VAT</span>
+          ${canEditFin ? `<input class="fin-input" id="fin-vat" type="number" value="${(vr*100).toFixed(1)}" min="0" max="100" step="0.1" onchange="saveFinancials()" ${finInputAttr}> %` : `<span class="fin-val">${(vr*100).toFixed(1)}%</span>`}
+        </div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(vatPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(vatTod)}</span></div>
+      </div>
+      <div class="fin-row" style="border-top:2px solid var(--bdr2)">
+        <span class="fin-label" style="font-size:13px;color:var(--gold)">Net Total</span>
+        <div class="fin-vals"><span class="fin-val prev grand">${fmtAED(netPrev)}</span><span class="fin-val cur grand">—</span><span class="fin-val total grand">${fmtAED(netTod)}</span></div>
+      </div>
+    </div>
+
+    ${(totSubcon>0||combVOs>0) ? `
+    <div class="psum-section-title">Contract Position (Combined)</div>
+    <div class="pos-block">
+      <div class="pos-row"><span class="pos-label">Original Contract Value (all scopes)</span><span class="pos-val">${fmtAED(totSubcon)}</span></div>
+      ${combVOs>0?`<div class="pos-row"><span class="pos-label" style="font-weight:700">Approved Variations</span><span class="pos-val accent">+ ${fmtAED(combVOs)}</span></div>
+      <div class="pos-row"><span class="pos-label" style="font-weight:700;color:var(--tx)">Adjusted Contract Value</span><span class="pos-val" style="font-size:13px">${fmtAED(totSubcon+combVOs)}</span></div>`:''}
+      <div class="pos-divider"></div>
+      <div class="pos-row"><span class="pos-label">Certified To Date (this PC)</span><span class="pos-val green">${fmtAED(certTod)}</span></div>
+    </div>` : ''}
+
+    <div class="sig-block">
+      <div class="sig-block-title"><span>Signatures</span>${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit</button>` : ''}</div>
+      <div class="sig-grid">${sigItems || '<div style="color:var(--tx3);font-size:12px">No signatories configured. Click Edit to add.</div>'}</div>
+    </div>
+  `;
+
+  const retToggle = document.getElementById('fin-ret-toggle');
+  if (retToggle) retToggle.addEventListener('change', () => { const ri=document.getElementById('fin-ret'); if(ri) ri.disabled=!retToggle.checked; saveFinancials(); });
+}
+
 async function saveFinancials() {
   if (!selectedPC) return;
-  const adv  = parseFloat(document.getElementById('fin-adv')?.value)||0;
+  const adv  = (isMultiPC && pcSections.length>1)
+    ? (parseFloat(lastAdvAed)||0)
+    : (parseFloat(document.getElementById('fin-adv')?.value)||0);
   const ded  = parseFloat(document.getElementById('fin-ded')?.value)||0;
   const retT = document.getElementById('fin-ret-toggle')?.checked||false;
-  const ret  = parseFloat(document.getElementById('fin-ret')?.value)||0;
   const vatPct = parseFloat(document.getElementById('fin-vat')?.value)||5;
+  // Retention is entered as a PERCENTAGE; blank = use the scope's default rate.
+  const retRaw = document.getElementById('fin-ret')?.value;
+  const scopeRetPct = parseFloat(selectedScope.retention_pct)||0;
+  let retOverride = null, effRetPct = scopeRetPct;
+  if (retRaw!=='' && retRaw!=null) { effRetPct = (parseFloat(retRaw)||0)/100; retOverride = effRetPct; }
+  const grossNow = parseFloat(lastGrossAed)||0;
+  const ret = retT ? Math.max(0, (grossNow - adv) * effRetPct) : 0;
   await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
     advance_recovery_aed: adv, deduction_aed: ded,
-    retention_applicable: retT, retention_aed: ret, vat_rate: vatPct/100
+    retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
   });
   audit('qs_payment_certificates', 'UPDATE_FINANCIALS', selectedPC.id, {
     scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number,
     advance_recovery_aed: adv, deduction_aed: ded,
-    retention_applicable: retT, retention_aed: ret, vat_rate: vatPct/100
+    retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
   });
   selectedPC.advance_recovery_aed = adv;
   selectedPC.deduction_aed = ded;
   selectedPC.retention_applicable = retT;
+  selectedPC.retention_pct_override = retOverride;
   selectedPC.retention_aed = ret;
   selectedPC.vat_rate = vatPct/100;
   // Update allScopePCs cache too
@@ -2088,18 +2451,46 @@ async function submitPC() {
   await loadPCData();
 }
 
+// Billable items across all scopes in the PC (or the single scope)
+function collectBillableItems() {
+  const items = [];
+  if (isMultiPC && pcSections.length > 1) {
+    pcSections.forEach(s => {
+      s.ctx.villas.forEach(sv => {
+        s.ctx.activities.forEach(act => {
+          const st = ctxActStatus(s.ctx, sv.villa_id, act.activity_code);
+          if (st.isCompleteToDate && !st.wasBilledPrev)
+            items.push({ scope_id: s.scope.id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no });
+        });
+      });
+    });
+  } else {
+    scopeVillas.forEach(sv => {
+      scopeActivities.forEach(act => {
+        const st = getActivityStatus(sv.villa_id, act.activity_code);
+        if (st.isCompleteToDate && !st.wasBilledPrev)
+          items.push({ scope_id: selectedScope.id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no });
+      });
+    });
+  }
+  return items;
+}
+
 async function openLock() {
   if (!selectedPC) return;
 
   // ── Validation gate ──────────────────────────────────────────────────
   const errors = [], warnings = [];
+  const multi = isMultiPC && pcSections.length > 1;
+  const anyVillas = multi ? pcSections.some(s => s.ctx.villas.length) : scopeVillas.length;
+  const anyActs   = multi ? pcSections.some(s => s.ctx.activities.length) : scopeActivities.length;
 
   if (!selectedPC.period_label?.trim())
     errors.push('Period label is not set — edit the PC to add one before locking.');
-  if (!scopeVillas.length)
-    errors.push('No villas are configured for this scope.');
-  if (!scopeActivities.length)
-    errors.push('No activities are configured for this scope.');
+  if (!anyVillas)
+    errors.push('No villas are configured for the scope(s) in this PC.');
+  if (!anyActs)
+    errors.push('No activities are configured for the scope(s) in this PC.');
   if (!pcSigsList.length)
     warnings.push('No signatories are configured on this PC.');
   else if (pcSigsList.some(s => !s.full_name?.trim()))
@@ -2121,17 +2512,10 @@ async function openLock() {
   }
   document.getElementById('lock-validation-msg')?.remove();
 
-  // ── Build billing summary ────────────────────────────────────────────
-  let summary = '', count = 0;
-  scopeVillas.forEach(sv => {
-    scopeActivities.forEach(act => {
-      const { isCompleteToDate, wasBilledPrev } = getActivityStatus(sv.villa_id, act.activity_code);
-      if (isCompleteToDate && !wasBilledPrev) {
-        summary += `<div>VI-${escH(sv.villa_no)} · ${escH(act.activity_code)}</div>`;
-        count++;
-      }
-    });
-  });
+  // ── Build billing summary (across every scope in this PC) ─────────────
+  const billItems = collectBillableItems();
+  const count = billItems.length;
+  const summary = billItems.map(it => `<div>VI-${escH(it.villa_no)} · ${escH(it.activity_code)}</div>`).join('');
 
   if (!count) warnings.push('No new billable items in this PC — it will be locked with zero new records.');
 
@@ -2149,16 +2533,8 @@ async function openLock() {
 async function confirmLock() {
   const msg = document.getElementById('lock-msg');
   try {
-    // 1. Write billed records (ON CONFLICT DO NOTHING)
-    const newBilledItems = [];
-    scopeVillas.forEach(sv => {
-      scopeActivities.forEach(act => {
-        const { isCompleteToDate, wasBilledPrev } = getActivityStatus(sv.villa_id, act.activity_code);
-        if (isCompleteToDate && !wasBilledPrev) {
-          newBilledItems.push({ scope_id: selectedScope.id, villa_id: sv.villa_id, activity_code: act.activity_code, locked_pc_id: selectedPC.id });
-        }
-      });
-    });
+    // 1. Write billed records for every scope in the PC (ON CONFLICT DO NOTHING)
+    const newBilledItems = collectBillableItems().map(it => ({ scope_id: it.scope_id, villa_id: it.villa_id, activity_code: it.activity_code, locked_pc_id: selectedPC.id }));
     if (newBilledItems.length) {
       await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
         method:'POST',
@@ -2166,8 +2542,27 @@ async function confirmLock() {
         body: JSON.stringify(newBilledItems)
       });
     }
-    // 2. Update PC status (store gross_aed for dashboard reporting)
+    // 2. Update PC status (store combined gross_aed for reporting)
     await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString(), gross_aed: lastGrossAed });
+
+    // 2b. Per-scope locked snapshots → correct dashboard roll-up of combined PCs
+    const effRetPct = (selectedPC.retention_pct_override!=null && selectedPC.retention_pct_override!=='')
+      ? parseFloat(selectedPC.retention_pct_override)
+      : (parseFloat(selectedScope.retention_pct)||0);
+    let snaps;
+    if (isMultiPC && pcSections.length > 1) {
+      snaps = pcSections.map(sObj => {
+        const sec = ctxSection(sObj.ctx);
+        const adv = sec.subTod * (parseFloat(sObj.scope.advance_recovery_pct)||0);
+        const ret = selectedPC.retention_applicable ? Math.max(0, (sec.subTod - adv) * effRetPct) : 0;
+        return { scope_id: sObj.scope.id, gross_aed: sec.subTod, retention_aed: ret, advance_recovery_aed: adv };
+      });
+    } else {
+      snaps = [{ scope_id: selectedScope.id, gross_aed: parseFloat(lastGrossAed)||0, retention_aed: parseFloat(selectedPC.retention_aed)||0, advance_recovery_aed: parseFloat(selectedPC.advance_recovery_aed)||0 }];
+    }
+    for (const sn of snaps) {
+      await fpatch(`qs_pc_scopes?pc_id=eq.${selectedPC.id}&scope_id=eq.${sn.scope_id}`, { gross_aed: sn.gross_aed, retention_aed: sn.retention_aed, advance_recovery_aed: sn.advance_recovery_aed });
+    }
     audit('qs_payment_certificates', 'LOCK_PC', selectedPC.id, { scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number, period_label: selectedPC.period_label, billed_count: newBilledItems.length });
     notifyTelegram('PC_LOCKED', { scope: selectedScope.subcontractor_name, pcNumber: selectedPC.pc_number, period: selectedPC.period_label, grossAed: lastGrossAed });
     selectedPC.status = 'locked';
@@ -2234,12 +2629,12 @@ async function _loadSubsList() {
   }
 }
 
-async function openNewScope() {
+async function openNewScope(prefillSub) {
   await _loadSubsList();
   editScopeMode = false;
-  document.getElementById('ns-modal-title').textContent = 'New Subcontractor Scope';
+  document.getElementById('ns-modal-title').textContent = prefillSub ? ('Add Scope · ' + prefillSub) : 'New Subcontractor Scope';
   document.getElementById('ns-submit-btn').textContent = 'Create Scope';
-  document.getElementById('ns-sub-search').value = '';
+  document.getElementById('ns-sub-search').value = prefillSub || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
   document.getElementById('ns-scope').value = '';
   document.getElementById('ns-sca').value = '';
@@ -2247,8 +2642,12 @@ async function openNewScope() {
   document.getElementById('ns-msg').className = 'form-msg';
   document.getElementById('modal-new-scope').style.display = 'flex';
   setTimeout(() => {
-    document.getElementById('ns-sub-search').focus();
-    filterSubOptions(); // explicitly show full list on open
+    if (prefillSub) {
+      document.getElementById('ns-scope').focus(); // subcontractor already chosen → go to Scope of Works
+    } else {
+      document.getElementById('ns-sub-search').focus();
+      filterSubOptions(); // explicitly show full list on open
+    }
   }, 80);
 }
 
@@ -2453,7 +2852,33 @@ function openNewPC() {
   document.getElementById('npc-msg').className = 'form-msg';
   document.getElementById('npc-historical').checked = false;
   document.getElementById('npc-submit-btn').textContent = 'Create PC';
+  // Scope multi-select (sibling scopes of the same subcontractor)
+  const sib = allScopes.filter(s => s.is_active !== false && (
+    (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
+    (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
+  ));
+  newPcScopeIds = [selectedScope.id];
+  const row = document.getElementById('npc-scopes-row');
+  const list = document.getElementById('npc-scopes-list');
+  if (sib.length > 1) {
+    row.style.display = '';
+    list.innerHTML = sib.map(s => {
+      const isPrimary = s.id === selectedScope.id;
+      return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:${isPrimary?'default':'pointer'}">
+        <input type="checkbox" value="${s.id}" ${isPrimary?'checked disabled':''} onchange="toggleNpcScope(${s.id},this.checked)" style="width:14px;height:14px">
+        <span><strong>${escH(s.sca_ref||s.scope_title||('Scope '+s.id))}</strong>${(s.scope_title&&s.sca_ref)?' · '+escH(s.scope_title):''}${isPrimary?' <span style="color:var(--tx3)">(current)</span>':''}</span>
+      </label>`;
+    }).join('');
+  } else {
+    row.style.display = 'none';
+    list.innerHTML = '';
+  }
   document.getElementById('modal-new-pc').style.display = 'flex';
+}
+function toggleNpcScope(id, on) {
+  id = +id;
+  if (on) { if (!newPcScopeIds.includes(id)) newPcScopeIds.push(id); }
+  else { newPcScopeIds = newPcScopeIds.filter(x => x !== id); }
 }
 
 async function submitNewPC() {
@@ -2468,6 +2893,11 @@ async function submitNewPC() {
     created_by: currentUser?.full_name || '', status:'draft' };
   const res = await fp('qs_payment_certificates', body);
   if (!res?.id) { showMsg(msg,'err','Save failed — PC number may already exist.'); return; }
+
+  // Record every scope merged into this PC (primary always included)
+  const ids = [...new Set([selectedScope.id, ...(newPcScopeIds||[])])];
+  const scopeRows = ids.map((sid,i) => ({ pc_id: res.id, scope_id: sid, sort_order: i }));
+  if (scopeRows.length) await fp('qs_pc_scopes', scopeRows);
 
   // Copy global signatories to this PC
   const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
@@ -2485,7 +2915,10 @@ async function submitNewPC() {
 
 function toggleHistMode(on) {
   const btn = document.getElementById('npc-submit-btn');
-  btn.textContent = on ? 'Next: Set Activities →' : 'Create PC';
+  btn.textContent = on ? 'Next: Import Excel →' : 'Create PC';
+  // Multi-scope merging isn't supported for historical PCs
+  const row = document.getElementById('npc-scopes-row');
+  if (row) row.style.display = (on || !document.getElementById('npc-scopes-list').children.length) ? 'none' : '';
 }
 
 function handleNewPC() {
@@ -2507,6 +2940,7 @@ function openHistPCSetup() {
   histPCSelections = {};
   document.getElementById('hist-pc-info-bar').textContent =
     `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}`;
+  const im = document.getElementById('hist-pc-import-msg'); if (im) im.style.display = 'none';
   renderHistGrid();
   document.getElementById('modal-hist-pc').style.display = 'flex';
 }
@@ -2609,6 +3043,146 @@ function updateHistCount() {
   document.getElementById('hist-pc-count').textContent = `${n} activit${n===1?'y':'ies'} selected across ${scopeVillas.length} villas`;
 }
 
+// ── Historical PC: import the progress Excel and pre-tick the grid ──
+function histClearAll() {
+  histPCSelections = {};
+  renderHistGrid();
+  const m = document.getElementById('hist-pc-import-msg');
+  if (m) m.style.display = 'none';
+}
+function _pctTo100(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v <= 1 ? v * 100 : v;     // 1→100, 0.92→92, 100→100
+  const n = parseFloat(String(v).replace('%','').trim());
+  if (isNaN(n)) return 0;
+  return n <= 1 ? n * 100 : n;
+}
+function _digits(v) { const m = String(v==null?'':v).match(/(\d+)/); return m ? parseInt(m[1],10) : null; }
+function showHistImportMsg(kind, html, isHtml) {
+  const m = document.getElementById('hist-pc-import-msg');
+  if (!m) return;
+  m.style.display = 'block';
+  const pal = kind==='err' ? ['rgba(239,68,68,.10)','var(--red)','var(--red)']
+            : kind==='busy' ? ['var(--bg3)','var(--accent)','var(--tx)']
+            : ['var(--bg3)','var(--bdr)','var(--tx2)'];
+  m.style.background = pal[0]; m.style.border = '1px solid '+pal[1]; m.style.color = pal[2];
+  if (kind==='busy') {
+    m.innerHTML = `<div style="display:flex;align-items:center;gap:10px"><span class="spin" style="width:16px;height:16px;border-width:2px;flex:0 0 auto"></span><span>${html||'Working…'}</span></div>`;
+    return;
+  }
+  m.innerHTML = isHtml ? html : ('<div style="font-weight:600">'+escH(html)+'</div>');
+}
+
+async function handleHistExcel(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { showHistImportMsg('err','Spreadsheet library failed to load — check your connection and retry.'); return; }
+  if (!scopeActivities.length) { showHistImportMsg('err','Configure this scope’s activities before importing.'); return; }
+  try {
+    showHistImportMsg('busy', 'Reading <strong>'+escH(file.name)+'</strong>…');
+    const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
+    // The villa data lives on the "BOQ" sheet (the name may have a suffix, e.g. "BOQ-01 (2)")
+    const lc = n => String(n).trim().toLowerCase();
+    const boqName = wb.SheetNames.find(n => lc(n) === 'boq')
+                 || wb.SheetNames.find(n => lc(n).startsWith('boq'))
+                 || wb.SheetNames.find(n => lc(n).includes('boq'));
+    const sheetName = boqName || wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    // Recompute the full range from the actual cells — a too-narrow !ref can drop trailing columns
+    let _maxC = 0, _maxR = 0;
+    Object.keys(sheet).forEach(k => { if (k[0]==='!') return; const cc = XLSX.utils.decode_cell(k); if (cc.c>_maxC) _maxC=cc.c; if (cc.r>_maxR) _maxR=cc.r; });
+    const fullRange = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:_maxR, c:_maxC} });
+    const rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'', range: fullRange });
+    if (!rows.length) { showHistImportMsg('err',`Sheet "${escH(sheetName)}" looks empty.`); return; }
+
+    // 1. Locate the Villa No / Cluster columns and each activity-code column from the header rows
+    const codeList = scopeActivities.map(a => String(a.activity_code).trim());
+    const codeStrSet = new Set(codeList);
+    const codeCol = new Map();
+    let villaCol = -1, clusterCol = -1;
+    const scan = Math.min(rows.length, 30);
+    for (let r = 0; r < scan; r++) {
+      const row = rows[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        const cell = String(row[c]==null?'':row[c]).trim();
+        if (!cell) continue;
+        const low = cell.toLowerCase();
+        if (villaCol < 0 && /villa\s*no/.test(low)) villaCol = c;
+        if (clusterCol < 0 && (low === 'cluster' || low === 'clusters')) clusterCol = c;
+        // match a code even when the cell also contains the activity name (merged header)
+        if (codeCol.size < codeList.length) {
+          const toks = cell.match(/\d+/g) || [];
+          for (const t of toks) { if (codeStrSet.has(t) && !codeCol.has(t)) { codeCol.set(t, c); break; } }
+        }
+      }
+    }
+    if (!codeCol.size || villaCol < 0) {
+      let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read the sheet automatically.</div>`;
+      diag += `<div style="color:var(--tx2);margin-top:4px">Sheet used: <strong>${escH(sheetName)}</strong>${villaCol<0?' · <span style="color:var(--amber)">no “Villa No” column found</span>':''}${!codeCol.size?' · <span style="color:var(--amber)">no activity codes matched</span>':''}</div>`;
+      diag += `<div style="color:var(--tx3)">Sheets in file: ${wb.SheetNames.map(escH).join(', ')}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope codes expected: ${escH(codeList.join(', '))}</div>`;
+      diag += `<div style="margin-top:6px;color:var(--tx2)">What the importer sees in the top rows:</div>`;
+      for (let r = 0; r < Math.min(rows.length, 14); r++) {
+        const vals = (rows[r]||[]).map(v => String(v==null?'':v).trim()).filter(Boolean);
+        if (vals.length) diag += `<div style="font-family:monospace;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">r${r+1}: ${escH(vals.slice(0,22).join(' | '))}</div>`;
+      }
+      diag += `<div style="margin-top:6px;color:var(--tx3)">If the codes look correct above but it still fails, send me this panel.</div>`;
+      showHistImportMsg('err', diag, true);
+      return;
+    }
+
+    // 2. Collect billed (villaNo, clusterNo, codes[]) from the data rows
+    showHistImportMsg('busy', 'Matching villas…');
+    const billRows = []; const clusterSet = new Set();
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const villaRaw = String(row[villaCol]==null?'':row[villaCol]).trim();
+      if (!/vi[-\s]?\d+/i.test(villaRaw) && !/^\d+$/.test(villaRaw)) continue;
+      const villaNo = _digits(villaRaw); if (villaNo == null) continue;
+      const clusterNo = clusterCol >= 0 ? _digits(row[clusterCol]) : null;
+      const codes = [];
+      for (const [code, col] of codeCol) if (_pctTo100(row[col]) >= 99.5) codes.push(code);
+      if (!codes.length) continue;                 // only rows with at least one 100% activity
+      billRows.push({ villaNo, clusterNo, codes });
+      if (clusterNo != null) clusterSet.add(clusterNo);
+    }
+
+    // 3. Match against the PROJECT villa list (not just WIR-detected villas)
+    const clusterFilter = clusterSet.size ? `cluster_id=in.(${[...clusterSet].join(',')})&` : '';
+    const projVillas = await fa(`villas?${clusterFilter}select=id,villa_no,cluster_id,villa_type&is_active=eq.true&limit=20000`);
+    const vKey = {}, vNo = {};
+    projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no] = v; (vNo[v.villa_no] = vNo[v.villa_no] || []).push(v); });
+
+    histPCSelections = {};
+    const importedVillas = []; const seen = new Set(); const unmatched = []; let cellsTicked = 0;
+    billRows.forEach(br => {
+      let v = (br.clusterNo != null) ? vKey[br.clusterNo+':'+br.villaNo] : undefined;
+      if (!v) { const cand = vNo[br.villaNo]; if (cand && cand.length === 1) v = cand[0]; }
+      if (!v) { unmatched.push('VI-'+br.villaNo+(br.clusterNo!=null?' (C'+br.clusterNo+')':'')); return; }
+      if (!seen.has(v.id)) { seen.add(v.id); importedVillas.push({ villa_id:v.id, villa_no:v.villa_no, cluster_id:v.cluster_id, villa_type_label: matchVillaType(v.villa_type), raw_villa_type:v.villa_type }); }
+      br.codes.forEach(code => { histPCSelections[v.id+':'+code] = true; cellsTicked++; });
+    });
+
+    // 4. Add matched villas to the scope's list so the grid + Payment Summary show and value them
+    const have = new Set(scopeVillas.map(s => s.villa_id));
+    importedVillas.forEach(v => { if (!have.has(v.villa_id)) scopeVillas.push(v); });
+    scopeVillas.sort((a,b) => ((a.cluster_id||0)-(b.cluster_id||0)) || ((a.villa_no||0)-(b.villa_no||0)));
+    updateClusterFilter();
+
+    renderHistGrid();
+    const missing = codeList.filter(c => !codeCol.has(c));
+    let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(file.name)} — sheet <strong>${escH(sheetName)}</strong></div>
+      <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities ticked (100%): <strong>${cellsTicked}</strong></div>
+      <div style="color:var(--tx3)">Activity columns used: ${[...codeCol.keys()].map(escH).join(', ')}</div>`;
+    if (!boqName) html += `<div style="color:var(--amber)">⚠ No “BOQ” sheet found — used “${escH(sheetName)}”.</div>`;
+    if (missing.length) html += `<div style="color:var(--amber)">⚠ Scope codes not found as columns (ignored): ${missing.map(escH).join(', ')}</div>`;
+    if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
+    html += `<div style="color:var(--tx3);margin-top:4px">Review the grid, then click <strong>Create Locked PC</strong>.</div>`;
+    showHistImportMsg('ok', html, true);
+  } catch(e) {
+    showHistImportMsg('err', 'Failed to read the file: ' + e.message);
+  }
+}
+
 async function submitHistPC() {
   const btn = document.querySelector('#modal-hist-pc .btn-amber');
   btn.disabled = true; btn.textContent = 'Creating…';
@@ -2625,6 +3199,9 @@ async function submitHistPC() {
     };
     const res = await fp('qs_payment_certificates', body);
     if (!res?.id) throw new Error('Failed to create PC — number may already exist.');
+
+    // Link the scope (historical PCs are single-scope)
+    await fp('qs_pc_scopes', [{ pc_id: res.id, scope_id: selectedScope.id, sort_order: 0 }]);
 
     // Copy global signatories
     const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
@@ -2682,7 +3259,7 @@ async function openConfigScope() {
     return { ...a, _gi: gi };
   });
   // Populate contract tab fields
-  document.getElementById('cfg-contract-value').value = parseFloat(selectedScope.contract_value_aed)||'';
+  updateCfgContractField();
   document.getElementById('cfg-retention-pct').value = selectedScope.retention_pct > 0 ? (parseFloat(selectedScope.retention_pct)*100).toFixed(1) : '';
   document.getElementById('cfg-advance-amount').value = parseFloat(selectedScope.advance_amount_aed)||'';
   document.getElementById('cfg-advance-pct').value = selectedScope.advance_recovery_pct > 0 ? (parseFloat(selectedScope.advance_recovery_pct)*100).toFixed(1) : '';
@@ -2705,6 +3282,15 @@ function getVillaTypeOptions() {
   return [...base, ...[...extra].sort((a, b) => a - b)].map(b => `${b} Bedroom Villa`);
 }
 
+// Contract value = sum of (qty contracted × rate) across all villa types in the scope
+function cfgContractValue() {
+  return (cfgVillaTypes||[]).reduce((a,t)=>a + (parseFloat(t.qty_contracted)||0)*(parseFloat(t.rate_aed)||0), 0);
+}
+function updateCfgContractField() {
+  const el = document.getElementById('cfg-contract-value');
+  if (el) el.value = cfgContractValue().toFixed(2);
+}
+
 function renderCfgTypes() {
   const list = document.getElementById('cfg-types-list');
   const opts = getVillaTypeOptions();
@@ -2722,9 +3308,9 @@ function renderCfgTypes() {
     <div style="display:grid;grid-template-columns:1fr 80px 100px 120px 28px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px">
       <select onchange="cfgVillaTypes[${i}].villa_type_label=this.value" style="width:100%">${optHtml}</select>
       <input type="text" value="${escH(t.unit||'Villa')}" placeholder="Villa" title="Unit of measure printed on the certificate" onchange="cfgVillaTypes[${i}].unit=this.value">
-      <input type="number" value="${t.qty_contracted}" placeholder="0" min="0" title="Total number of villas of this type in the subcontract" onchange="cfgVillaTypes[${i}].qty_contracted=+this.value">
-      <input type="number" value="${t.rate_aed}" placeholder="0.00" min="0" step="0.01" title="Payment rate per villa (AED)" onchange="cfgVillaTypes[${i}].rate_aed=+this.value">
-      <button class="icon-btn del" title="Remove this villa type" onclick="cfgVillaTypes.splice(${i},1);renderCfgTypes()">🗑</button>
+      <input type="number" value="${t.qty_contracted}" placeholder="0" min="0" title="Total number of villas of this type in the subcontract" onchange="cfgVillaTypes[${i}].qty_contracted=+this.value;updateCfgContractField()">
+      <input type="number" value="${t.rate_aed}" placeholder="0.00" min="0" step="0.01" title="Payment rate per villa (AED)" onchange="cfgVillaTypes[${i}].rate_aed=+this.value;updateCfgContractField()">
+      <button class="icon-btn del" title="Remove this villa type" onclick="cfgVillaTypes.splice(${i},1);renderCfgTypes();updateCfgContractField()">🗑</button>
     </div>`;
   }).join('');
   list.innerHTML = cfgVillaTypes.length
@@ -2739,6 +3325,7 @@ function addVillaTypeRow() {
   const defaultLabel = opts.find(o => !used.has(o)) || opts[0];
   cfgVillaTypes.push({ scope_id: selectedScope.id, villa_type_label: defaultLabel, unit:'Villa', qty_contracted:0, rate_aed:0, sort_order: cfgVillaTypes.length });
   renderCfgTypes();
+  updateCfgContractField();
 }
 
 function renderCfgActs() {
@@ -2872,8 +3459,13 @@ async function saveConfigScope() {
         const rows = cfgVillaTypes.map((t,i) => ({ scope_id:sid, villa_type_label:t.villa_type_label, unit:t.unit||'Villa', qty_contracted:t.qty_contracted||0, rate_aed:t.rate_aed||0, sort_order:i }));
         await fp('qs_scope_villa_types', rows);
       }
-      audit('qs_scope_villa_types', 'UPDATE_VILLA_TYPES', sid, { scope: selectedScope.subcontractor_name, types_count: cfgVillaTypes.length });
-      showMsg(msg1,'ok','Villa rates saved.');
+      // Contract value is derived from villa types — keep it in sync
+      const cv = cfgContractValue();
+      await fpatch(`qs_scopes?id=eq.${sid}`, { contract_value_aed: cv });
+      selectedScope.contract_value_aed = cv;
+      const sc = allScopes.find(e => e.id === sid); if (sc) sc.contract_value_aed = cv;
+      audit('qs_scope_villa_types', 'UPDATE_VILLA_TYPES', sid, { scope: selectedScope.subcontractor_name, types_count: cfgVillaTypes.length, contract_value_aed: cv });
+      showMsg(msg1,'ok','Villa rates saved. Contract value set to '+fmtAED(cv)+'.');
       await loadScopeConfig(); renderCfgTypes(); cfgVillaTypes = JSON.parse(JSON.stringify(scopeVillaTypes));
     }
     else if (cfgTab === 'acts') {
@@ -2925,7 +3517,7 @@ async function saveConfigScope() {
     }
     else if (cfgTab === 'contract') {
       const msgC = document.getElementById('cfg-contract-msg');
-      const contractVal = parseFloat(document.getElementById('cfg-contract-value').value)||0;
+      const contractVal = cfgContractValue();  // derived from villa types, not manually entered
       const retPct = parseFloat(document.getElementById('cfg-retention-pct').value)||0;
       const advAmt = parseFloat(document.getElementById('cfg-advance-amount').value)||0;
       const advPct = parseFloat(document.getElementById('cfg-advance-pct').value)||0;
@@ -2965,49 +3557,54 @@ function renderDetectedVillas() {
     </div>`;
     return;
   }
-  // Group by cluster then villa_type_label
-  const byClusters = {};
+  // Group by villa TYPE first (contracted QTY is per type, scope-wide), then by cluster.
+  const byType = {};
   scopeVillas.forEach(v => {
-    const c = v.cluster_id != null ? String(v.cluster_id) : 'Unknown';
-    if (!byClusters[c]) byClusters[c] = {};
     const t = v.villa_type_label || 'Unknown';
-    if (!byClusters[c][t]) byClusters[c][t] = [];
-    byClusters[c][t].push(v);
+    const c = v.cluster_id != null ? String(v.cluster_id) : 'Unknown';
+    if (!byType[t]) byType[t] = {};
+    if (!byType[t][c]) byType[t][c] = [];
+    byType[t][c].push(v);
   });
-  const clusterKeys = Object.keys(byClusters).sort((a,b)=> isNaN(a)||isNaN(b) ? a.localeCompare(b) : +a - +b);
-  const hasMultipleClusters = clusterKeys.length > 1;
-  const rows = clusterKeys.map(clusterKey => {
-    const byType = byClusters[clusterKey];
-    const clusterHeader = hasMultipleClusters
-      ? `<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tx3);margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--bdr)">Cluster ${clusterKey}</div>`
-      : '';
-    const typeRows = Object.entries(byType).map(([type, villas]) => {
-      const contracted = scopeVillaTypes.find(t => t.villa_type_label === type)?.qty_contracted || 0;
-      const detected = villas.length;
-      const balance = contracted - detected;
+  const allClusters = new Set(scopeVillas.map(v => v.cluster_id != null ? String(v.cluster_id) : 'Unknown'));
+  const hasMultipleClusters = allClusters.size > 1;
+  // Preserve the configured villa-type order, then any extra detected types
+  const typeOrder = scopeVillaTypes.map(t => t.villa_type_label);
+  const typeKeys = Object.keys(byType).sort((a,b) => {
+    const ia = typeOrder.indexOf(a), ib = typeOrder.indexOf(b);
+    return (ia<0?999:ia) - (ib<0?999:ib) || a.localeCompare(b);
+  });
+  const rows = typeKeys.map(type => {
+    const clusters = byType[type];
+    const detectedTotal = Object.values(clusters).reduce((a,arr)=>a+arr.length, 0);
+    const contracted = scopeVillaTypes.find(t => t.villa_type_label === type)?.qty_contracted || 0;
+    const balance = contracted - detectedTotal;
+    const clusterKeys = Object.keys(clusters).sort((a,b)=> isNaN(a)||isNaN(b) ? a.localeCompare(b) : +a - +b);
+    const clusterRows = clusterKeys.map(ck => {
+      const villas = clusters[ck];
       const villaList = villas.map(v => `<span style="display:inline-block;background:var(--bg4);border:1px solid var(--bdr);border-radius:4px;padding:1px 6px;font-size:10px;font-family:monospace;margin:1px">VI-${escH(v.villa_no)}</span>`).join('');
-      return `
-        <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="font-weight:700;font-size:13px;color:var(--tx)">${escH(type)}</span>
-            <span style="font-size:11px;color:var(--tx2)">Detected: <strong style="color:var(--green)">${detected}</strong></span>
-            <span style="font-size:11px;color:var(--tx2)">Contracted QTY: <strong>${contracted||'—'}</strong></span>
-            <span style="font-size:11px;color:var(--tx2)">Balance: <strong style="color:${balance>0?'var(--amber)':balance<0?'var(--red)':'var(--green)'}">${contracted?balance:'—'}</strong></span>
-          </div>
-          <div style="line-height:2">${villaList}</div>
-        </div>`;
+      const clusterLabel = hasMultipleClusters
+        ? `<div style="font-size:10px;font-weight:600;color:var(--tx3);margin:6px 0 2px">Cluster ${escH(ck)} · ${villas.length}</div>`
+        : '';
+      return clusterLabel + `<div style="line-height:2">${villaList}</div>`;
     }).join('');
-    return `<div style="margin-bottom:${hasMultipleClusters?'14px':'0'}">${clusterHeader}${typeRows}</div>`;
+    return `
+      <div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px;margin-bottom:6px">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:13px;color:var(--tx)">${escH(type)}</span>
+          <span style="font-size:11px;color:var(--tx2)">Detected: <strong style="color:var(--green)">${detectedTotal}</strong></span>
+          <span style="font-size:11px;color:var(--tx2)">Contracted QTY: <strong>${contracted||'—'}</strong></span>
+          <span style="font-size:11px;color:var(--tx2)">Balance: <strong style="color:${balance>0?'var(--amber)':balance<0?'var(--red)':'var(--green)'}">${contracted?balance:'—'}</strong></span>
+        </div>
+        ${clusterRows}
+      </div>`;
   }).join('');
-  // Count totals
-  const totalByType = {};
-  scopeVillas.forEach(v => { const t = v.villa_type_label||'Unknown'; totalByType[t]=(totalByType[t]||0)+1; });
   el.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <span style="font-size:12px;color:var(--tx2)">
         <strong style="color:var(--tx)">${scopeVillas.length}</strong> villas detected across
-        <strong style="color:var(--tx)">${Object.keys(totalByType).length}</strong> types
-        ${hasMultipleClusters ? `in <strong style="color:var(--tx)">${clusterKeys.length}</strong> clusters` : ''}
+        <strong style="color:var(--tx)">${typeKeys.length}</strong> types
+        ${hasMultipleClusters ? `in <strong style="color:var(--tx)">${allClusters.size}</strong> clusters` : ''}
       </span>
       <span style="font-size:10px;color:var(--tx3)">Source: WIR / scope activities</span>
     </div>

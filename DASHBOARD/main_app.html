@@ -480,6 +480,10 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span>
         <span class="nl">Reference Data</span>
       </div>
+      <div class="nav perm-gate" id="nav-notification_rules" data-label="Notifications" data-perm="manage_system" onclick="go('notification_rules')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+        <span class="nl">Notifications</span>
+      </div>
       <div class="nav perm-gate" id="nav-user_management" data-label="User Management" data-perm="manage_users" onclick="go('user_management')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="nl">User Management</span>
@@ -573,6 +577,7 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-progress_entry"     title="Progress Entry"></iframe>
       <iframe id="frame-csv_import_tool"    title="Import DC CSV"></iframe>
       <iframe id="frame-reference_data"    title="Reference Data"></iframe>
+      <iframe id="frame-notification_rules" title="Notifications"></iframe>
       <iframe id="frame-user_management"   title="User Management"></iframe>
       <iframe id="frame-audit_log"          title="Audit Log"></iframe>
       <iframe id="frame-ncr_sor"            title="NCR / SOR Tracker"></iframe>
@@ -606,6 +611,7 @@ const PAGES = {
   progress_entry:    { title:'Progress Entry',       desc:'Manual site progress updates',           file:'progress_entry.html',     built:true },
   csv_import_tool:   { title:'Import DC CSV',        desc:'Import DC WIR & clearance data',        file:'csv_import_tool.html',    built:true },
   reference_data:    { title:'Reference Data',       desc:'WIR activities & clearance items',       file:'reference_data.html',     built:true },
+  notification_rules:{ title:'Notifications',        desc:'Manage Telegram notification rules',     file:'notification_rules.html', built:true },
   user_management:   { title:'User Management',      desc:'Manage team members, roles & access',    file:'user_management.html',    built:true },
   audit_log:         { title:'Audit Log',            desc:'Full trail of database changes',          file:'audit_log.html',          built:true },
   ncr_sor:           { title:'NCR / SOR Tracker',   desc:'Non-conformance & site observation reports', file:'ncr_sor.html',            built:true },

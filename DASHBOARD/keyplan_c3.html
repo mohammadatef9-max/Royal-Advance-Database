@@ -405,6 +405,12 @@ function subAbbr(n){if(!n||n==='—')return '';var w=n.trim().split(/\s+/);retur
 var ST_BG_COLORS={AP:'#22c55e',RJ:'#f87171',UR:'#818cf8',PN:'#f59e0b',FA:'#22c55e',NA:'#f87171',NS:'#cbd5e1'};
 // Act2 uses a warm palette: teal=approved, amber=review, rose=rejected, slate=NS
 var ST_BG_COLORS2={AP:'#0d9488',RJ:'#f97316',UR:'#e879f9',PN:'#f59e0b',FA:'#0d9488',NA:'#f97316',NS:'#cbd5e1'};
+function villaHasNcrForCurrentActivity(vNum){
+  var recs=ncrVillaMap[vNum]; if(!recs||!recs.length) return false;
+  if(!currentActivity) return false;
+  var code=String(currentActivity).split(/\s[—–-]\s/)[0].trim();
+  return recs.some(function(r){ return String(r.activity_code||'').trim()===code; });
+}
 function renderVillas(dm, dm2){
   var layer=document.getElementById('villa-layer');
   var keys=Object.keys(VILLAS);
@@ -450,7 +456,7 @@ function renderVillas(dm, dm2){
         '<span class="vnum">'+vNum+'</span>'+
         '</div>'+(color&&showSubLabels?'<div class="vsub-stripe" style="background:'+color+'"></div>':'');
       var attrs=' data-v="'+vNum+'" data-s="'+st+'" data-sub="'+(sub||'—').replace(/"/g,'&quot;')+'" data-type="'+(d?(d.type||'—'):'—').replace(/"/g,'&quot;')+'"';
-      html+='<div class="villa s-'+st+(color?' has-sub':'')+(openFrontVillas.has(vNum)?' is-front':'')+(priorityVillas.has(vNum)?' is-priority':'')+(ncrVillaMap[vNum]&&ncrVillaMap[vNum].length>0?' is-ncr':'')+(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub))?' filter-hidden':'')+'" style="'+style+'"'+attrs+'>'+inner+'</div>';
+      html+='<div class="villa s-'+st+(color?' has-sub':'')+(openFrontVillas.has(vNum)?' is-front':'')+(priorityVillas.has(vNum)?' is-priority':'')+(villaHasNcrForCurrentActivity(vNum)?' is-ncr':'')+(inArr(hiddenStatus,st)||(sub&&sub!=='—'&&inArr(hiddenSubs,sub))?' filter-hidden':'')+'" style="'+style+'"'+attrs+'>'+inner+'</div>';
     }
   }
   layer.innerHTML=html;

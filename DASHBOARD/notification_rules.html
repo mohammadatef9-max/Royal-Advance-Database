@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Notifications · MEP Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;
+  --border:rgba(255,255,255,0.07);--border-hover:rgba(255,255,255,0.13);
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --text:#e2e8f0;--text-muted:#64748b;--text-dim:#94a3b8;
+  --approved:#6ee2a3;--approved-bg:rgba(110,226,163,0.10);
+  --rejected:#ff8a99;--rejected-bg:rgba(255,138,153,0.10);
+  --progress:#f4c95a;--mono:'JetBrains Mono',monospace;--radius:10px;
+}
+body.light-theme{
+  --bg:#f1f4f9;--bg-elev:#ffffff;--bg-panel:#f8fafc;
+  --border:rgba(0,0,0,0.08);--border-hover:rgba(0,0,0,0.15);
+  --text:#1e293b;--text-muted:#94a3b8;--text-dim:#475569;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+body{display:flex;flex-direction:column;min-height:100vh}
+a{color:var(--accent-text);text-decoration:none}
+
+.head{padding:20px 24px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.head h1{font-size:18px;font-weight:700}
+.head .sub{font-size:12px;color:var(--text-muted);margin-top:3px;max-width:680px;line-height:1.5}
+.head .spacer{flex:1}
+.wrap{flex:1;overflow:auto;padding:18px 24px 60px}
+
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg-elev);color:var(--text);transition:.15s;font-family:inherit}
+.btn:hover{border-color:var(--border-hover)}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{filter:brightness(1.08)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-danger{color:var(--rejected)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.src-group{margin-bottom:26px}
+.src-title{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);margin:0 2px 10px}
+.src-title .count{font-family:var(--mono);font-weight:500;color:var(--text-muted);font-size:11px}
+.src-title .wired{font-size:10px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--accent-text);background:var(--accent-soft);padding:2px 8px;border-radius:20px}
+
+.rule{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;display:flex;gap:14px;align-items:flex-start}
+.rule.off{opacity:.55}
+.rule .main{flex:1;min-width:0}
+.rule .name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rule .meta{font-size:11.5px;color:var(--text-muted);margin-top:5px;display:flex;flex-wrap:wrap;gap:6px 14px}
+.rule .meta b{color:var(--text-dim);font-weight:600}
+.pill{display:inline-block;font-size:10.5px;font-family:var(--mono);padding:2px 8px;border-radius:20px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-dim)}
+.pill.group{color:var(--accent-text);border-color:var(--accent-soft);background:var(--accent-soft)}
+.pill.perm{color:var(--progress);border-color:rgba(244,201,90,.25);background:rgba(244,201,90,.10)}
+.rule .preview{margin-top:9px;font-size:12px;line-height:1.5;color:var(--text-dim);background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:9px 11px;white-space:pre-wrap;word-break:break-word}
+.rule .preview b{color:var(--text)}
+.rule .acts{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+.rule .acts .row{display:flex;gap:6px}
+
+/* toggle */
+.tog{position:relative;width:38px;height:21px;flex-shrink:0;cursor:pointer}
+.tog input{opacity:0;width:0;height:0}
+.tog .sl{position:absolute;inset:0;background:var(--bg-panel);border:1px solid var(--border);border-radius:21px;transition:.2s}
+.tog .sl:before{content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--text-muted);border-radius:50%;transition:.2s}
+.tog input:checked + .sl{background:var(--accent-soft);border-color:var(--accent)}
+.tog input:checked + .sl:before{transform:translateX(17px);background:var(--accent)}
+
+/* modal */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:34px 16px;overflow:auto}
+.ov.show{display:flex}
+.modal{background:var(--bg-elev);border:1px solid var(--border-hover);border-radius:14px;width:100%;max-width:620px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal .mh{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal .mh h2{font-size:15px;font-weight:600}
+.modal .mb{padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.modal .mf{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.x{cursor:pointer;color:var(--text-muted);font-size:20px;line-height:1;background:none;border:none}
+.fld label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin-bottom:5px}
+.fld .hint{font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.4}
+.inp,.sel,.ta{width:100%;padding:9px 11px;background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-family:inherit;outline:none}
+.inp:focus,.sel:focus,.ta:focus{border-color:var(--accent)}
+.ta{font-family:var(--mono);font-size:12.5px;line-height:1.6;resize:vertical;min-height:120px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.row-inline{display:flex;gap:14px;flex-wrap:wrap}
+.row-inline .fld{flex:1;min-width:150px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.chip{font-size:11px;font-family:var(--mono);padding:3px 9px;border-radius:20px;background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--accent-soft);cursor:pointer;transition:.12s}
+.chip:hover{border-color:var(--accent)}
+.hidden{display:none!important}
+
+.empty{text-align:center;color:var(--text-muted);padding:60px 20px;font-size:13px}
+.banner{background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:12px;color:var(--text-dim);line-height:1.5;margin-bottom:18px}
+.banner b{color:var(--text)}
+
+/* access denied */
+#denied{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:100;text-align:center;padding:30px}
+#denied h2{font-size:18px}#denied p{color:var(--text-muted);font-size:13px}
+
+.toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:200}
+.toast{background:var(--bg-elev);border:1px solid var(--border-hover);border-radius:9px;padding:11px 15px;font-size:13px;display:flex;align-items:center;gap:9px;box-shadow:0 8px 28px rgba(0,0,0,.4);min-width:220px;max-width:380px}
+.toast.success{border-left:3px solid var(--approved)}
+.toast.error{border-left:3px solid var(--rejected)}
+.toast.info{border-left:3px solid var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>🔔 Notifications</h1>
+    <div class="sub">Create and manage Telegram notification rules. A rule watches a record type, fires when a condition is met, and sends a templated message to the group chat or to a permission group — no code needed.</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="btn btn-primary" onclick="openNew()">+ New Rule</button>
+</div>
+
+<div class="wrap">
+  <div class="banner">
+    <b>How it works:</b> pick a <b>source</b> (a record type we watch), choose <b>when</b> it should fire, write the <b>message</b> using the <code>{{field}}</code> chips, and pick <b>who</b> receives it. Use <b>Test</b> to send a sample to yourself/group before enabling. New source types (brand-new tables) need a one-time wiring by an admin/developer.
+  </div>
+  <div id="list"><div class="empty">Loading…</div></div>
+</div>
+
+<!-- EDIT / NEW MODAL -->
+<div class="ov" id="ov">
+  <div class="modal">
+    <div class="mh"><h2 id="m-title">New Rule</h2><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="fld">
+        <label>Rule name</label>
+        <input class="inp" id="f-name" placeholder="e.g. Clearance rejected alert">
+      </div>
+      <div class="row-inline">
+        <div class="fld">
+          <label>Source (what to watch)</label>
+          <select class="sel" id="f-source" onchange="onSourceChange()"></select>
+        </div>
+        <div class="fld">
+          <label>Fire on</label>
+          <select class="sel" id="f-trigger">
+            <option value="insert">When created</option>
+            <option value="update">When updated</option>
+            <option value="insert_update">Created or updated</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld">
+        <label>Condition</label>
+        <select class="sel" id="f-cond" onchange="onCondChange()">
+          <option value="always">Always (every time it fires)</option>
+          <option value="column_becomes">When a field becomes a specific value</option>
+          <option value="column_changed">When a field changes at all</option>
+          <option value="column_set">When a field gets filled in</option>
+        </select>
+        <div class="row-inline" id="cond-extra" style="margin-top:10px">
+          <div class="fld" id="cond-col-wrap">
+            <label>Field</label>
+            <select class="sel" id="f-cond-col" onchange="onCondColChange()"></select>
+          </div>
+          <div class="fld" id="cond-val-wrap">
+            <label>Value</label>
+            <select class="sel" id="f-cond-val-sel"></select>
+            <input class="inp hidden" id="f-cond-val-txt" placeholder="value">
+          </div>
+        </div>
+      </div>
+      <div class="row-inline">
+        <div class="fld">
+          <label>Send to</label>
+          <select class="sel" id="f-recip" onchange="onRecipChange()">
+            <option value="group">Shared group chat</option>
+            <option value="permission">Permission group</option>
+          </select>
+        </div>
+        <div class="fld" id="perm-wrap">
+          <label>Permission key</label>
+          <input class="inp" id="f-perm" placeholder="e.g. view_ncr">
+          <div class="hint">Only bot users whose web account holds this permission get the message.</div>
+        </div>
+      </div>
+      <div class="row-inline">
+        <div class="fld" style="max-width:90px;flex:0 0 90px">
+          <label>Emoji</label>
+          <input class="inp" id="f-emoji" placeholder="🔔" style="text-align:center">
+        </div>
+        <div class="fld">
+          <label>Title (bold heading)</label>
+          <input class="inp" id="f-headline" placeholder="e.g. Clearance Released">
+        </div>
+      </div>
+      <div class="fld">
+        <label>Message</label>
+        <textarea class="ta" id="f-msg" placeholder="<b>Location:</b> {{location}}&#10;<b>Clearance:</b> {{clearance}}"></textarea>
+        <div class="hint">Click a field to insert it. Lines whose value ends up empty are auto-removed. <code>&lt;b&gt;…&lt;/b&gt;</code>, <code>&lt;i&gt;…&lt;/i&gt;</code> formatting allowed.</div>
+        <div class="chips" id="f-chips"></div>
+      </div>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <span class="tog"><input type="checkbox" id="f-enabled" checked><span class="sl"></span></span>
+        Enabled
+      </label>
+    </div>
+    <div class="mf">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="save-btn" onclick="saveRule()">Save Rule</button>
+    </div>
+  </div>
+</div>
+
+<div id="denied"><h2>🔒 Restricted</h2><p>You need administrator access to manage notifications.</p></div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
+const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+
+function getH(){
+  let tok = window.__MEP_TOKEN__;
+  if(!tok){ try{ const s=localStorage.getItem('mep_session'); if(s){const j=JSON.parse(s); if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000) tok=j.access_token;} }catch(e){} }
+  return {'apikey':KEY,'Authorization':'Bearer '+(tok||KEY),'Content-Type':'application/json','Prefer':'return=representation'};
+}
+
+// auth + theme via shell
+window.addEventListener('message',e=>{
+  if(e.data&&e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;window.__MEP_PERMS__=e.data.user?.permissions||[];checkAccess();load();}
+  if(e.data&&e.data.type==='theme') applyTheme(e.data.theme);
+});
+function applyTheme(t){document.body.classList.toggle('light-theme',t==='light');}
+window.addEventListener('storage',e=>{if(e.key==='mep_theme')applyTheme(e.newValue);});
+applyTheme(localStorage.getItem('mep_theme'));
+if(window.self!==window.top) document.body.classList.add('in-shell');
+try{ if(window.parent) window.parent.postMessage({type:'child_ready'},'*'); }catch(e){}
+
+function hasPerm(p){
+  if(window.__MEP_PERMS__&&window.__MEP_PERMS__.length) return window.__MEP_PERMS__.includes(p);
+  try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);return(j.profile?.permissions||j.permissions||[]).includes(p);}}catch(e){}
+  return false;
+}
+function isAdmin(){return hasPerm('manage_system')||hasPerm('manage_users');}
+function checkAccess(){
+  const ok=isAdmin();
+  document.getElementById('denied').style.display = ok?'none':'flex';
+  return ok;
+}
+
+function toast(msg,type='info'){
+  const c=document.getElementById('toasts');const el=document.createElement('div');
+  el.className='toast '+type;el.textContent=msg;c.appendChild(el);
+  setTimeout(()=>{el.style.opacity='0';el.style.transition='opacity .3s';setTimeout(()=>el.remove(),300);},3400);
+}
+
+// ── state ──
+let SOURCES=[], RULES=[], editingId=null;
+const TRIG_LBL={insert:'on create',update:'on update',insert_update:'on create/update'};
+
+async function load(){
+  if(!checkAccess()) return;
+  try{
+    const [s,r]=await Promise.all([
+      fetch(`${SB}/rest/v1/notification_sources?select=*&order=label`,{headers:getH()}).then(r=>r.json()),
+      fetch(`${SB}/rest/v1/notification_rules?select=*&order=source_table,sort_order,id`,{headers:getH()}).then(r=>r.json())
+    ]);
+    SOURCES=Array.isArray(s)?s:[]; RULES=Array.isArray(r)?r:[];
+    render();
+  }catch(e){ document.getElementById('list').innerHTML='<div class="empty">Failed to load: '+e.message+'</div>'; }
+}
+
+function srcByTable(t){return SOURCES.find(s=>s.table_name===t);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function condSummary(r){
+  if(r.condition_type==='always') return 'always';
+  if(r.condition_type==='column_becomes') return esc(r.condition_column)+' → '+esc(r.condition_value);
+  if(r.condition_type==='column_changed') return esc(r.condition_column)+' changes';
+  if(r.condition_type==='column_set') return esc(r.condition_column)+' filled';
+  return '';
+}
+function recipSummary(r){
+  return r.recipients==='permission' ? '<span class="pill perm">perm: '+esc(r.permission_key||'?')+'</span>' : '<span class="pill group">group chat</span>';
+}
+function previewHtml(r){
+  let h=(r.emoji?r.emoji+' ':'')+'<b>'+esc(r.title||'')+'</b>';
+  if(r.message_template) h+='\n'+esc(r.message_template);
+  return h.replace(/&lt;b&gt;/g,'<b>').replace(/&lt;\/b&gt;/g,'</b>').replace(/&lt;i&gt;/g,'<i>').replace(/&lt;\/i&gt;/g,'</i>');
+}
+
+function render(){
+  const list=document.getElementById('list');
+  if(!RULES.length){ list.innerHTML='<div class="empty">No rules yet. Click <b>+ New Rule</b> to create one.</div>'; return; }
+  let html='';
+  for(const src of SOURCES){
+    const rules=RULES.filter(r=>r.source_table===src.table_name);
+    if(!rules.length) continue;
+    html+='<div class="src-group"><div class="src-title">'+esc(src.label)+
+      ' <span class="count">'+rules.length+' rule'+(rules.length>1?'s':'')+'</span>'+
+      ' <span class="wired">wired source</span></div>';
+    for(const r of rules) html+=ruleCard(r);
+    html+='</div>';
+  }
+  // rules whose source isn't registered (safety)
+  const orphan=RULES.filter(r=>!srcByTable(r.source_table));
+  if(orphan.length){ html+='<div class="src-group"><div class="src-title">Other</div>'; orphan.forEach(r=>html+=ruleCard(r)); html+='</div>'; }
+  list.innerHTML=html;
+}
+
+function ruleCard(r){
+  return '<div class="rule'+(r.is_enabled?'':' off')+'">'+
+    '<label class="tog" title="Enable / disable"><input type="checkbox" '+(r.is_enabled?'checked':'')+' onchange="toggleRule('+r.id+',this.checked)"><span class="sl"></span></label>'+
+    '<div class="main">'+
+      '<div class="name">'+esc(r.name)+'</div>'+
+      '<div class="meta">'+
+        '<span><b>When:</b> '+TRIG_LBL[r.trigger_on]+' · '+condSummary(r)+'</span>'+
+        '<span><b>To:</b> '+recipSummary(r)+'</span>'+
+      '</div>'+
+      '<div class="preview">'+previewHtml(r)+'</div>'+
+    '</div>'+
+    '<div class="acts">'+
+      '<div class="row"><button class="btn btn-sm" onclick="testRule('+r.id+')">Test</button>'+
+      '<button class="btn btn-sm" onclick="openEdit('+r.id+')">Edit</button></div>'+
+      '<button class="btn btn-sm btn-danger" onclick="deleteRule('+r.id+')">Delete</button>'+
+    '</div>'+
+  '</div>';
+}
+
+// ── modal ──
+function fillSourceSelect(){
+  document.getElementById('f-source').innerHTML=SOURCES.map(s=>'<option value="'+esc(s.table_name)+'">'+esc(s.label)+'</option>').join('');
+}
+function curSource(){return srcByTable(document.getElementById('f-source').value);}
+
+function onSourceChange(){
+  const src=curSource(); if(!src) return;
+  // condition columns
+  const cf=src.condition_fields||[];
+  document.getElementById('f-cond-col').innerHTML=cf.map(c=>'<option value="'+esc(c.column)+'">'+esc(c.label||c.column)+'</option>').join('');
+  onCondColChange();
+  // template chips
+  const tf=src.template_fields||[];
+  document.getElementById('f-chips').innerHTML=tf.map(f=>'<span class="chip" onclick="insertField(\''+esc(f.key)+'\')" title="'+esc(f.label||'')+'">{{'+esc(f.key)+'}}</span>').join('');
+}
+function onCondChange(){
+  const t=document.getElementById('f-cond').value;
+  const extra=document.getElementById('cond-extra');
+  const valWrap=document.getElementById('cond-val-wrap');
+  extra.classList.toggle('hidden', t==='always');
+  valWrap.classList.toggle('hidden', t!=='column_becomes');
+}
+function onCondColChange(){
+  const src=curSource(); if(!src) return;
+  const col=document.getElementById('f-cond-col').value;
+  const cf=(src.condition_fields||[]).find(c=>c.column===col);
+  const sel=document.getElementById('f-cond-val-sel'), txt=document.getElementById('f-cond-val-txt');
+  if(cf&&cf.values&&cf.values.length){
+    sel.innerHTML=cf.values.map(v=>'<option value="'+esc(v)+'">'+esc(v)+'</option>').join('')+'<option value="__custom__">Custom…</option>';
+    sel.classList.remove('hidden'); txt.classList.add('hidden');
+    sel.onchange=function(){ if(sel.value==='__custom__'){sel.classList.add('hidden');txt.classList.remove('hidden');txt.value='';txt.focus();} };
+  } else {
+    sel.classList.add('hidden'); txt.classList.remove('hidden');
+  }
+}
+function onRecipChange(){
+  document.getElementById('perm-wrap').classList.toggle('hidden', document.getElementById('f-recip').value!=='permission');
+}
+function insertField(key){
+  const ta=document.getElementById('f-msg'); const tok='{{'+key+'}}';
+  const s=ta.selectionStart||0, e=ta.selectionEnd||0;
+  ta.value=ta.value.slice(0,s)+tok+ta.value.slice(e);
+  ta.focus(); ta.selectionStart=ta.selectionEnd=s+tok.length;
+}
+
+function openNew(){
+  if(!checkAccess()){toast('Admin access required','error');return;}
+  editingId=null;
+  document.getElementById('m-title').textContent='New Rule';
+  fillSourceSelect();
+  document.getElementById('f-name').value='';
+  document.getElementById('f-source').selectedIndex=0;
+  document.getElementById('f-trigger').value='insert';
+  document.getElementById('f-cond').value='always';
+  document.getElementById('f-recip').value='group';
+  document.getElementById('f-perm').value='view_ncr';
+  document.getElementById('f-emoji').value='🔔';
+  document.getElementById('f-headline').value='';
+  document.getElementById('f-msg').value='';
+  document.getElementById('f-enabled').checked=true;
+  onSourceChange(); onCondChange(); onRecipChange();
+  document.getElementById('ov').classList.add('show');
+}
+function openEdit(id){
+  const r=RULES.find(x=>x.id===id); if(!r) return;
+  editingId=id;
+  document.getElementById('m-title').textContent='Edit Rule';
+  fillSourceSelect();
+  document.getElementById('f-name').value=r.name||'';
+  document.getElementById('f-source').value=r.source_table;
+  document.getElementById('f-trigger').value=r.trigger_on||'insert';
+  document.getElementById('f-cond').value=r.condition_type||'always';
+  document.getElementById('f-recip').value=r.recipients||'group';
+  document.getElementById('f-perm').value=r.permission_key||'';
+  document.getElementById('f-emoji').value=r.emoji||'';
+  document.getElementById('f-headline').value=r.title||'';
+  document.getElementById('f-msg').value=r.message_template||'';
+  document.getElementById('f-enabled').checked=!!r.is_enabled;
+  onSourceChange();
+  if(r.condition_column) document.getElementById('f-cond-col').value=r.condition_column;
+  onCondColChange();
+  if(r.condition_type==='column_becomes'&&r.condition_value!=null){
+    const sel=document.getElementById('f-cond-val-sel'), txt=document.getElementById('f-cond-val-txt');
+    const opt=[...sel.options].find(o=>o.value===r.condition_value);
+    if(opt){sel.value=r.condition_value;} else {sel.classList.add('hidden');txt.classList.remove('hidden');txt.value=r.condition_value;}
+  }
+  onCondChange(); onRecipChange();
+  document.getElementById('ov').classList.add('show');
+}
+function closeModal(){document.getElementById('ov').classList.remove('show');}
+
+function collect(){
+  const cond=document.getElementById('f-cond').value;
+  let col=null,val=null;
+  if(cond!=='always') col=document.getElementById('f-cond-col').value;
+  if(cond==='column_becomes'){
+    const sel=document.getElementById('f-cond-val-sel'),txt=document.getElementById('f-cond-val-txt');
+    val = txt.classList.contains('hidden') ? sel.value : txt.value.trim();
+  }
+  const recip=document.getElementById('f-recip').value;
+  return {
+    name:document.getElementById('f-name').value.trim(),
+    source_table:document.getElementById('f-source').value,
+    trigger_on:document.getElementById('f-trigger').value,
+    condition_type:cond,
+    condition_column:col,
+    condition_value:val,
+    recipients:recip,
+    permission_key: recip==='permission' ? (document.getElementById('f-perm').value.trim()||null) : null,
+    emoji:document.getElementById('f-emoji').value.trim(),
+    title:document.getElementById('f-headline').value.trim(),
+    message_template:document.getElementById('f-msg').value,
+    is_enabled:document.getElementById('f-enabled').checked
+  };
+}
+
+async function saveRule(){
+  const b=collect();
+  if(!b.name){toast('Give the rule a name','error');return;}
+  if(!b.title){toast('Add a title','error');return;}
+  if(b.condition_type==='column_becomes'&&!b.condition_value){toast('Choose a value for the condition','error');return;}
+  if(b.recipients==='permission'&&!b.permission_key){toast('Enter a permission key','error');return;}
+  const btn=document.getElementById('save-btn'); btn.disabled=true;
+  try{
+    let url=`${SB}/rest/v1/notification_rules`, method='POST';
+    if(editingId){ url+=`?id=eq.${editingId}`; method='PATCH'; }
+    const r=await fetch(url,{method,headers:getH(),body:JSON.stringify(b)});
+    if(!r.ok) throw new Error('HTTP '+r.status+' '+(await r.text()));
+    toast(editingId?'Rule updated':'Rule created','success');
+    closeModal(); await load();
+  }catch(e){ toast('Save failed: '+e.message,'error'); }
+  finally{ btn.disabled=false; }
+}
+
+async function toggleRule(id,on){
+  try{
+    const r=await fetch(`${SB}/rest/v1/notification_rules?id=eq.${id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({is_enabled:on})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rule=RULES.find(x=>x.id===id); if(rule) rule.is_enabled=on;
+    render();
+    toast(on?'Rule enabled':'Rule disabled','success');
+  }catch(e){ toast('Failed: '+e.message,'error'); load(); }
+}
+
+async function deleteRule(id){
+  const r=RULES.find(x=>x.id===id);
+  if(!confirm('Delete rule "'+(r?r.name:'')+'"? This cannot be undone.')) return;
+  try{
+    const res=await fetch(`${SB}/rest/v1/notification_rules?id=eq.${id}`,{method:'DELETE',headers:getH()});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    toast('Rule deleted','success'); await load();
+  }catch(e){ toast('Delete failed: '+e.message,'error'); }
+}
+
+async function testRule(id){
+  toast('Sending test…','info');
+  try{
+    const r=await fetch(`${SB}/rest/v1/rpc/test_notification_rule`,{method:'POST',headers:getH(),body:JSON.stringify({p_rule_id:id})});
+    const j=await r.json();
+    if(!r.ok||j.error) throw new Error(j.error||('HTTP '+r.status));
+    const who = j.recipients==='permission' ? ('permission group ('+(j.permissionKey||'')+')') : 'the group chat';
+    toast('Test sent to '+who,'success');
+  }catch(e){ toast('Test failed: '+e.message,'error'); }
+}
+
+// init
+checkAccess();
+load();
+</script>
+</body>
+</html>
