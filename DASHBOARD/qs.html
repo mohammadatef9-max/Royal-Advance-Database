@@ -43,6 +43,19 @@ body.in-shell{height:100vh}
 .lp-add{margin-top:8px;width:100%;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
 .lp-add:hover{background:var(--accent2)}
 .lp-list{flex:1;overflow-y:auto;padding:6px}
+/* Subcontractor groups */
+.sub-group{margin-bottom:4px}
+.sub-head{display:flex;align-items:center;gap:7px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:background .12s}
+.sub-head:hover{background:var(--bg3)}
+.sub-head.active{background:var(--bg3);border-color:var(--bdr)}
+.sub-caret{font-size:10px;color:var(--tx3);width:10px;flex:0 0 auto}
+.sub-name{font-weight:700;font-size:12.5px;color:var(--tx);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub-count{font-size:10px;font-weight:600;color:var(--tx2);background:var(--bg4);border-radius:10px;padding:1px 7px;flex:0 0 auto}
+.sub-add{flex:0 0 auto;width:20px;height:20px;border-radius:5px;border:1px solid var(--bdr);background:var(--bg2);color:var(--tx2);font-size:14px;line-height:1;cursor:pointer;display:none}
+.sub-head:hover .sub-add{display:inline-block}
+.sub-add:hover{color:var(--accent);border-color:var(--accent)}
+.sub-scopes{padding-left:10px;margin-top:2px}
+.scope-card.sub-scope{padding:7px 10px;margin-bottom:2px;border-left:2px solid var(--bdr)}
 .scope-card{padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:4px;border:1px solid transparent;transition:background .12s,border-color .12s}
 .scope-card:hover{background:var(--bg3);border-color:var(--bdr)}
 .scope-card.active{background:var(--bg4);border-color:var(--accent)}
@@ -421,7 +434,7 @@ textarea{resize:vertical;min-height:60px}
     <div class="lp-title">QS Certificates</div>
     <input class="lp-search" id="scope-search" placeholder="Search subcontractor…" oninput="filterScopes()">
     <button id="btn-dash-overview" onclick="backToDashboard()" style="display:none;margin-top:8px;width:100%;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--tx2);transition:all .15s;text-align:center" onmouseover="this.style.background='var(--bg4)';this.style.color='var(--tx)'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--tx2)'">📊 Overview</button>
-    <button class="lp-add" id="btn-new-scope" onclick="openNewScope()" style="display:none">+ New Scope</button>
+    <button class="lp-add" id="btn-new-scope" onclick="openNewScope()" style="display:none">+ Add Subcontractor</button>
   </div>
   <div class="lp-list" id="scope-list"><div class="loading-row"><span class="spin"></span></div></div>
 </div>
@@ -1033,6 +1046,9 @@ async function loadScopes() {
   renderDashboard();
 }
 
+let expandedSubs = {};   // subcontractor name → expanded?
+let subGroupOrder = [];  // index → subcontractor name (for click handlers)
+
 function renderScopeList() {
   const q = (document.getElementById('scope-search').value || '').toLowerCase();
   const list = document.getElementById('scope-list');
@@ -1041,16 +1057,47 @@ function renderScopeList() {
     (s.scope_title||'').toLowerCase().includes(q)
   );
   if (!filtered.length) { list.innerHTML = '<div class="lp-empty">No scopes found</div>'; return; }
-  list.innerHTML = filtered.map(s => {
-    const lp = s.latestPc;
-    const badgeClass = lp ? lp.status : 'none';
-    const badgeText = lp ? `PC#${lp.pc_number} · ${lp.period_label}` : 'No PCs yet';
-    return `<div class="scope-card${selectedScope?.id===s.id?' active':''}" onclick="selectScope(${s.id})">
-      <div class="sc-name">${escH(s.subcontractor_name)}</div>
-      <div class="sc-sub">${escH(s.scope_title||'')}</div>
-      <div class="sc-meta"><span class="sc-badge ${badgeClass}">${escH(badgeText)}</span></div>
+
+  // Group scopes by subcontractor
+  const groups = {};
+  filtered.forEach(s => { (groups[s.subcontractor_name] = groups[s.subcontractor_name] || []).push(s); });
+  subGroupOrder = Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  const searching = q.length > 0;
+
+  list.innerHTML = subGroupOrder.map((name, gi) => {
+    const scopes = groups[name];
+    const hasSelected = scopes.some(s => selectedScope?.id === s.id);
+    const open = searching || hasSelected || !!expandedSubs[name];
+    const cards = !open ? '' : scopes.map(s => {
+      const lp = s.latestPc;
+      const badgeClass = lp ? lp.status : 'none';
+      const badgeText = lp ? `PC#${lp.pc_number} · ${lp.period_label}` : 'No PCs yet';
+      return `<div class="scope-card sub-scope${selectedScope?.id===s.id?' active':''}" onclick="event.stopPropagation();selectScope(${s.id})">
+        <div class="sc-sub" style="color:var(--tx);font-weight:600">${escH(s.scope_title||'(untitled scope)')}</div>
+        <div class="sc-meta"><span class="sc-badge ${badgeClass}">${escH(badgeText)}</span></div>
+      </div>`;
+    }).join('');
+    return `<div class="sub-group">
+      <div class="sub-head${hasSelected?' active':''}" onclick="toggleSub(${gi})">
+        <span class="sub-caret">${open?'▾':'▸'}</span>
+        <span class="sub-name">${escH(name)}</span>
+        <span class="sub-count">${scopes.length}</span>
+        <button class="sub-add" title="Add a scope for this subcontractor" onclick="addScopeForSub(event,${gi})">+</button>
+      </div>
+      <div class="sub-scopes">${cards}</div>
     </div>`;
   }).join('');
+}
+
+function toggleSub(gi) {
+  const name = subGroupOrder[gi]; if (name == null) return;
+  expandedSubs[name] = !expandedSubs[name];
+  renderScopeList();
+}
+function addScopeForSub(ev, gi) {
+  ev.stopPropagation();
+  const name = subGroupOrder[gi]; if (name == null) return;
+  openNewScope(name);
 }
 
 function filterScopes() { renderScopeList(); }
