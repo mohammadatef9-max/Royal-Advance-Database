@@ -694,6 +694,7 @@ textarea{resize:vertical;min-height:60px}
           Choose Excel…
           <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleHistExcel(this.files[0])">
         </label>
+        <select id="hist-sheet-sel" onchange="parseHistSheet(this.value)" title="Which sheet to read" style="display:none;padding:6px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;color:var(--tx);font-size:12px;max-width:200px"></select>
         <button class="btn btn-ghost btn-sm" onclick="histClearAll()">Clear all ticks</button>
       </div>
       <div id="hist-pc-import-msg" style="display:none;font-size:12px;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6"></div>
@@ -892,6 +893,7 @@ let globalSigs = [];
 let allVillasCache = [];
 let subcontractorsList = [];
 let allScopePCs = [];       // all PCs for currently selected scope (for running totals)
+let pcNumById = {};         // pc_id → pc_number (to order PCs: earlier = prev, later = ignore)
 let scopeVariations = [];   // VOs for current scope
 // ── Multi-scope PC state ──
 let pcSections = [];        // [{scope, ctx}] — all scopes merged into the current PC
@@ -1280,22 +1282,30 @@ async function _detectWirVillas() {
   }));
 }
 
-// The scope's villa universe = WIR-detected villas ∪ any villa already billed for this scope
-// (so villas billed via a historical-PC Excel import still appear and get valued).
+async function _villasByIds(ids) {
+  if (!ids.length) return [];
+  const v = await fa(`villas?id=in.(${ids.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true`);
+  return v.map(x => ({ villa_id:x.id, villa_no:x.villa_no, villa_type_label: matchVillaType(x.villa_type), raw_villa_type:x.villa_type, cluster_id:x.cluster_id }))
+          .sort((a,b) => ((a.cluster_id||0)-(b.cluster_id||0)) || ((a.villa_no||0)-(b.villa_no||0)));
+}
+// Villa universe for a scope:
+//  • Once the scope has billing, its villas are exactly the ones it has billed (Excel/BOQ-driven).
+//  • Before any billing: single-scope subs seed from WIR detection; multi-scope subs start empty
+//    (WIR can't tell same-sub scopes apart — the Excel import defines them).
 async function autoDetectScopeVillas() {
-  const detected = await _detectWirVillas();
+  let billedIds = [];
   try {
     const billed = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id`);
-    const billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
-    const have = new Set(detected.map(v => v.villa_id));
-    const extraIds = billedIds.filter(id => !have.has(id));
-    if (extraIds.length) {
-      const extra = await fa(`villas?id=in.(${extraIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true`);
-      extra.forEach(v => detected.push({ villa_id:v.id, villa_no:v.villa_no, villa_type_label: matchVillaType(v.villa_type), raw_villa_type:v.villa_type, cluster_id:v.cluster_id }));
-      detected.sort((a,b) => ((a.cluster_id||0)-(b.cluster_id||0)) || ((a.villa_no||0)-(b.villa_no||0)));
-    }
-  } catch(e) { /* billed-villa union is best-effort */ }
-  return detected;
+    billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
+  } catch(e) {}
+  if (billedIds.length) return await _villasByIds(billedIds);
+
+  const siblings = allScopes.filter(s =>
+    (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
+    (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
+  ).length;
+  if (siblings > 1) return [];
+  return await _detectWirVillas();
 }
 
 // Map a raw villa_type string from the villas table to a configured qs_scope_villa_types label
@@ -1413,9 +1423,12 @@ async function loadPCData() {
   pcOverrides = {};
   overrideRows.forEach(o => { pcOverrides[o.villa_id + ':' + o.activity_code] = o; });
 
-  // Index billed records
+  // Index billed records + map each PC id to its number (for prev/current/later ordering)
   billedRecords = {};
   billedRows.forEach(b => { billedRecords[b.villa_id + ':' + b.activity_code] = b.locked_pc_id; });
+  pcNumById = {};
+  (allScopePCs || []).forEach(p => { pcNumById[p.id] = p.pc_number; });
+  if (selectedPC) pcNumById[selectedPC.id] = selectedPC.pc_number;
 
   // PC signatories
   pcSigsList = pcSigs;
@@ -1481,22 +1494,28 @@ function getActivityStatus(villa_id, activity_code) {
     source = isCompleteToDate ? 'approved' : 'not-approved';
   }
 
-  // If billed in a PREVIOUS locked PC → always PREV, never CURRENT
-  const wasBilledPrev = billedPcId !== undefined && billedPcId !== selectedPC.id;
+  // Order by PC number: billed earlier = PREV, this PC = NOW, later = ignore for this PC
+  const curNum   = selectedPC ? selectedPC.pc_number : Infinity;
+  const billedNum = (billedPcId !== undefined) ? (pcNumById[billedPcId] ?? null) : null;
   const isBilledNow   = billedPcId !== undefined && billedPcId === selectedPC.id;
+  const wasBilledPrev = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum < curNum;
+  const billedLater   = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum > curNum;
 
-  return { isCompleteToDate, wasBilledPrev, isBilledNow, source, override, wir };
+  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source, override, wir };
 }
 
 function calcVillaWorkdone(villa_id) {
   let prev = 0, current = 0, toDate = 0;
+  // A locked PC's "current" = only what was billed IN THIS PC; a draft's "current" = approvable now.
+  const locked = selectedPC && selectedPC.status === 'locked';
   scopeActivityGroups.forEach(grp => {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     grpActs.forEach(act => {
-      const { isCompleteToDate, wasBilledPrev } = getActivityStatus(villa_id, act.activity_code);
+      const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater } = getActivityStatus(villa_id, act.activity_code);
+      if (billedLater) return;  // billed in a later PC → not part of this PC's history
       const contrib = grp.group_weight * act.activity_weight;
       if (wasBilledPrev) { prev += contrib; toDate += contrib; }
-      else if (isCompleteToDate) { current += contrib; toDate += contrib; }
+      else if (locked ? isBilledNow : isCompleteToDate) { current += contrib; toDate += contrib; }
     });
   });
   return { prev, current, toDate };
@@ -1564,18 +1583,24 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   const override = ctx.overrides[key];
   const wir = ctx.wir[key];
   const isCompleteToDate = (override !== undefined) ? override.is_complete : (wir?.approved === true);
-  const wasBilledPrev = billedPcId !== undefined && billedPcId !== selectedPC.id;
+  const curNum   = selectedPC ? selectedPC.pc_number : Infinity;
+  const billedNum = (billedPcId !== undefined) ? (pcNumById[billedPcId] ?? null) : null;
+  const isBilledNow   = billedPcId !== undefined && billedPcId === selectedPC.id;
+  const wasBilledPrev = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum < curNum;
+  const billedLater   = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum > curNum;
   const source = override!==undefined ? (override.is_complete?'override-on':'override-off') : (isCompleteToDate?'approved':'not-approved');
-  return { isCompleteToDate, wasBilledPrev, source };
+  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source };
 }
 function ctxWorkdone(ctx, villa_id) {
   let prev=0, current=0, toDate=0;
+  const locked = selectedPC && selectedPC.status === 'locked';
   ctx.activityGroups.forEach(grp => {
     ctx.activities.filter(a => a.group_id === grp.id).forEach(act => {
-      const { isCompleteToDate, wasBilledPrev } = ctxActStatus(ctx, villa_id, act.activity_code);
+      const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater } = ctxActStatus(ctx, villa_id, act.activity_code);
+      if (billedLater) return;
       const contrib = (grp.group_weight||0) * (act.activity_weight||0);
       if (wasBilledPrev) { prev += contrib; toDate += contrib; }
-      else if (isCompleteToDate) { current += contrib; toDate += contrib; }
+      else if (locked ? isBilledNow : isCompleteToDate) { current += contrib; toDate += contrib; }
     });
   });
   return { prev, current, toDate };
@@ -1623,10 +1648,17 @@ function renderProgressSheet() {
   thGroups += '<th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
   thActs += '<th class="aed-prev">PREV</th><th class="aed-cur">CURRENT</th><th class="aed-date">TO DATE</th>';
 
-  // Apply cluster filter
-  const visibleVillas = psClusterFilter === 'all'
-    ? scopeVillas
-    : scopeVillas.filter(v => String(v.cluster_id) === String(psClusterFilter));
+  // A villa belongs to this PC only if it has work billed in this or an earlier PC
+  // (or, for a draft, work that's approvable now). Villas billed only in LATER PCs are hidden.
+  const villaInThisPc = sv => scopeActivities.some(a => {
+    const st = getActivityStatus(sv.villa_id, a.activity_code);
+    return st.wasBilledPrev || st.isBilledNow || (!isLocked && st.isCompleteToDate && !st.billedLater);
+  });
+
+  // Apply cluster filter + PC relevance
+  const visibleVillas = scopeVillas.filter(v =>
+    (psClusterFilter === 'all' || String(v.cluster_id) === String(psClusterFilter)) && villaInThisPc(v)
+  );
 
   // Build rows
   let rows = '';
@@ -2941,6 +2973,9 @@ function openHistPCSetup() {
   document.getElementById('hist-pc-info-bar').textContent =
     `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}`;
   const im = document.getElementById('hist-pc-import-msg'); if (im) im.style.display = 'none';
+  const ss = document.getElementById('hist-sheet-sel'); if (ss) { ss.style.display='none'; ss.innerHTML=''; }
+  const cb = document.querySelector('#modal-hist-pc .btn-amber'); if (cb) { cb.disabled = false; cb.textContent = 'Create Locked PC'; }
+  histWB = null;
   renderHistGrid();
   document.getElementById('modal-hist-pc').style.display = 'flex';
 }
@@ -3073,113 +3108,163 @@ function showHistImportMsg(kind, html, isHtml) {
   m.innerHTML = isHtml ? html : ('<div style="font-weight:600">'+escH(html)+'</div>');
 }
 
+let histWB = null;  // workbook from the last historical import (for the sheet picker)
+function _normTxt(s){ return String(s==null?'':s).toLowerCase().replace(/[^a-z]/g,''); }  // "DRAINAGE-40%" → "drainage"
+
 async function handleHistExcel(file) {
   if (!file) return;
   if (typeof XLSX === 'undefined') { showHistImportMsg('err','Spreadsheet library failed to load — check your connection and retry.'); return; }
   if (!scopeActivities.length) { showHistImportMsg('err','Configure this scope’s activities before importing.'); return; }
   try {
     showHistImportMsg('busy', 'Reading <strong>'+escH(file.name)+'</strong>…');
-    const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
-    // The villa data lives on the "BOQ" sheet (the name may have a suffix, e.g. "BOQ-01 (2)")
+    histWB = XLSX.read(await file.arrayBuffer(), { type:'array' });
+    histWB._fileName = file.name;
+    // Pick a BOQ sheet (prefer one without a "(2)" copy suffix); let the user switch via the picker
     const lc = n => String(n).trim().toLowerCase();
-    const boqName = wb.SheetNames.find(n => lc(n) === 'boq')
-                 || wb.SheetNames.find(n => lc(n).startsWith('boq'))
-                 || wb.SheetNames.find(n => lc(n).includes('boq'));
-    const sheetName = boqName || wb.SheetNames[0];
-    const sheet = wb.Sheets[sheetName];
-    // Recompute the full range from the actual cells — a too-narrow !ref can drop trailing columns
-    let _maxC = 0, _maxR = 0;
-    Object.keys(sheet).forEach(k => { if (k[0]==='!') return; const cc = XLSX.utils.decode_cell(k); if (cc.c>_maxC) _maxC=cc.c; if (cc.r>_maxR) _maxR=cc.r; });
-    const fullRange = XLSX.utils.encode_range({ s:{r:0,c:0}, e:{r:_maxR, c:_maxC} });
-    const rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'', range: fullRange });
+    const boq = histWB.SheetNames.filter(n => lc(n).includes('boq'));
+    const def = boq.find(n => lc(n)==='boq')
+             || boq.filter(n => !n.includes('(')).sort((a,b)=>a.length-b.length)[0]
+             || boq[0] || histWB.SheetNames[0];
+    const sel = document.getElementById('hist-sheet-sel');
+    if (sel) {
+      sel.innerHTML = histWB.SheetNames.map(n => `<option value="${escH(n)}"${n===def?' selected':''}>${escH(n)}</option>`).join('');
+      sel.style.display = '';
+    }
+    await parseHistSheet(def);
+  } catch(e) {
+    showHistImportMsg('err', 'Failed to read the file: ' + e.message);
+  }
+}
+
+// Parse one sheet: match activity columns by GROUP + NAME (the code comes from the scope config)
+async function parseHistSheet(sheetName) {
+  if (!histWB) return;
+  const sheet = histWB.Sheets[sheetName];
+  if (!sheet) { showHistImportMsg('err','Sheet not found: '+escH(sheetName)); return; }
+  try {
+    showHistImportMsg('busy', 'Reading sheet <strong>'+escH(sheetName)+'</strong>…');
+    let _maxC=0,_maxR=0;
+    Object.keys(sheet).forEach(k => { if(k[0]==='!')return; const cc=XLSX.utils.decode_cell(k); if(cc.c>_maxC)_maxC=cc.c; if(cc.r>_maxR)_maxR=cc.r; });
+    const rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'', range: XLSX.utils.encode_range({s:{r:0,c:0},e:{r:_maxR,c:_maxC}}) });
     if (!rows.length) { showHistImportMsg('err',`Sheet "${escH(sheetName)}" looks empty.`); return; }
 
-    // 1. Locate the Villa No / Cluster columns and each activity-code column from the header rows
-    const codeList = scopeActivities.map(a => String(a.activity_code).trim());
-    const codeStrSet = new Set(codeList);
-    const codeCol = new Map();
-    let villaCol = -1, clusterCol = -1;
+    // Scope activities keyed by (group|name) and by name (name list kept in scope order for duplicates)
+    const grpName = {}; scopeActivityGroups.forEach(g => grpName[g.id] = g.group_name);
+    const byGN = new Map(), byName = new Map();
+    scopeActivities.forEach(a => {
+      const code = String(a.activity_code).trim();
+      byGN.set(_normTxt(grpName[a.group_id])+'|'+_normTxt(a.activity_name), code);
+      const nk = _normTxt(a.activity_name);
+      if (!byName.has(nk)) byName.set(nk, []);
+      byName.get(nk).push(code);
+    });
+    const groupNorms = new Set(scopeActivityGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
+
+    // Find the name row (has "Villa No"), the group row (has a scope group name), + Villa/Cluster cols
+    let nameRow=-1, groupRow=-1, villaCol=-1, clusterCol=-1;
     const scan = Math.min(rows.length, 30);
-    for (let r = 0; r < scan; r++) {
-      const row = rows[r] || [];
-      for (let c = 0; c < row.length; c++) {
-        const cell = String(row[c]==null?'':row[c]).trim();
-        if (!cell) continue;
+    for (let r=0; r<scan; r++){
+      const row = rows[r]||[];
+      for (let c=0;c<row.length;c++){
+        const cell = String(row[c]==null?'':row[c]).trim(); if(!cell) continue;
         const low = cell.toLowerCase();
-        if (villaCol < 0 && /villa\s*no/.test(low)) villaCol = c;
-        if (clusterCol < 0 && (low === 'cluster' || low === 'clusters')) clusterCol = c;
-        // match a code even when the cell also contains the activity name (merged header)
-        if (codeCol.size < codeList.length) {
-          const toks = cell.match(/\d+/g) || [];
-          for (const t of toks) { if (codeStrSet.has(t) && !codeCol.has(t)) { codeCol.set(t, c); break; } }
-        }
+        if (/villa\s*no/.test(low)) { if(nameRow<0) nameRow=r; if(villaCol<0) villaCol=c; }
+        if (clusterCol<0 && low==='cluster') clusterCol=c;
+        if (groupRow<0 && groupNorms.has(_normTxt(cell))) groupRow=r;
       }
     }
-    if (!codeCol.size || villaCol < 0) {
-      let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read the sheet automatically.</div>`;
-      diag += `<div style="color:var(--tx2);margin-top:4px">Sheet used: <strong>${escH(sheetName)}</strong>${villaCol<0?' · <span style="color:var(--amber)">no “Villa No” column found</span>':''}${!codeCol.size?' · <span style="color:var(--amber)">no activity codes matched</span>':''}</div>`;
-      diag += `<div style="color:var(--tx3)">Sheets in file: ${wb.SheetNames.map(escH).join(', ')}</div>`;
-      diag += `<div style="color:var(--tx3)">Scope codes expected: ${escH(codeList.join(', '))}</div>`;
-      diag += `<div style="margin-top:6px;color:var(--tx2)">What the importer sees in the top rows:</div>`;
-      for (let r = 0; r < Math.min(rows.length, 14); r++) {
-        const vals = (rows[r]||[]).map(v => String(v==null?'':v).trim()).filter(Boolean);
-        if (vals.length) diag += `<div style="font-family:monospace;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">r${r+1}: ${escH(vals.slice(0,22).join(' | '))}</div>`;
+
+    // Map each scope activity code → its data column.
+    const codeCol = new Map();
+    // Pass 1 — exact activity-code cells in the header (precise; ignores things like "WIR(3060)")
+    const codeStrSet = new Set(scopeActivities.map(a => String(a.activity_code).trim()));
+    for (let r=0; r<scan && codeCol.size<scopeActivities.length; r++){
+      const row = rows[r]||[];
+      for (let c=0;c<row.length;c++){
+        const cell = String(row[c]==null?'':row[c]).trim();
+        if (cell && codeStrSet.has(cell) && !codeCol.has(cell)) codeCol.set(cell, c);
       }
-      diag += `<div style="margin-top:6px;color:var(--tx3)">If the codes look correct above but it still fails, send me this panel.</div>`;
+    }
+    // Pass 2 — match any still-unmapped codes by group+name, then by name order (sheets with no code row)
+    if (nameRow>=0 && codeCol.size < scopeActivities.length) {
+      const usedCols = new Set([...codeCol.values()]);
+      const nrow = rows[nameRow]||[];
+      const grow = groupRow>=0 ? (rows[groupRow]||[]) : [];
+      const width = Math.max(nrow.length, grow.length);
+      let curGroup=''; const nameUse={};
+      for (let c=0;c<width;c++){
+        const gcell = grow[c]!=null ? String(grow[c]).trim() : '';
+        if (gcell && groupNorms.has(_normTxt(gcell))) curGroup = _normTxt(gcell);
+        const nk = _normTxt(nrow[c]); if(!nk) continue;
+        if (usedCols.has(c)) { nameUse[nk] = (nameUse[nk]||0)+1; continue; }
+        let code = byGN.get(curGroup+'|'+nk);
+        if (!code) { const arr = byName.get(nk); if (arr && arr.length) code = arr[nameUse[nk]||0] || arr[arr.length-1]; }
+        if (code && !codeCol.has(code)) codeCol.set(code, c);
+        if (byName.has(nk)) nameUse[nk] = (nameUse[nk]||0)+1;
+      }
+    }
+
+    if (!codeCol.size || villaCol < 0) {
+      let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
+      diag += `<div style="color:var(--tx2);margin-top:4px">${villaCol<0?'<span style="color:var(--amber)">no “Villa No” column</span> · ':''}${!codeCol.size?'<span style="color:var(--amber)">no activity columns matched by name</span>':''}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope groups: ${scopeActivityGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope activities: ${scopeActivities.map(a=>escH(a.activity_name)).join(', ')}</div>`;
+      diag += `<div style="margin-top:6px;color:var(--tx2)">Top rows seen:</div>`;
+      for (let r=0;r<Math.min(rows.length,12);r++){ const vals=(rows[r]||[]).map(v=>String(v==null?'':v).trim()).filter(Boolean); if(vals.length) diag+=`<div style="font-family:monospace;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">r${r+1}: ${escH(vals.slice(0,22).join(' | '))}</div>`; }
+      diag += `<div style="margin-top:6px;color:var(--tx3)">Try a different sheet above, or send me this panel.</div>`;
       showHistImportMsg('err', diag, true);
       return;
     }
 
-    // 2. Collect billed (villaNo, clusterNo, codes[]) from the data rows
+    // Collect billed rows (only those with at least one 100% activity)
     showHistImportMsg('busy', 'Matching villas…');
-    const billRows = []; const clusterSet = new Set();
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r] || [];
+    const billRows=[]; const clusterSet=new Set();
+    for (let r=(nameRow>=0?nameRow+1:0); r<rows.length; r++){
+      const row = rows[r]||[];
       const villaRaw = String(row[villaCol]==null?'':row[villaCol]).trim();
       if (!/vi[-\s]?\d+/i.test(villaRaw) && !/^\d+$/.test(villaRaw)) continue;
-      const villaNo = _digits(villaRaw); if (villaNo == null) continue;
-      const clusterNo = clusterCol >= 0 ? _digits(row[clusterCol]) : null;
-      const codes = [];
-      for (const [code, col] of codeCol) if (_pctTo100(row[col]) >= 99.5) codes.push(code);
-      if (!codes.length) continue;                 // only rows with at least one 100% activity
+      const villaNo = _digits(villaRaw); if (villaNo==null) continue;
+      const clusterNo = clusterCol>=0 ? _digits(row[clusterCol]) : null;
+      const codes=[];
+      for (const [code,col] of codeCol) if (_pctTo100(row[col]) >= 99.5) codes.push(code);
+      if (!codes.length) continue;
       billRows.push({ villaNo, clusterNo, codes });
-      if (clusterNo != null) clusterSet.add(clusterNo);
+      if (clusterNo!=null) clusterSet.add(clusterNo);
     }
 
-    // 3. Match against the PROJECT villa list (not just WIR-detected villas)
+    // Match villas against the PROJECT villa list
     const clusterFilter = clusterSet.size ? `cluster_id=in.(${[...clusterSet].join(',')})&` : '';
     const projVillas = await fa(`villas?${clusterFilter}select=id,villa_no,cluster_id,villa_type&is_active=eq.true&limit=20000`);
-    const vKey = {}, vNo = {};
-    projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no] = v; (vNo[v.villa_no] = vNo[v.villa_no] || []).push(v); });
+    const vKey={}, vNo={};
+    projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no]=v; (vNo[v.villa_no]=vNo[v.villa_no]||[]).push(v); });
 
     histPCSelections = {};
-    const importedVillas = []; const seen = new Set(); const unmatched = []; let cellsTicked = 0;
+    const importedVillas=[]; const seen=new Set(); const unmatched=[]; let cellsTicked=0;
     billRows.forEach(br => {
-      let v = (br.clusterNo != null) ? vKey[br.clusterNo+':'+br.villaNo] : undefined;
-      if (!v) { const cand = vNo[br.villaNo]; if (cand && cand.length === 1) v = cand[0]; }
+      let v = (br.clusterNo!=null) ? vKey[br.clusterNo+':'+br.villaNo] : undefined;
+      if (!v) { const cand=vNo[br.villaNo]; if(cand&&cand.length===1) v=cand[0]; }
       if (!v) { unmatched.push('VI-'+br.villaNo+(br.clusterNo!=null?' (C'+br.clusterNo+')':'')); return; }
-      if (!seen.has(v.id)) { seen.add(v.id); importedVillas.push({ villa_id:v.id, villa_no:v.villa_no, cluster_id:v.cluster_id, villa_type_label: matchVillaType(v.villa_type), raw_villa_type:v.villa_type }); }
-      br.codes.forEach(code => { histPCSelections[v.id+':'+code] = true; cellsTicked++; });
+      if (!seen.has(v.id)){ seen.add(v.id); importedVillas.push({villa_id:v.id,villa_no:v.villa_no,cluster_id:v.cluster_id,villa_type_label:matchVillaType(v.villa_type),raw_villa_type:v.villa_type}); }
+      br.codes.forEach(code => { histPCSelections[v.id+':'+code]=true; cellsTicked++; });
     });
 
-    // 4. Add matched villas to the scope's list so the grid + Payment Summary show and value them
-    const have = new Set(scopeVillas.map(s => s.villa_id));
-    importedVillas.forEach(v => { if (!have.has(v.villa_id)) scopeVillas.push(v); });
-    scopeVillas.sort((a,b) => ((a.cluster_id||0)-(b.cluster_id||0)) || ((a.villa_no||0)-(b.villa_no||0)));
+    // The Excel defines this PC's villas — show ONLY those that have at least one billed activity
+    scopeVillas = importedVillas.slice().sort((a,b)=>((a.cluster_id||0)-(b.cluster_id||0))||((a.villa_no||0)-(b.villa_no||0)));
     updateClusterFilter();
-
     renderHistGrid();
-    const missing = codeList.filter(c => !codeCol.has(c));
-    let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(file.name)} — sheet <strong>${escH(sheetName)}</strong></div>
+
+    const codeName = {}; scopeActivities.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
+    const lbl = c => escH((codeName[c]||'')+' ['+c+']');
+    const missing = scopeActivities.map(a=>String(a.activity_code).trim()).filter(c=>!codeCol.has(c));
+    let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(histWB._fileName||'')} — sheet <strong>${escH(sheetName)}</strong></div>
       <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities ticked (100%): <strong>${cellsTicked}</strong></div>
-      <div style="color:var(--tx3)">Activity columns used: ${[...codeCol.keys()].map(escH).join(', ')}</div>`;
-    if (!boqName) html += `<div style="color:var(--amber)">⚠ No “BOQ” sheet found — used “${escH(sheetName)}”.</div>`;
-    if (missing.length) html += `<div style="color:var(--amber)">⚠ Scope codes not found as columns (ignored): ${missing.map(escH).join(', ')}</div>`;
+      <div style="color:var(--tx3)">Matched activities: ${[...codeCol.keys()].map(lbl).join(', ')}</div>`;
+    if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column: ${missing.map(lbl).join(', ')}</div>`;
     if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
-    html += `<div style="color:var(--tx3);margin-top:4px">Review the grid, then click <strong>Create Locked PC</strong>.</div>`;
+    html += `<div style="color:var(--tx3);margin-top:4px">Review the grid, then click <strong>Create Locked PC</strong>. Wrong sheet? Pick another above.</div>`;
     showHistImportMsg('ok', html, true);
   } catch(e) {
-    showHistImportMsg('err', 'Failed to read the file: ' + e.message);
+    showHistImportMsg('err', 'Failed to read the sheet: ' + e.message);
   }
 }
 
@@ -3235,6 +3320,7 @@ async function submitHistPC() {
     }
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
+    btn.disabled = false; btn.textContent = 'Create Locked PC';
     closeModal('modal-hist-pc');
     closeModal('modal-new-pc');
     await loadPCs();
