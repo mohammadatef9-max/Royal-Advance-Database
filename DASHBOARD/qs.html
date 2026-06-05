@@ -705,7 +705,7 @@ textarea{resize:vertical;min-height:60px}
         </div>
         <label class="btn btn-primary btn-sm" style="cursor:pointer">
           Choose Excel…
-          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleHistExcel(this.files[0])">
+          <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onclick="this.value=null" onchange="handleHistExcel(this.files[0])">
         </label>
         <select id="hist-sheet-sel" onchange="parseHistSheet(this.value)" title="Which sheet to read" style="display:none;padding:6px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;color:var(--tx);font-size:12px;max-width:200px"></select>
         <button class="btn btn-ghost btn-sm" onclick="histClearAll()">Clear all ticks</button>
@@ -1689,7 +1689,7 @@ function renderProgressSheet() {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${(grp.group_weight*100).toFixed(0)}%)</th>`;
     grpActs.forEach(act => {
-      thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${(act.activity_weight*100).toFixed(0)}%</div></th>`;
+      thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${(act.activity_weight*100).toFixed(0)}%</div></th>`;
     });
   });
   thGroups += '<th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
@@ -1836,6 +1836,46 @@ function printProgressSheet() {
     window.print();
     document.body.classList.remove('print-ps-only');
   }, 80);
+}
+
+// ── Excel export (uses the SheetJS already loaded for the BOQ import) ──
+function _xlsxFileBase() {
+  const sub = String(selectedScope?.subcontractor_name || 'PC').replace(/[^\w]+/g,'_').replace(/^_+|_+$/g,'');
+  const per = String(selectedPC?.period_label || '').replace(/[^\w]+/g,'_').replace(/^_+|_+$/g,'');
+  return 'PC' + (selectedPC?.pc_number ?? '') + '_' + sub + (per ? '_'+per : '');
+}
+
+function exportSummaryExcel() {
+  if (typeof XLSX === 'undefined') { alert('Spreadsheet library not loaded — check your connection and retry.'); return; }
+  if (!selectedPC || !selectedScope) return;
+  const inner = document.getElementById('psum-inner');
+  const itemTable = inner && inner.querySelector('.psum-table');
+  if (!itemTable) { alert('Open the Payment Summary tab first.'); return; }
+  // Faithful copy of the certificate items table
+  const ws = XLSX.utils.table_to_sheet(itemTable, { raw:false });
+  // Append the financial summary block (it's div-based, not a table)
+  const _num = s => { const v = parseFloat(String(s).replace(/[^0-9.\-]/g,'')); return (String(s).trim()===''||isNaN(v)) ? (String(s).trim()) : v; };
+  const fin = [[''], ['Financial Summary', 'Previous', 'Current', 'To Date']];
+  inner.querySelectorAll('.fin-block .fin-row').forEach(r => {
+    const label = (r.querySelector('.fin-label, .fin-toggle')?.textContent || '').replace(/\s+/g,' ').trim();
+    const vals  = [...r.querySelectorAll('.fin-vals .fin-val')].map(v => (v.textContent||'').trim());
+    if (label) fin.push([label, _num(vals[0]||''), _num(vals[1]||''), _num(vals[2]||'')]);
+  });
+  XLSX.utils.sheet_add_aoa(ws, fin, { origin: -1 });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Payment Summary');
+  XLSX.writeFile(wb, _xlsxFileBase() + '_Summary.xlsx');
+}
+
+function exportProgressExcel() {
+  if (typeof XLSX === 'undefined') { alert('Spreadsheet library not loaded — check your connection and retry.'); return; }
+  if (!selectedPC || !selectedScope) return;
+  const t = document.querySelector('#ps-wrap .ps-table');
+  if (!t) { alert('No progress sheet to export — configure the scope first.'); return; }
+  const ws = XLSX.utils.table_to_sheet(t, { raw:false });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Progress Sheet');
+  XLSX.writeFile(wb, _xlsxFileBase() + '_Progress.xlsx');
 }
 
 // Populate the cluster filter dropdown based on clusters present in scopeVillas
@@ -1998,6 +2038,8 @@ function renderPaymentSummarySingle() {
     <div class="psum-actions">
       <button class="btn btn-primary btn-sm" onclick="printCertificate()">🖨 Print Certificate</button>
       <button class="btn btn-ghost btn-sm" onclick="printProgressSheet()">📋 Print Progress Sheet</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportSummaryExcel()">⬇ Summary (Excel)</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportProgressExcel()">⬇ Progress (Excel)</button>
       ${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit Signatories</button>` : ''}
     </div>
 
@@ -2318,6 +2360,8 @@ function renderPaymentSummaryMulti() {
     <div class="psum-actions">
       <button class="btn btn-primary btn-sm" onclick="printCertificate()">🖨 Print Certificate</button>
       <button class="btn btn-ghost btn-sm" onclick="printProgressSheet()">📋 Print Progress Sheet</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportSummaryExcel()">⬇ Summary (Excel)</button>
+      <button class="btn btn-ghost btn-sm" onclick="exportProgressExcel()">⬇ Progress (Excel)</button>
       ${canEditSigs ? `<button class="btn btn-ghost btn-sm" onclick="openPcSigs()">✍ Edit Signatories</button>` : ''}
     </div>
     <div class="warn-strip" style="margin-bottom:12px">📑 Combined certificate — <strong>${sections.length} scopes</strong> merged. Each scope keeps its own rate table; totals merge below.</div>
@@ -3042,7 +3086,7 @@ function renderHistGrid() {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     grpActs.forEach(act => {
       headCols += `<th style="white-space:normal;min-width:72px;padding:5px 8px;text-align:center;vertical-align:top">
-        <div style="font-size:11px;font-weight:600;color:var(--tx)">${escH(act.activity_name)}</div>
+        <div style="font-size:11px;font-weight:600;color:var(--tx)">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div>
         <div style="font-size:10px;color:var(--tx3)">${escH(act.activity_code)}</div>
         <div style="margin-top:4px">
           <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 6px"
@@ -3195,19 +3239,29 @@ async function parseHistSheet(sheetName) {
     const rows = XLSX.utils.sheet_to_json(sheet, { header:1, raw:true, defval:'', range: XLSX.utils.encode_range({s:{r:0,c:0},e:{r:_maxR,c:_maxC}}) });
     if (!rows.length) { showHistImportMsg('err',`Sheet "${escH(sheetName)}" looks empty.`); return; }
 
-    // Scope activities keyed by (group|name) and by name (name list kept in scope order for duplicates)
+    // Group scope activities by BASE code → ordered parts. A normal activity is a base with one
+    // part; a split activity (GF/FF) is a base whose parts sit in consecutive BOQ sub-columns.
     const grpName = {}; scopeActivityGroups.forEach(g => grpName[g.id] = g.group_name);
-    const byGN = new Map(), byName = new Map();
+    const baseParts = new Map();  // base → [{code, sort}]
+    const baseMeta  = new Map();  // base → {name, group}
     scopeActivities.forEach(a => {
-      const code = String(a.activity_code).trim();
-      byGN.set(_normTxt(grpName[a.group_id])+'|'+_normTxt(a.activity_name), code);
-      const nk = _normTxt(a.activity_name);
+      const base = String(a.base_code || a.activity_code).trim();
+      if (!baseParts.has(base)) { baseParts.set(base, []); baseMeta.set(base, { name:a.activity_name, group:grpName[a.group_id] }); }
+      baseParts.get(base).push({ code:String(a.activity_code).trim(), sort:(a.sort_order||0) });
+    });
+    baseParts.forEach(arr => arr.sort((x,y)=>x.sort-y.sort));
+
+    // name/group lookups at the BASE level (parts share the base's name)
+    const byGN = new Map(), byName = new Map();
+    baseMeta.forEach((m, base) => {
+      byGN.set(_normTxt(m.group)+'|'+_normTxt(m.name), base);
+      const nk = _normTxt(m.name);
       if (!byName.has(nk)) byName.set(nk, []);
-      byName.get(nk).push(code);
+      byName.get(nk).push(base);
     });
     const groupNorms = new Set(scopeActivityGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
 
-    // Find the name row (has "Villa No"), the group row (has a scope group name), + Villa/Cluster cols
+    // Find the name row (has "Villa No"), the group row, + Villa/Cluster cols
     let nameRow=-1, groupRow=-1, villaCol=-1, clusterCol=-1;
     const scan = Math.min(rows.length, 30);
     for (let r=0; r<scan; r++){
@@ -3221,20 +3275,17 @@ async function parseHistSheet(sheetName) {
       }
     }
 
-    // Map each scope activity code → its data column.
-    const codeCol = new Map();
-    // Pass 1 — exact activity-code cells in the header (precise; ignores things like "WIR(3060)")
-    const codeStrSet = new Set(scopeActivities.map(a => String(a.activity_code).trim()));
-    for (let r=0; r<scan && codeCol.size<scopeActivities.length; r++){
+    // Find the START column for each base. Pass 1 — exact base-code cell. Pass 2 — name(+group)/order.
+    const baseStart = new Map();
+    for (let r=0; r<scan && baseStart.size<baseParts.size; r++){
       const row = rows[r]||[];
       for (let c=0;c<row.length;c++){
         const cell = String(row[c]==null?'':row[c]).trim();
-        if (cell && codeStrSet.has(cell) && !codeCol.has(cell)) codeCol.set(cell, c);
+        if (cell && baseParts.has(cell) && !baseStart.has(cell)) baseStart.set(cell, c);
       }
     }
-    // Pass 2 — match any still-unmapped codes by group+name, then by name order (sheets with no code row)
-    if (nameRow>=0 && codeCol.size < scopeActivities.length) {
-      const usedCols = new Set([...codeCol.values()]);
+    if (nameRow>=0 && baseStart.size < baseParts.size) {
+      const usedCols = new Set([...baseStart.values()]);
       const nrow = rows[nameRow]||[];
       const grow = groupRow>=0 ? (rows[groupRow]||[]) : [];
       const width = Math.max(nrow.length, grow.length);
@@ -3244,12 +3295,20 @@ async function parseHistSheet(sheetName) {
         if (gcell && groupNorms.has(_normTxt(gcell))) curGroup = _normTxt(gcell);
         const nk = _normTxt(nrow[c]); if(!nk) continue;
         if (usedCols.has(c)) { nameUse[nk] = (nameUse[nk]||0)+1; continue; }
-        let code = byGN.get(curGroup+'|'+nk);
-        if (!code) { const arr = byName.get(nk); if (arr && arr.length) code = arr[nameUse[nk]||0] || arr[arr.length-1]; }
-        if (code && !codeCol.has(code)) codeCol.set(code, c);
+        let base = byGN.get(curGroup+'|'+nk);
+        if (!base) { const arr = byName.get(nk); if (arr && arr.length) base = arr[nameUse[nk]||0] || arr[arr.length-1]; }
+        if (base && !baseStart.has(base)) baseStart.set(base, c);
         if (byName.has(nk)) nameUse[nk] = (nameUse[nk]||0)+1;
       }
     }
+
+    // Expand each base to its part columns: part[i] → startCol + i (consecutive sub-columns)
+    const codeCol = new Map();
+    baseParts.forEach((parts, base) => {
+      const start = baseStart.get(base);
+      if (start == null) return;
+      parts.forEach((p, i) => { if(!codeCol.has(p.code)) codeCol.set(p.code, start + i); });
+    });
 
     if (!codeCol.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
@@ -3500,10 +3559,25 @@ function renderCfgActs() {
         </div>
         ${grpActs.map(act => {
           const ai = cfgActivities.indexOf(act);
+          const isPart = !!(act.part_label && String(act.part_label).trim());
+          if (isPart) {
+            return `<div class="ag-act-row" style="border-left:3px solid var(--accent,#4f8cff)">
+              <span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap" title="Shared BOQ code">↳ ${escH(act.base_code||'')}</span>
+              <input type="text" value="${escH(act.part_label)}" placeholder="GF" title="Part label (e.g. GF / FF)"
+                     style="width:46px;font-size:11px;text-transform:uppercase" onchange="setCfgPartLabel(${ai},this.value)">
+              <input type="text" value="${escH(act.activity_name)}" placeholder="Activity description"
+                     style="flex:1;font-size:11px" onchange="cfgActivities[${ai}].activity_name=this.value">
+              <input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
+                     style="width:64px;text-align:right;font-size:11px" onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
+              <span style="font-size:11px;color:var(--tx2)">%</span>
+              <button class="icon-btn" title="Merge parts back into one activity" onclick="unsplitCfgActivity(${ai})">↩</button>
+              <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
+            </div>`;
+          }
           return `<div class="ag-act-row">
             <input type="text" value="${escH(act.activity_code)}" placeholder="e.g. 3060"
                    style="width:90px;font-family:monospace;font-size:11px"
-                   onchange="cfgActivities[${ai}].activity_code=this.value">
+                   onchange="cfgActivities[${ai}].activity_code=this.value;cfgActivities[${ai}].base_code=this.value">
             <input type="text" value="${escH(act.activity_name)}" placeholder="Activity description"
                    style="flex:1;font-size:11px"
                    onchange="cfgActivities[${ai}].activity_name=this.value">
@@ -3511,6 +3585,7 @@ function renderCfgActs() {
                    style="width:64px;text-align:right;font-size:11px"
                    onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
             <span style="font-size:11px;color:var(--tx2);align-self:center">%</span>
+            <button class="icon-btn" title="Split into GF / FF parts (for old split BOQs)" onclick="splitCfgActivity(${ai})">⫶</button>
             <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
           </div>`;
         }).join('')}
@@ -3524,7 +3599,33 @@ function renderCfgActs() {
 }
 
 function addCfgActivity(gi) {
-  cfgActivities.push({ _gi: gi, group_id: cfgActGroups[gi]?.id, activity_code:'', activity_name:'', activity_weight:0, sort_order: cfgActivities.filter(a=>a._gi===gi).length });
+  cfgActivities.push({ _gi: gi, group_id: cfgActGroups[gi]?.id, activity_code:'', activity_name:'', base_code:'', activity_weight:0, sort_order: cfgActivities.filter(a=>a._gi===gi).length });
+  renderCfgActs();
+}
+// ── Split an activity into weighted sub-parts (GF/FF) — for importing old split BOQs ──
+function _cfgPartCode(base,label){ return (String(base||'').trim()||'ACT')+'-'+(String(label||'').trim().toUpperCase()||'P'); }
+function setCfgPartLabel(ai,val){
+  const a=cfgActivities[ai]; if(!a)return;
+  a.part_label=String(val||'').trim().toUpperCase();
+  a.activity_code=_cfgPartCode(a.base_code,a.part_label);
+}
+function splitCfgActivity(ai){
+  const a=cfgActivities[ai]; if(!a||a.part_label)return;
+  const base=(a.activity_code||'').trim()||('ACT'+(ai+1));
+  const w=a.activity_weight||0;
+  a.base_code=base; a.part_label='GF'; a.activity_weight=w/2; a.activity_code=_cfgPartCode(base,'GF');
+  cfgActivities.splice(ai+1,0,{ _gi:a._gi, group_id:a.group_id, base_code:base, part_label:'FF', activity_code:_cfgPartCode(base,'FF'), activity_name:a.activity_name||'', activity_weight:w/2, sort_order:(a.sort_order||0) });
+  renderCfgActs();
+}
+function unsplitCfgActivity(ai){
+  const a=cfgActivities[ai]; if(!a||!a.part_label)return;
+  const gi=a._gi, base=a.base_code;
+  const parts=cfgActivities.filter(x=>x._gi===gi && x.base_code===base && x.part_label);
+  const totalW=parts.reduce((s,x)=>s+(x.activity_weight||0),0);
+  const name=parts[0]?.activity_name||a.activity_name||'';
+  const pos=cfgActivities.indexOf(parts[0]);
+  cfgActivities=cfgActivities.filter(x=>!(x._gi===gi && x.base_code===base && x.part_label));
+  cfgActivities.splice(Math.max(0,pos),0,{ _gi:gi, group_id:a.group_id, base_code:base, part_label:'', activity_code:base, activity_name:name, activity_weight:totalW, sort_order:a.sort_order||0 });
   renderCfgActs();
 }
 
@@ -3618,6 +3719,8 @@ async function saveConfigScope() {
             activity_code: a.activity_code,
             activity_name: a.activity_name,
             activity_weight: a.activity_weight,
+            base_code: (a.base_code || a.activity_code),
+            part_label: (a.part_label && String(a.part_label).trim()) ? String(a.part_label).trim().toUpperCase() : null,
             sort_order: ai
           }));
           await fp('qs_scope_activities', actRows);

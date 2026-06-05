@@ -657,13 +657,16 @@ body.in-shell header { display: none !important; }
   <div class="cmgr-footer">
     <button class="btn btn-blue" onclick="applyMgr()">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      Apply &amp; Save
+      Apply
     </button>
     <button class="btn btn-gray" onclick="closeMgr()">Cancel</button>
+    <button class="btn" id="btn-save-default" style="display:none;background:var(--st-approved-bg);color:var(--st-approved-tx);border-color:var(--st-approved-bd);font-weight:600" title="Save these columns as the default view for every user (this discipline)" onclick="saveDefaultLayout()">
+      ★ Save as Default (all users)
+    </button>
     <div style="flex:1"></div>
-    <button class="btn" style="color:var(--st-rejected-tx);border-color:var(--st-rejected-bd);background:var(--st-rejected-bg)" onclick="if(confirm('Reset all columns to defaults?')){COLS=disc==='mech'?COLS_MECH.map(c=>({...c})):COLS_ELEC.map(c=>({...c}));saveLayout();buildCmList();render();}">
+    <button class="btn" style="color:var(--st-rejected-tx);border-color:var(--st-rejected-bd);background:var(--st-rejected-bg)" onclick="resetToDefault()">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
-      Reset to Defaults
+      Reset to Default
     </button>
   </div>
 </div>
@@ -866,17 +869,43 @@ async function fa(p){let a=[],o=0;while(true){const r=await fetch(`${SB}/rest/v1
 // svUserId() is defined in the saved-views block below; it reads window.__MEP_USER__
 // which is set by the parent shell via postMessage before any awaited network calls
 // complete, so it is always populated by the time saveLayout/loadLayout run.
-function getLayoutKey(){return 'mep_tracker_v1:'+svUserId();}
+// The ONE global default layout (per discipline), managed only by the super admin.
+const DEFAULT_LAYOUT_KEY='mep_tracker_default';
+function getLayoutKey(){return DEFAULT_LAYOUT_KEY;}
 
-async function saveLayout(){
-  const key=getLayoutKey();
-  const payload={user_key:key,discipline:disc,layout:JSON.stringify(COLS)};
-  const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
-  if(existing.length){
-    await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:JSON.stringify(COLS)})});
-  } else {
-    await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify(payload)});
-  }
+// Super admin = the boss who manages the default view (role super_admin / level 100)
+function isSuperAdminCT(){
+  const u=window.__MEP_USER__;
+  if(u&&(u.main_role==='super_admin'||u.main_role_level===100))return true;
+  try{const s=localStorage.getItem('mep_session');if(s){const p=(JSON.parse(s)||{}).profile||{};if(p.main_role==='super_admin'||p.main_role_level===100)return true;}}catch(e){}
+  return false;
+}
+
+// Column edits are SESSION-ONLY for everyone — they never auto-persist. On refresh, loadLayout()
+// reloads the super-admin default, so non-admins always revert to the default view.
+async function saveLayout(){ /* no-op: only saveDefaultLayout() (super admin) writes to the DB */ }
+
+// Super admin: persist the CURRENT columns as the global default for everyone (this discipline)
+async function saveDefaultLayout(){
+  if(!isSuperAdminCT()){alert('Only a super admin can change the default view.');return;}
+  const json=JSON.stringify(COLS);
+  try{
+    const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(DEFAULT_LAYOUT_KEY)}&discipline=eq.${disc}`);
+    if(existing.length){
+      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:json})});
+    }else{
+      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:json})});
+    }
+    closeMgr();render();
+    alert('Default '+(disc==='mech'?'Mechanical':'Electrical')+' view saved — everyone will see it on their next refresh.');
+  }catch(e){alert('Failed to save default: '+e.message);}
+}
+
+// Reset the live view back to the current global default (or the built-in defaults if none set)
+async function resetToDefault(){
+  const ok=await loadLayout(disc);
+  if(!ok){COLS=disc==='mech'?COLS_MECH.map(c=>({...c})):COLS_ELEC.map(c=>({...c}));}
+  buildCmList();render();
 }
 async function loadLayout(d){
   try{
@@ -1387,9 +1416,9 @@ function clearAll(){
 
 // COLUMN MANAGER
 let activeMgrTab='cols';
-function openMgr(tab){switchMgrTab(tab||'cols');document.getElementById('cmgr').classList.add('open');buildCmList();}
+function openMgr(tab){switchMgrTab(tab||'cols');document.getElementById('cmgr').classList.add('open');buildCmList();const sd=document.getElementById('btn-save-default');if(sd)sd.style.display=isSuperAdminCT()?'inline-flex':'none';}
 function closeMgr(){document.getElementById('cmgr').classList.remove('open');editingKey=null;}
-function applyMgr(){closeMgr();render();saveLayout();}
+function applyMgr(){closeMgr();render();}
 // ── SAVED VIEWS PANEL ────────────────────────────────────
 function toggleViewsPanel(e){
   e.stopPropagation();
@@ -2221,7 +2250,7 @@ body{font-family:system-ui,sans-serif;font-size:8pt;background:#fff;color:#111;p
 .ph-meta{font-size:7pt;color:#6b7280;margin-top:3pt}
 .ph-right{text-align:right;font-size:7pt;color:#6b7280;line-height:1.6}
 .ph-date{font-size:9pt;font-weight:700;color:#111}
-.ph-stats{display:grid;grid-template-columns:repeat(4,1fr);border:1pt solid #e5e7eb;border-radius:3pt;overflow:hidden;margin-bottom:5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.ph-stats{display:grid;grid-template-columns:repeat(3,1fr);border:1pt solid #e5e7eb;border-radius:3pt;overflow:hidden;margin-bottom:5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .ph-stat{padding:5pt 8pt;border-right:1pt solid #e5e7eb}
 .ph-stat:last-child{border-right:none}
 .ph-stat-lbl{font-size:6.5pt;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;font-weight:600;margin-bottom:2pt}
@@ -2305,10 +2334,6 @@ tr.rh{display:none}
   <div class="ph-stat">
     <div class="ph-stat-lbl">Completed</div>
     <div class="ph-stat-val" style="color:#15803d">${comp.toLocaleString()} <span class="ph-stat-pct">${pct(comp)}</span></div>
-  </div>
-  <div class="ph-stat">
-    <div class="ph-stat-lbl">In Progress</div>
-    <div class="ph-stat-val" style="color:#b45309">${prog.toLocaleString()} <span class="ph-stat-pct">${pct(prog)}</span></div>
   </div>
   <div class="ph-stat">
     <div class="ph-stat-lbl">Rejected (WIR)</div>
