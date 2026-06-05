@@ -962,6 +962,7 @@ async function fp(path, body) {
     method:'POST', headers: getH({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
   const d = await r.json();
+  if (!r.ok) throw new Error((d && d.message) ? `[${r.status}] ${d.message}` : `HTTP ${r.status}`);
   // Supabase always returns an array; unwrap for single-object inserts
   if (Array.isArray(d)) return !Array.isArray(body) ? (d[0] || null) : d;
   return d;
@@ -970,10 +971,17 @@ async function fpatch(path, body) {
   const r = await fetch(`${SB}/rest/v1/${path}`, {
     method:'PATCH', headers: getH({'Prefer':'return=representation'}), body: JSON.stringify(body)
   });
-  return await r.json();
+  const d = await r.json();
+  if (!r.ok) throw new Error((d && d.message) ? `[${r.status}] ${d.message}` : `HTTP ${r.status}`);
+  return d;
 }
 async function fdel(path) {
-  await fetch(`${SB}/rest/v1/${path}`, { method:'DELETE', headers: getH() });
+  const r = await fetch(`${SB}/rest/v1/${path}`, { method:'DELETE', headers: getH() });
+  if (!r.ok) {
+    let errMsg = `HTTP ${r.status}`;
+    try { const ed = await r.json(); if (ed && ed.message) errMsg = `[${r.status}] ${ed.message}`; } catch(_){}
+    throw new Error(`DELETE ${path} failed: ${errMsg}`);
+  }
 }
 
 function fmtAED(n) {
@@ -1298,19 +1306,22 @@ async function loadScopeConfig() {
 async function _detectWirVillas() {
   const subName = selectedScope.subcontractor_name;
   if (!subName) return [];
-  // Collect all aliases (the raw_subcontractor strings) that map to this canonical name
-  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias`);
+  // Collect all aliases (the raw_subcontractor strings) that map to this canonical name.
+  // Also fetch canonical_name itself — it may be stored in a different case than subName,
+  // and the raw WIR data uses the exact canonical_name casing (e.g. "HO RS TECHNICAL" ≠ "HO RS Technical").
+  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias,canonical_name`);
   let nameFilter;
   if (aliases.length) {
-    // Match any known alias
-    const names = [...new Set([subName, ...aliases.map(a => a.alias)])];
+    const names = [...new Set([subName, ...aliases.map(a => a.alias), ...aliases.map(a => a.canonical_name).filter(Boolean)])];
     nameFilter = `raw_subcontractor=in.(${names.map(n => `"${n}"`).join(',')})`;
   } else {
     nameFilter = `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
   }
   // Activities MUST be configured first — without them we can't scope the detection
   // (omitting the filter would return every villa the sub has touched, which is wrong)
-  const actCodes = scopeActivities.map(a => a.activity_code).filter(Boolean);
+  // For split activities use base_code (the original WIR code, e.g. "3190") not the synthetic
+  // split code ("3190-GF") — the raw WIR data never contains the split suffix.
+  const actCodes = [...new Set(scopeActivities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
   if (!actCodes.length) return [];
 
   const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
@@ -1345,14 +1356,20 @@ async function autoDetectScopeVillas() {
     const billed = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id`);
     billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
   } catch(e) {}
-  if (billedIds.length) return await _villasByIds(billedIds);
 
   const siblings = allScopes.filter(s =>
     (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
     (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
   ).length;
-  if (siblings > 1) return [];
-  return await _detectWirVillas();
+
+  // Multi-scope sub: WIR can't distinguish scopes → billing-only once billed, else empty
+  if (siblings > 1) return billedIds.length ? await _villasByIds(billedIds) : [];
+
+  // Single-scope sub: union of billed villas + WIR-detected so new approvals always appear
+  const wirVillas = await _detectWirVillas();
+  if (!billedIds.length) return wirVillas;
+  const allIds = [...new Set([...billedIds, ...wirVillas.map(v => v.villa_id)])];
+  return await _villasByIds(allIds);
 }
 
 // Map a raw villa_type string from the villas table to a configured qs_scope_villa_types label
@@ -1447,23 +1464,36 @@ async function loadPCData() {
   }
 
   const villaIdsStr = villaIds.join(',');
-  const actCodesStr = actCodes.map(c => `"${c}"`).join(',');
+  // For split activities use base_code for the WIR query — raw_activity_code in WIR data
+  // only has the base code (e.g. "3190"), never the synthetic split code ("3190-GF").
+  const baseCodes = [...new Set(scopeActivities.map(a => a.base_code || a.activity_code))];
+  const baseCodesStr = baseCodes.map(c => `"${c}"`).join(',');
+  // Map base_code → [activity_codes] so each WIR row fans out to all its split parts
+  const baseToSplits = {};
+  scopeActivities.forEach(a => {
+    const base = a.base_code || a.activity_code;
+    if (!baseToSplits[base]) baseToSplits[base] = [];
+    baseToSplits[base].push(a.activity_code);
+  });
 
   const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
-    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${actCodesStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
+    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
     fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason`),
     fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id`),
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
   ]);
 
-  // Index WIR data
+  // Index WIR data — fan each base-code WIR row out to all its split activity_codes
   wirData = {};
   wirRows.forEach(w => {
-    const key = w.villa_id + ':' + w.raw_activity_code;
-    const existing = wirData[key];
-    if (!existing || (w.normalised_status === 'approved')) {
-      wirData[key] = { approved: w.normalised_status === 'approved', response_date: w.response_date };
-    }
+    const splits = baseToSplits[w.raw_activity_code] || [w.raw_activity_code];
+    splits.forEach(actCode => {
+      const key = w.villa_id + ':' + actCode;
+      const existing = wirData[key];
+      if (!existing || w.normalised_status === 'approved') {
+        wirData[key] = { approved: w.normalised_status === 'approved', response_date: w.response_date };
+      }
+    });
   });
 
   // Index overrides
@@ -1587,11 +1617,11 @@ function ctxMatchVillaType(rawType, villaTypes) {
 async function ctxDetectVillas(scope, villaTypes, activities) {
   const subName = scope.subcontractor_name;
   if (!subName) return [];
-  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias`);
+  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias,canonical_name`);
   let nameFilter = aliases.length
-    ? `raw_subcontractor=in.(${[...new Set([subName, ...aliases.map(a=>a.alias)])].map(n=>`"${n}"`).join(',')})`
+    ? `raw_subcontractor=in.(${[...new Set([subName, ...aliases.map(a=>a.alias), ...aliases.map(a=>a.canonical_name).filter(Boolean)])].map(n=>`"${n}"`).join(',')})`
     : `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
-  const actCodes = activities.map(a => a.activity_code).filter(Boolean);
+  const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
   if (!actCodes.length) return [];
   const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
   const wirRows = await fa(`v_latest_wir_status?${nameFilter}${actFilter}&select=villa_id`);
@@ -1723,10 +1753,11 @@ function renderProgressSheet() {
     scopeActivityGroups.forEach(grp => {
       const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
       grpActs.forEach(act => {
-        const { isCompleteToDate, wasBilledPrev, source } = getActivityStatus(sv.villa_id, act.activity_code);
+        const { isCompleteToDate, wasBilledPrev, isBilledNow, source } = getActivityStatus(sv.villa_id, act.activity_code);
         let cls = 'act-cell';
         let label = '—';
         if (wasBilledPrev) { cls += ' prev-billed readonly'; label = '✓ₚ'; }
+        else if (isBilledNow) { cls += ' approved readonly'; label = '✓ₗ'; }
         else if (source === 'override-on') { cls += ' override-on'; label = '✓ᵒ'; }
         else if (source === 'override-off') { cls += ' override-off'; label = '✗ᵒ'; }
         else if (source === 'approved') { cls += ' approved'; label = '✓'; }
@@ -2272,15 +2303,6 @@ function renderPaymentSummarySingle() {
     </div>
   `;
 
-  // Wire up retention toggle
-  const retToggle = document.getElementById('fin-ret-toggle');
-  if (retToggle) {
-    retToggle.addEventListener('change', () => {
-      const retInput = document.getElementById('fin-ret');
-      if (retInput) retInput.disabled = !retToggle.checked;
-      saveFinancials();
-    });
-  }
 }
 
 // ── Combined certificate for a PC that spans multiple scopes ──
@@ -2434,44 +2456,50 @@ function renderPaymentSummaryMulti() {
     </div>
   `;
 
-  const retToggle = document.getElementById('fin-ret-toggle');
-  if (retToggle) retToggle.addEventListener('change', () => { const ri=document.getElementById('fin-ret'); if(ri) ri.disabled=!retToggle.checked; saveFinancials(); });
 }
 
 async function saveFinancials() {
   if (!selectedPC) return;
+  // Sync the retention input's disabled state immediately so UI feels responsive
+  const retToggle = document.getElementById('fin-ret-toggle');
+  const retInput  = document.getElementById('fin-ret');
+  if (retToggle && retInput) retInput.disabled = !retToggle.checked;
+
   const adv  = (isMultiPC && pcSections.length>1)
     ? (parseFloat(lastAdvAed)||0)
     : (parseFloat(document.getElementById('fin-adv')?.value)||0);
   const ded  = parseFloat(document.getElementById('fin-ded')?.value)||0;
-  const retT = document.getElementById('fin-ret-toggle')?.checked||false;
+  const retT = retToggle?.checked || false;
   const vatPct = parseFloat(document.getElementById('fin-vat')?.value)||5;
   // Retention is entered as a PERCENTAGE; blank = use the scope's default rate.
-  const retRaw = document.getElementById('fin-ret')?.value;
+  const retRaw = retInput?.value;
   const scopeRetPct = parseFloat(selectedScope.retention_pct)||0;
   let retOverride = null, effRetPct = scopeRetPct;
-  if (retRaw!=='' && retRaw!=null) { effRetPct = (parseFloat(retRaw)||0)/100; retOverride = effRetPct; }
+  if (retRaw !== '' && retRaw != null) { effRetPct = (parseFloat(retRaw)||0)/100; retOverride = effRetPct; }
   const grossNow = parseFloat(lastGrossAed)||0;
   const ret = retT ? Math.max(0, (grossNow - adv) * effRetPct) : 0;
-  await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
-    advance_recovery_aed: adv, deduction_aed: ded,
-    retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
-  });
-  audit('qs_payment_certificates', 'UPDATE_FINANCIALS', selectedPC.id, {
-    scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number,
-    advance_recovery_aed: adv, deduction_aed: ded,
-    retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
-  });
-  selectedPC.advance_recovery_aed = adv;
-  selectedPC.deduction_aed = ded;
-  selectedPC.retention_applicable = retT;
-  selectedPC.retention_pct_override = retOverride;
-  selectedPC.retention_aed = ret;
-  selectedPC.vat_rate = vatPct/100;
-  // Update allScopePCs cache too
-  const idx = allScopePCs.findIndex(p => p.id === selectedPC.id);
-  if (idx >= 0) Object.assign(allScopePCs[idx], selectedPC);
-  renderPaymentSummary();
+  try {
+    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
+      advance_recovery_aed: adv, deduction_aed: ded,
+      retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
+    });
+    audit('qs_payment_certificates', 'UPDATE_FINANCIALS', selectedPC.id, {
+      scope: selectedScope.subcontractor_name, pc_number: selectedPC.pc_number,
+      advance_recovery_aed: adv, deduction_aed: ded,
+      retention_applicable: retT, retention_pct_override: retOverride, retention_aed: ret, vat_rate: vatPct/100
+    });
+    selectedPC.advance_recovery_aed = adv;
+    selectedPC.deduction_aed = ded;
+    selectedPC.retention_applicable = retT;
+    selectedPC.retention_pct_override = retOverride;
+    selectedPC.retention_aed = ret;
+    selectedPC.vat_rate = vatPct/100;
+    const idx = allScopePCs.findIndex(p => p.id === selectedPC.id);
+    if (idx >= 0) Object.assign(allScopePCs[idx], selectedPC);
+    renderPaymentSummary();
+  } catch(e) {
+    alert('Failed to save financials: ' + e.message + '\nCheck your connection and try again.');
+  }
 }
 
 function resetAdvAuto() {
@@ -2735,20 +2763,28 @@ async function confirmReopen() {
 // NEW SCOPE
 // ══════════════════════════════════════════════
 async function _loadSubsList() {
-  // Always reload fresh so newly added entries appear immediately
-  subcontractorsList = await fa('subcontractors?select=id,name&order=name.asc');
-  if (!subcontractorsList.length) {
-    // Fallback: derive distinct names from WIR data when table is unpopulated
-    const wirRows = await fa('v_latest_wir_status?select=raw_subcontractor&raw_subcontractor=not.is.null');
+  // Load from the pre-deduped subcontractors table (58 entries), then resolve each name
+  // through a case-insensitive alias map so aliases collapse to their canonical names.
+  try {
+    const [aliasRows, subRows] = await Promise.all([
+      fa('subcontractor_aliases?select=alias,canonical_name'),
+      fa('subcontractors?select=name&order=name.asc')
+    ]);
+    // Case-insensitive alias map: alias.toLowerCase() → canonical display name
+    const aliasMap = {};
+    aliasRows.forEach(r => { if (r.alias && r.canonical_name) aliasMap[r.alias.trim().toLowerCase()] = r.canonical_name.trim(); });
+    const canon = s => { const t = String(s || '').trim(); return aliasMap[t.toLowerCase()] || t; };
     const seen = new Set();
     const names = [];
-    wirRows.forEach(r => {
-      const n = (r.raw_subcontractor || '').trim();
-      const key = n.toLowerCase();
-      if (n && !seen.has(key)) { seen.add(key); names.push(n); }
-    });
+    const addName = n => { n = String(n || '').trim(); if (n && !seen.has(n.toLowerCase())) { seen.add(n.toLowerCase()); names.push(n); } };
+    subRows.forEach(r => addName(canon(r.name)));
+    // Also add canonical names from the alias table — user-chosen canonicals may not exist
+    // in the subcontractors table (e.g. chosen as a display name, never a raw WIR entry).
+    aliasRows.forEach(r => { if (r.canonical_name) addName(r.canonical_name.trim()); });
     names.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
     subcontractorsList = names.map((n, i) => ({ id: -(i + 1), name: n }));
+  } catch(e) {
+    subcontractorsList = [];
   }
 }
 
@@ -3011,9 +3047,12 @@ async function submitNewPC() {
   const msg   = document.getElementById('npc-msg');
   if (!num || !date || !label) { showMsg(msg,'err','PC number, date and label are required.'); return; }
 
+  // Inherit retention from scope defaults so new PCs start with the right setting
+  const scopeRetPct = parseFloat(selectedScope.retention_pct) || 0;
   const body = { scope_id: selectedScope.id, pc_number: num, period_date: date, period_label: label,
     notes: document.getElementById('npc-notes').value.trim(),
-    created_by: currentUser?.full_name || '', status:'draft' };
+    created_by: currentUser?.full_name || '', status:'draft',
+    retention_applicable: scopeRetPct > 0 };
   const res = await fp('qs_payment_certificates', body);
   if (!res?.id) { showMsg(msg,'err','Save failed — PC number may already exist.'); return; }
 
@@ -3389,7 +3428,7 @@ async function submitHistPC() {
       status: 'locked'
     };
     const res = await fp('qs_payment_certificates', body);
-    if (!res?.id) throw new Error('Failed to create PC — number may already exist.');
+    if (!res?.id) throw new Error('PC was not created — PC number may already exist for this scope.');
 
     // Link the scope (historical PCs are single-scope)
     await fp('qs_pc_scopes', [{ pc_id: res.id, scope_id: selectedScope.id, sort_order: 0 }]);
@@ -3418,11 +3457,16 @@ async function submitHistPC() {
       });
     });
     if (billedItems.length) {
-      await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
+      const brRes = await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
         method: 'POST',
         headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
         body: JSON.stringify(billedItems)
       });
+      if (!brRes.ok) {
+        let errMsg = `HTTP ${brRes.status}`;
+        try { const ed = await brRes.json(); if (ed && ed.message) errMsg = `[${brRes.status}] ${ed.message}`; } catch(_){}
+        throw new Error(`PC created (id ${res.id}) but billed records failed to save: ${errMsg}. Delete this PC and try again.`);
+      }
     }
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
@@ -3742,7 +3786,7 @@ async function saveConfigScope() {
     }
     else if (cfgTab === 'sigs') {
       // Upsert global sigs
-      await fdel('qs_signatories');
+      await fdel('qs_signatories?sort_order=gte.0');
       if (globalSigs.length) {
         const rows = globalSigs.map((s,i) => ({ position_title:s.position_title, full_name:s.full_name, company:s.company||'RA', sort_order:i, is_active:true }));
         await fp('qs_signatories', rows);

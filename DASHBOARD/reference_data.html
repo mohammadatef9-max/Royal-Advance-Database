@@ -472,38 +472,37 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
   </div>
 
   <!-- ══ SUB-CONTRACTORS TAB ══ -->
-  <div class="tab-content" id="content-subs" style="flex-direction:column;overflow-y:auto;min-height:0">
-    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+  <div class="tab-content" id="content-subs" style="flex-direction:column;min-height:0">
+    <!-- Header -->
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
       <div style="font-size:13px;font-weight:600;color:var(--text)">Sub-Contractor Aliases</div>
-      <div style="font-size:11px;color:var(--text-dim)">Map misspelled or alternate names to a canonical name</div>
+      <div style="font-size:11px;color:var(--text-dim)">Merge duplicate spellings into a single canonical name. Raw data stays untouched.</div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <input id="subs-search" type="text" placeholder="Search…" oninput="renderSubsTable()"
-          style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:180px">
-        <button class="btn btn-primary" onclick="openAddSubModal()">+ Add Alias</button>
+        <input id="subs-search" type="text" placeholder="🔍 Search…" oninput="buildSubsList()"
+          style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px;width:180px">
+        <button class="btn btn-ghost" onclick="loadSubsTab()">↻ Refresh</button>
       </div>
     </div>
-    <!-- Merge bar -->
-    <div id="subs-merge-bar" style="display:none;padding:10px 18px;border-bottom:1px solid var(--border);background:var(--accent-soft);flex-shrink:0;align-items:center;gap:10px">
-      <span style="font-size:12px;font-weight:600;color:var(--accent-text)"><span id="subs-sel-count">0</span> selected</span>
-      <input id="subs-canon-input" type="text" placeholder="Canonical name (merge target)"
-        style="flex:1;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px">
-      <button class="btn btn-primary" onclick="mergeSubsSelected()">Merge Selected</button>
-      <button class="btn btn-ghost" onclick="clearSubsSel()">Clear</button>
+    <div style="padding:5px 18px;font-size:11px;color:var(--text-dim);flex-shrink:0;border-bottom:1px solid var(--border)">
+      ☐ Tick the duplicates, pick a canonical name below, then click Merge.
+    </div>
+    <!-- Scrollable list of all raw subcontractors -->
+    <div id="subs-list" style="flex:1;overflow-y:auto;min-height:0"></div>
+    <!-- Merge bar (shows when items selected) -->
+    <div id="subs-merge-bar" style="display:none;padding:10px 18px;border-top:1px solid var(--accent);background:var(--accent-soft);flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:600;color:var(--accent-text)"><span id="subs-sel-count">0</span> selected — merge into:</span>
+      <input id="subs-canon-input" type="text" placeholder="Canonical name" list="subs-canon-datalist"
+        style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px">
+      <datalist id="subs-canon-datalist"></datalist>
+      <button class="btn btn-primary" onclick="mergeSubs()">🔗 Merge</button>
+      <button class="btn btn-ghost" onclick="clearSubsSel()">✕ Clear</button>
       <span id="subs-merge-msg" style="font-size:11px"></span>
     </div>
-    <table style="border-collapse:collapse;width:100%;font-size:12px">
-        <thead>
-          <tr>
-            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:36px">
-              <input type="checkbox" id="subs-chk-all" onchange="toggleAllSubs(this)" style="accent-color:var(--accent)">
-            </th>
-            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Raw / Alias Name</th>
-            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Canonical Name</th>
-            <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:80px">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="subs-tbody"></tbody>
-      </table>
+    <!-- Current aliases list -->
+    <div style="padding:10px 18px;border-top:1px solid var(--border);flex-shrink:0">
+      <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Current aliases (<span id="subs-alias-count">0</span>)</div>
+      <div id="subs-aliases-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);font-size:11px"></div>
+    </div>
   </div>
 
   <!-- ══ WIR CODE ALIASES TAB ══ -->
@@ -1641,106 +1640,128 @@ async function deleteAllRequests(){
 }
 
 // ══ SUB-CONTRACTORS TAB ══
-var subAliasData = []; // [{id, alias, canonical_name}]
-var subsSel = new Set();
+// ── Sub-Contractors tab — cluster-tracker style ──
+var subAliasExact = {};  // alias (exact) → canonical_name
+var subAliasMap   = {};  // alias (lowercased) → canonical_name
+var subRawNames   = [];  // all raw names from subcontractors table
+var subsSel       = new Set();
 
-async function loadSubsTab(){
-  const rows = await sbFetch('subcontractor_aliases?select=id,alias,canonical_name&order=canonical_name,alias');
-  subAliasData = Array.isArray(rows) ? rows : [];
-  renderSubsTable();
+async function loadSubsTab() {
+  const list = document.getElementById('subs-list');
+  if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</div>';
+  const [aliasRows, subRows] = await Promise.all([
+    sbFetch('subcontractor_aliases?select=alias,canonical_name&order=alias'),
+    sbFetch('subcontractors?select=name&order=name.asc')
+  ]);
+  subAliasExact = {}; subAliasMap = {};
+  (Array.isArray(aliasRows) ? aliasRows : []).forEach(r => {
+    if (r.alias && r.canonical_name) {
+      subAliasExact[r.alias.trim()] = r.canonical_name.trim();
+      subAliasMap[r.alias.trim().toLowerCase()] = r.canonical_name.trim();
+    }
+  });
+  // All raw names from subcontractors table; also add alias keys AND canonical values so
+  // user-chosen canonical names (not in the raw WIR data) still appear in the list.
+  const nameSet = new Set();
+  (Array.isArray(subRows) ? subRows : []).forEach(r => { if (r.name) nameSet.add(r.name.trim()); });
+  Object.keys(subAliasExact).forEach(a => nameSet.add(a));
+  Object.values(subAliasExact).forEach(c => nameSet.add(c));
+  subRawNames = [...nameSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  subsSel = new Set();
+  buildSubsList();
 }
 
-function renderSubsTable(){
-  const q = (document.getElementById('subs-search')?.value||'').toLowerCase();
-  const filtered = subAliasData.filter(r =>
-    !q || r.alias.toLowerCase().includes(q) || r.canonical_name.toLowerCase().includes(q)
+function buildSubsList() {
+  const q = (document.getElementById('subs-search')?.value || '').toLowerCase();
+  const rows = subRawNames.filter(s =>
+    !q || s.toLowerCase().includes(q) || (subAliasExact[s] || '').toLowerCase().includes(q)
   );
-  const tb = document.getElementById('subs-tbody');
-  if(!tb) return;
-  tb.innerHTML = filtered.map(r => `
-    <tr>
-      <td style="border:1px solid var(--border-subtle);padding:7px 12px;text-align:center">
-        <input type="checkbox" ${subsSel.has(r.alias)?'checked':''} onchange="toggleSubsSel('${esc2(r.alias)}',this)"
-          style="accent-color:var(--accent)">
-      </td>
-      <td style="border:1px solid var(--border-subtle);padding:7px 12px;color:var(--text);font-family:var(--mono,monospace);font-size:11px">${esc2(r.alias)}</td>
-      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
-        <span style="background:var(--accent-soft);color:var(--accent-text);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">${esc2(r.canonical_name)}</span>
-      </td>
-      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
-        <button onclick="deleteSubAlias(${r.id},'${esc2(r.alias)}')"
-          style="padding:3px 8px;border:1px solid var(--rejected-bd,#6b2530);border-radius:5px;background:var(--rejected-bg,#4a1820);color:var(--rejected,#ff8a99);font-size:10px;cursor:pointer">Delete</button>
-      </td>
-    </tr>`).join('') || `<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text-dim)">No aliases found</td></tr>`;
+  const list = document.getElementById('subs-list');
+  if (!list) return;
+  if (!rows.length) {
+    list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">No sub-contractors found.</div>';
+  } else {
+    list.innerHTML = rows.map(raw => {
+      const alias = subAliasExact[raw];
+      const sel   = subsSel.has(raw);
+      const safe  = raw.replace(/\\/g,'\\\\').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+      return `<div onclick="togSub('${safe}')"
+        style="display:flex;align-items:center;gap:10px;padding:7px 16px;cursor:pointer;border-bottom:1px solid var(--border);background:${sel?'var(--accent-soft)':''};transition:background .1s">
+        <div style="width:18px;height:18px;border:2px solid ${sel?'var(--accent)':'var(--border-strong)'};border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--accent);font-size:11px;font-weight:700">${sel?'✓':''}</div>
+        <div style="flex:1;font-size:12px;color:var(--text);font-family:var(--mono,monospace)">${esc2(raw)}</div>
+        ${alias && alias !== raw ? `<span style="font-size:11px;color:var(--accent-text);background:var(--accent-soft);padding:2px 8px;border-radius:4px;white-space:nowrap">→ ${esc2(alias)}</span>` : ''}
+      </div>`;
+    }).join('');
+  }
+  // Populate canonical datalist
+  const canonicals = new Set(Object.values(subAliasExact));
+  subRawNames.forEach(s => { if (!subAliasExact[s]) canonicals.add(s); });
+  const dl = document.getElementById('subs-canon-datalist');
+  if (dl) dl.innerHTML = [...canonicals].sort().map(c => `<option value="${esc2(c)}">`).join('');
   updateSubsMergeBar();
-}
-
-function toggleSubsSel(alias, chk){
-  if(chk.checked) subsSel.add(alias); else subsSel.delete(alias);
-  updateSubsMergeBar();
-}
-function toggleAllSubs(chk){
-  const q=(document.getElementById('subs-search')?.value||'').toLowerCase();
-  const filtered=subAliasData.filter(r=>!q||r.alias.toLowerCase().includes(q)||r.canonical_name.toLowerCase().includes(q));
-  if(chk.checked) filtered.forEach(r=>subsSel.add(r.alias));
-  else subsSel.clear();
-  renderSubsTable();
-}
-function clearSubsSel(){subsSel.clear();document.getElementById('subs-canon-input').value='';document.getElementById('subs-merge-msg').textContent='';renderSubsTable();}
-function updateSubsMergeBar(){
-  const bar=document.getElementById('subs-merge-bar');
-  if(bar) bar.style.display=subsSel.size>0?'flex':'none';
-  const cnt=document.getElementById('subs-sel-count');
-  if(cnt) cnt.textContent=subsSel.size;
-  if(subsSel.size>0&&document.getElementById('subs-canon-input')&&!document.getElementById('subs-canon-input').value){
-    document.getElementById('subs-canon-input').value=[...subsSel].sort()[0];
+  // Aliases list below
+  const al = Object.entries(subAliasExact).sort((a,b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]));
+  const alEl = document.getElementById('subs-alias-count');
+  if (alEl) alEl.textContent = al.length;
+  const alList = document.getElementById('subs-aliases-list');
+  if (alList) {
+    alList.innerHTML = al.length ? al.map(([from, to]) => {
+      const safe = from.replace(/\\/g,'\\\\').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
+      return `<div style="display:flex;align-items:center;gap:8px;padding:5px 12px;border-bottom:1px solid var(--border)">
+        <span style="flex:1;font-family:var(--mono,monospace);color:var(--text);font-size:11px">${esc2(from)}</span>
+        <span style="color:var(--text-dim)">→</span>
+        <span style="color:var(--accent-text);font-weight:600;font-size:11px">${esc2(to)}</span>
+        <button onclick="deleteSubAlias('${safe}')" style="padding:2px 7px;border:1px solid var(--rejected-bd,#6b2530);border-radius:4px;background:var(--rejected-bg,#4a1820);color:var(--rejected,#ff8a99);font-size:10px;cursor:pointer;flex-shrink:0">🗑</button>
+      </div>`;
+    }).join('') : '<div style="padding:12px 16px;color:var(--text-dim)">No aliases yet.</div>';
   }
 }
 
-function openAddSubModal(){
-  const alias=prompt('Raw / alias name (as it appears in WIR data):');
-  if(!alias?.trim()) return;
-  const canon=prompt('Canonical name to map it to:');
-  if(!canon?.trim()) return;
-  saveSubAlias(alias.trim(), canon.trim());
+function togSub(raw) {
+  if (subsSel.has(raw)) subsSel.delete(raw); else subsSel.add(raw);
+  buildSubsList();
 }
-
-async function saveSubAlias(alias, canon){
-  const res=await fetch(`${SB}/rest/v1/subcontractor_aliases?on_conflict=alias`,{
-    method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=minimal'},
-    body:JSON.stringify({alias,canonical_name:canon})
+function updateSubsMergeBar() {
+  const bar = document.getElementById('subs-merge-bar');
+  if (bar) bar.style.display = subsSel.size > 0 ? 'flex' : 'none';
+  const cnt = document.getElementById('subs-sel-count');
+  if (cnt) cnt.textContent = subsSel.size;
+  const inp = document.getElementById('subs-canon-input');
+  if (inp && !inp.value && subsSel.size > 0) inp.value = [...subsSel].sort()[0];
+}
+function clearSubsSel() {
+  subsSel.clear();
+  const inp = document.getElementById('subs-canon-input'); if (inp) inp.value = '';
+  const msg = document.getElementById('subs-merge-msg');  if (msg) msg.textContent = '';
+  buildSubsList();
+}
+async function mergeSubs() {
+  const canon = (document.getElementById('subs-canon-input')?.value || '').trim();
+  const msg   = document.getElementById('subs-merge-msg');
+  if (!canon) { if (msg) msg.innerHTML = '<span style="color:var(--rejected)">Enter a canonical name.</span>'; return; }
+  const rows = [...subsSel].filter(raw => raw !== canon).map(alias => ({ alias, canonical_name: canon }));
+  if (!rows.length) { if (msg) msg.innerHTML = '<span style="color:var(--rejected)">Nothing to merge.</span>'; return; }
+  if (msg) msg.innerHTML = '<span style="color:var(--accent-text)">Saving…</span>';
+  const res = await fetch(`${SB}/rest/v1/subcontractor_aliases?on_conflict=alias`, {
+    method: 'POST',
+    headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify(rows)
   });
-  if(!res.ok){toast('Error: '+(await res.text()),'err');return;}
-  toast('Alias saved','ok');
-  loadSubsTab();
+  if (!res.ok) { if (msg) msg.innerHTML = '<span style="color:var(--rejected)">Error: ' + (await res.text()) + '</span>'; return; }
+  if (msg) msg.innerHTML = `<span style="color:var(--approved)">✅ Merged ${rows.length} alias${rows.length!==1?'es':''} → "${canon}"</span>`;
+  subsSel.clear(); if (document.getElementById('subs-canon-input')) document.getElementById('subs-canon-input').value = '';
+  await loadSubsTab();
+  setTimeout(() => { const m=document.getElementById('subs-merge-msg'); if(m)m.textContent=''; }, 3000);
 }
-
-async function mergeSubsSelected(){
-  const canon=(document.getElementById('subs-canon-input').value||'').trim();
-  const msg=document.getElementById('subs-merge-msg');
-  if(!canon){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Enter a canonical name</span>';return;}
-  const rows=[...subsSel].filter(a=>a!==canon).map(alias=>({alias,canonical_name:canon}));
-  // Also save the canonical as its own entry pointing to itself (so it shows in the list)
-  if(rows.length===0){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Nothing to merge</span>';return;}
-  if(msg)msg.innerHTML='<span style="color:var(--accent-text)">Saving…</span>';
-  const res=await fetch(`${SB}/rest/v1/subcontractor_aliases?on_conflict=alias`,{
-    method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=minimal'},
-    body:JSON.stringify(rows)
+async function deleteSubAlias(alias) {
+  if (!confirm('Remove alias for "' + alias + '"?\n\nIt will appear under its original name again.')) return;
+  const res = await fetch(`${SB}/rest/v1/subcontractor_aliases?alias=eq.${encodeURIComponent(alias)}`, {
+    method: 'DELETE', headers: getH()
   });
-  if(!res.ok){if(msg)msg.innerHTML='<span style="color:var(--rejected)">Error: '+(await res.text())+'</span>';return;}
-  if(msg)msg.innerHTML='<span style="color:var(--approved)">✅ Merged '+rows.length+' aliases → "'+canon+'"</span>';
-  subsSel.clear();document.getElementById('subs-canon-input').value='';
-  loadSubsTab();
-  setTimeout(()=>{if(msg)msg.textContent='';},3000);
-}
-
-async function deleteSubAlias(id, alias){
-  if(!confirm('Remove alias for "'+alias+'"?')) return;
-  await fetch(SB+'/rest/v1/subcontractor_aliases?id=eq.'+id,{method:'DELETE',headers:getH()});
-  subAliasData=subAliasData.filter(r=>r.id!==id);
-  subsSel.delete(alias);
-  renderSubsTable();
-  toast('Alias removed','ok');
+  if (!res.ok) { toast('Delete failed', 'error'); return; }
+  delete subAliasExact[alias]; delete subAliasMap[alias.toLowerCase()];
+  buildSubsList();
+  toast('Alias removed', 'ok');
 }
 
 
