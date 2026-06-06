@@ -535,6 +535,10 @@ textarea{resize:vertical;min-height:60px}
         </div>
         <div class="form-hint" id="ns-sub-hint">Select from list or type a new name</div>
       </div>
+      <div class="form-row">
+        <label>Display Name <span style="font-weight:400;color:var(--tx3);font-size:11px">(shown on certificate — leave blank to use Subcontractor name)</span></label>
+        <input id="ns-display-name" type="text" placeholder="e.g. Al Afkar Engineering & Contracting LLC">
+      </div>
       <div class="form-row"><label>Project</label><input id="ns-project" type="text" value="RA4104- BAGHAIYLUM VILLAS DEVELOPMENT"></div>
       <div class="form-row"><label>Scope of Works *</label><textarea id="ns-scope" rows="2" placeholder="INSTALLATION OF HIGH-LEVEL WATER SUPPLY…"></textarea></div>
       <div class="form-row-2">
@@ -998,6 +1002,8 @@ function fmtQty(n) {
   return Number(n).toFixed(2);
 }
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// Returns the display name for a scope (full company name if set, else the subcontractor lookup name)
+function scopeDisplayName(scope) { return (scope && scope.display_name) ? scope.display_name : (scope && scope.subcontractor_name) || ''; }
 
 // ══════════════════════════════════════════════
 // PERMISSION CHECK
@@ -1029,7 +1035,7 @@ async function init() {
 // ══════════════════════════════════════════════
 async function loadScopes() {
   const [scopes, pcs, vos, pcScopes] = await Promise.all([
-    fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc'),
+    fa('qs_scopes?select=id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc'),
     fa('qs_payment_certificates?select=id,scope_id,pc_number,period_label,status,gross_aed,retention_aed,advance_recovery_aed&order=pc_number.desc'),
     fa('qs_variation_orders?select=id,scope_id,value_aed,status&order=created_at.asc'),
     fa('qs_pc_scopes?select=pc_id,scope_id,gross_aed,retention_aed,advance_recovery_aed')
@@ -1483,15 +1489,21 @@ async function loadPCData() {
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
   ]);
 
-  // Index WIR data — fan each base-code WIR row out to all its split activity_codes
+  // Index WIR data — fan each base-code WIR row out to all its split activity_codes.
+  // Period-date gate: a WIR only counts as approved if its response_date falls on or
+  // before the PC's period_date. If the PC has no period_date, no date restriction applies.
+  const periodDate = selectedPC.period_date || null; // "YYYY-MM-DD" or null
   wirData = {};
   wirRows.forEach(w => {
     const splits = baseToSplits[w.raw_activity_code] || [w.raw_activity_code];
     splits.forEach(actCode => {
       const key = w.villa_id + ':' + actCode;
       const existing = wirData[key];
-      if (!existing || w.normalised_status === 'approved') {
-        wirData[key] = { approved: w.normalised_status === 'approved', response_date: w.response_date };
+      // Only count as approved if: status is approved AND (no period gate OR response_date ≤ period)
+      const withinPeriod = !periodDate || (w.response_date && w.response_date <= periodDate);
+      const approved = w.normalised_status === 'approved' && withinPeriod;
+      if (!existing || approved) {
+        wirData[key] = { approved, response_date: w.response_date };
       }
     });
   });
@@ -1834,7 +1846,7 @@ function _buildPrintHeader() {
       </tr>
       <tr>
         <td ${tdL}>SUBCONTRACTOR:</td>
-        <td ${tdV} colspan="3">${escH(selectedScope.subcontractor_name)}</td>
+        <td ${tdV} colspan="3">${escH(scopeDisplayName(selectedScope))}</td>
         <td ${tdL} style="padding:3px 10px 3px 12px;color:#555;font-weight:700;font-size:8pt;white-space:nowrap;vertical-align:middle">PC NO:</td>
         <td ${tdV} style="padding:3px 16px 3px 0;font-size:8.5pt;color:#000;vertical-align:middle">${selectedPC.pc_number}</td>
         <td colspan="2"></td>
@@ -2082,7 +2094,7 @@ function renderPaymentSummarySingle() {
         <!-- Project details -->
         <div style="flex:1;min-width:200px">
           <div class="psum-hdr-row"><span class="psum-hdr-label">PROJECT:</span><span class="psum-hdr-val">${escH(selectedScope.project||'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT')}</span></div>
-          <div class="psum-hdr-row"><span class="psum-hdr-label">SUBCONTRACTOR:</span><span class="psum-hdr-val">${escH(selectedScope.subcontractor_name)}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">SUBCONTRACTOR:</span><span class="psum-hdr-val">${escH(scopeDisplayName(selectedScope))}</span></div>
           <div class="psum-hdr-row"><span class="psum-hdr-label">SCOPE OF WORKS:</span><span class="psum-hdr-val">${escH(selectedScope.scope_title||'')}</span></div>
           <div class="psum-hdr-row"><span class="psum-hdr-label">SCA REF #:</span><span class="psum-hdr-val">${escH(selectedScope.sca_ref||'—')}</span></div>
         </div>
@@ -2795,6 +2807,7 @@ async function openNewScope(prefillSub) {
   document.getElementById('ns-submit-btn').textContent = 'Create Scope';
   document.getElementById('ns-sub-search').value = prefillSub || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-display-name').value = '';
   document.getElementById('ns-scope').value = '';
   document.getElementById('ns-sca').value = '';
   document.getElementById('ns-package').value = '';
@@ -2818,6 +2831,7 @@ async function openEditScope() {
   document.getElementById('ns-submit-btn').textContent = 'Save Changes';
   document.getElementById('ns-sub-search').value = selectedScope.subcontractor_name || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-display-name').value = selectedScope.display_name || '';
   document.getElementById('ns-scope').value = selectedScope.scope_title || '';
   document.getElementById('ns-sca').value = selectedScope.sca_ref || '';
   document.getElementById('ns-package').value = selectedScope.package || '';
@@ -2860,8 +2874,10 @@ async function submitScope() {
   const msg = document.getElementById('ns-msg');
   if (!name) { showMsg(msg,'err','Subcontractor name is required.'); return; }
   if (!scope) { showMsg(msg,'err','Scope of Works is required.'); return; }
+  const displayName = (document.getElementById('ns-display-name').value || '').trim();
   const body = {
     subcontractor_name: name,
+    display_name: displayName || null,
     project: (document.getElementById('ns-project').value || '').trim() || 'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT',
     scope_title: scope,
     sca_ref: (document.getElementById('ns-sca').value || '').trim(),
@@ -3811,7 +3827,7 @@ async function saveConfigScope() {
       // Update local scope data
       Object.assign(selectedScope, body);
       // Refresh loadScopes so sidebar scope cards reflect new data
-      const freshScopes = await fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc');
+      const freshScopes = await fa('qs_scopes?select=id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc');
       freshScopes.forEach(s => {
         const existing = allScopes.find(e => e.id === s.id);
         if (existing) Object.assign(existing, s);
