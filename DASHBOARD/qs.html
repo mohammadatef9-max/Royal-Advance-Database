@@ -420,6 +420,28 @@ textarea{resize:vertical;min-height:60px}
 .dash-pc-chips{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap;align-items:center}
 .dash-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;gap:10px;color:var(--tx3);font-size:12px}
 
+/* ── SCOPE TEMPLATES ── */
+.tpl-section{border-top:1px solid var(--bdr);padding:8px 6px 4px}
+.tpl-section-hdr{display:flex;align-items:center;gap:6px;padding:4px 6px;cursor:pointer;border-radius:6px;user-select:none}
+.tpl-section-hdr:hover{background:var(--bg3)}
+.tpl-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);flex:1}
+.tpl-caret{font-size:9px;color:var(--tx3);transition:transform .15s}
+.tpl-caret.open{transform:rotate(90deg)}
+.tpl-list{padding:2px 0 4px}
+.tpl-item{display:flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;border-radius:7px;margin-bottom:2px;border:1px solid transparent;cursor:default}
+.tpl-item:hover{background:var(--bg3);border-color:var(--bdr)}
+.tpl-name{flex:1;font-size:12px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpl-count{font-size:10px;color:var(--tx3);white-space:nowrap}
+.tpl-del{background:none;border:none;cursor:pointer;color:var(--tx3);font-size:13px;padding:2px 4px;border-radius:4px;line-height:1}
+.tpl-del:hover{color:#ef4444;background:rgba(239,68,68,.1)}
+.tpl-add-btn{width:100%;margin-top:4px;padding:5px;background:transparent;border:1px dashed var(--bdr2);border-radius:6px;color:var(--tx3);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s}
+.tpl-add-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* template toolbar in Activities tab */
+.tpl-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:7px;margin-bottom:10px;flex-wrap:wrap}
+.tpl-bar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--tx3);white-space:nowrap}
+.tpl-bar select{flex:1;min-width:140px;padding:5px 8px;font-size:12px}
+.tpl-bar .btn{padding:5px 12px;font-size:11px}
+
 /* scrollbars */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -437,6 +459,18 @@ textarea{resize:vertical;min-height:60px}
     <button class="lp-add" id="btn-new-scope" onclick="openNewScope()" style="display:none">+ Add Subcontractor</button>
   </div>
   <div class="lp-list" id="scope-list"><div class="loading-row"><span class="spin"></span></div></div>
+  <!-- Template section — admin only, rendered by renderTemplateList() -->
+  <div id="tpl-section" class="tpl-section" style="display:none">
+    <div class="tpl-section-hdr" onclick="toggleTplSection()">
+      <span style="font-size:13px">⭐</span>
+      <span class="tpl-section-label">Scope Templates</span>
+      <span class="tpl-caret" id="tpl-caret">▶</span>
+    </div>
+    <div id="tpl-list-wrap" style="display:none">
+      <div class="tpl-list" id="tpl-list"></div>
+      <button class="tpl-add-btn" onclick="openNewTemplate()">+ New template from scratch</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══ MAIN PANEL ══ -->
@@ -535,6 +569,10 @@ textarea{resize:vertical;min-height:60px}
         </div>
         <div class="form-hint" id="ns-sub-hint">Select from list or type a new name</div>
       </div>
+      <div class="form-row">
+        <label>Display Name <span style="font-weight:400;color:var(--tx3);font-size:11px">(shown on certificate — leave blank to use Subcontractor name)</span></label>
+        <input id="ns-display-name" type="text" placeholder="e.g. Al Afkar Engineering & Contracting LLC">
+      </div>
       <div class="form-row"><label>Project</label><input id="ns-project" type="text" value="RA4104- BAGHAIYLUM VILLAS DEVELOPMENT"></div>
       <div class="form-row"><label>Scope of Works *</label><textarea id="ns-scope" rows="2" placeholder="INSTALLATION OF HIGH-LEVEL WATER SUPPLY…"></textarea></div>
       <div class="form-row-2">
@@ -573,6 +611,16 @@ textarea{resize:vertical;min-height:60px}
 
       <!-- Activities -->
       <div id="cfg-panel-acts" style="display:none">
+        <!-- Template bar -->
+        <div class="tpl-bar" id="acts-tpl-bar">
+          <span class="tpl-bar-label">⭐ Template</span>
+          <select id="acts-tpl-select">
+            <option value="">— choose a template —</option>
+          </select>
+          <button class="btn btn-ghost" onclick="applyTemplate()" title="Replace current activities with this template">Load</button>
+          <div style="width:1px;height:20px;background:var(--bdr);flex-shrink:0"></div>
+          <button class="btn btn-ghost" onclick="saveAsTemplate()" title="Save current activities as a reusable template" style="white-space:nowrap">💾 Save as template</button>
+        </div>
         <div id="cfg-acts-list"></div>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addActivityGroup()">+ Add Activity Group</button>
         <div class="form-msg" id="cfg-acts-msg"></div>
@@ -892,6 +940,7 @@ let currentUser = null;
 let perms = [];
 let canView = false, canManage = false, canAdmin = false, isSuperAdmin = false;
 let allScopes = [];
+let allTemplates = []; // scope templates (is_template=true)
 let selectedScope = null;
 let selectedPC = null;
 let scopeVillaTypes = [];
@@ -998,6 +1047,8 @@ function fmtQty(n) {
   return Number(n).toFixed(2);
 }
 function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// Returns the display name for a scope (full company name if set, else the subcontractor lookup name)
+function scopeDisplayName(scope) { return (scope && scope.display_name) ? scope.display_name : (scope && scope.subcontractor_name) || ''; }
 
 // ══════════════════════════════════════════════
 // PERMISSION CHECK
@@ -1029,7 +1080,7 @@ async function init() {
 // ══════════════════════════════════════════════
 async function loadScopes() {
   const [scopes, pcs, vos, pcScopes] = await Promise.all([
-    fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc'),
+    fa('qs_scopes?select=id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template&order=subcontractor_name.asc'),
     fa('qs_payment_certificates?select=id,scope_id,pc_number,period_label,status,gross_aed,retention_aed,advance_recovery_aed&order=pc_number.desc'),
     fa('qs_variation_orders?select=id,scope_id,value_aed,status&order=created_at.asc'),
     fa('qs_pc_scopes?select=pc_id,scope_id,gross_aed,retention_aed,advance_recovery_aed')
@@ -1038,7 +1089,9 @@ async function loadScopes() {
   allVOsGlobal = vos;
   const latestPcByScopeId = {};
   pcs.forEach(p => { if (!latestPcByScopeId[p.scope_id]) latestPcByScopeId[p.scope_id] = p; });
-  allScopes = scopes.map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
+  // Split templates from real scopes
+  allTemplates = scopes.filter(s => s.is_template).sort((a,b)=>a.subcontractor_name.localeCompare(b.subcontractor_name));
+  allScopes = scopes.filter(s => !s.is_template).map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
   // Per-scope locked totals from section snapshots (correctly splits combined PCs by scope)
   const pcStatusById = {}; pcs.forEach(p => pcStatusById[p.id] = p.status);
   scopeLockedTotals = {};
@@ -1064,7 +1117,7 @@ function renderScopeList() {
     s.subcontractor_name.toLowerCase().includes(q) ||
     (s.scope_title||'').toLowerCase().includes(q)
   );
-  if (!filtered.length) { list.innerHTML = '<div class="lp-empty">No scopes found</div>'; return; }
+  if (!filtered.length) { list.innerHTML = '<div class="lp-empty">No scopes found</div>'; renderTemplateList(); return; }
 
   // Group scopes by subcontractor
   const groups = {};
@@ -1095,6 +1148,7 @@ function renderScopeList() {
       <div class="sub-scopes">${cards}</div>
     </div>`;
   }).join('');
+  renderTemplateList();
 }
 
 function toggleSub(gi) {
@@ -1109,6 +1163,183 @@ function addScopeForSub(ev, gi) {
 }
 
 function filterScopes() { renderScopeList(); }
+
+// ══════════════════════════════════════════════
+// SCOPE TEMPLATES
+// ══════════════════════════════════════════════
+let tplSectionOpen = false;
+
+function toggleTplSection() {
+  tplSectionOpen = !tplSectionOpen;
+  document.getElementById('tpl-list-wrap').style.display = tplSectionOpen ? '' : 'none';
+  document.getElementById('tpl-caret').classList.toggle('open', tplSectionOpen);
+}
+
+function renderTemplateList() {
+  const sec = document.getElementById('tpl-section');
+  if (!canAdmin) { sec.style.display = 'none'; return; }
+  sec.style.display = allTemplates.length || canAdmin ? '' : 'none';
+  const list = document.getElementById('tpl-list');
+  if (!allTemplates.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--tx3);padding:4px 8px 6px">No templates yet.</div>';
+  } else {
+    list.innerHTML = allTemplates.map(t => `
+      <div class="tpl-item">
+        <span class="tpl-name" title="${escH(t.scope_title||t.subcontractor_name)}">
+          ${escH(t.subcontractor_name)}
+        </span>
+        <span class="tpl-count" id="tpl-count-${t.id}">…</span>
+        <button class="tpl-del" title="Edit activities" onclick="openConfigTemplate(allTemplates.find(x=>x.id===${t.id}))" style="color:var(--tx3)">✏️</button>
+        <button class="tpl-del" title="Delete template" onclick="deleteTemplate(${t.id})">🗑</button>
+      </div>`).join('');
+    // Async: load activity counts for display
+    allTemplates.forEach(async t => {
+      const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${t.id}&select=id`);
+      const el = document.getElementById('tpl-count-' + t.id);
+      if (el) el.textContent = grps.length + (grps.length === 1 ? ' group' : ' groups');
+    });
+  }
+  // Populate the template dropdown in the Activities tab
+  _refreshTplSelect();
+}
+
+function _refreshTplSelect() {
+  const sel = document.getElementById('acts-tpl-select');
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— choose a template —</option>' +
+    allTemplates.map(t => `<option value="${t.id}">${escH(t.subcontractor_name)}</option>`).join('');
+  if (cur) sel.value = cur;
+}
+
+async function applyTemplate() {
+  const sel = document.getElementById('acts-tpl-select');
+  const tplId = parseInt(sel.value);
+  if (!tplId) { showMsg(document.getElementById('cfg-acts-msg'), 'err', 'Pick a template first.'); return; }
+  const tpl = allTemplates.find(t => t.id === tplId);
+  if (!tpl) return;
+  if (cfgActGroups.length > 0) {
+    if (!confirm(`Replace current activities with template "${tpl.subcontractor_name}"?\nThis won't save until you click "Save Changes".`)) return;
+  }
+  // Load template's groups + activities
+  const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${tplId}&order=sort_order.asc`);
+  const grpIds = grps.map(g => g.id);
+  const acts = grpIds.length
+    ? await fa(`qs_scope_activities?group_id=in.(${grpIds.join(',')})&order=sort_order.asc`)
+    : [];
+  // Strip DB ids — these will become new records for this scope
+  cfgActGroups = grps.map(g => ({ ...g, id: undefined, scope_id: selectedScope.id }));
+  cfgActivities = acts.map(a => {
+    const gi = grps.findIndex(g => g.id === a.group_id);
+    return { ...a, id: undefined, group_id: undefined, _gi: gi };
+  });
+  renderCfgActs();
+  showMsg(document.getElementById('cfg-acts-msg'), 'ok', `Loaded template "${tpl.subcontractor_name}". Click Save Changes to apply.`);
+}
+
+async function saveAsTemplate() {
+  if (!cfgActGroups.length) {
+    showMsg(document.getElementById('cfg-acts-msg'), 'err', 'Add activity groups first before saving as a template.');
+    return;
+  }
+  const name = prompt('Template name:', selectedScope.subcontractor_name + ' (template)');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  const btn = document.querySelector('[onclick="saveAsTemplate()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '…Saving'; }
+  try {
+    // Create template scope record
+    const tplScope = await fp('qs_scopes', {
+      subcontractor_name: trimmed,
+      scope_title: trimmed,
+      is_template: true,
+      project: selectedScope.project || ''
+    });
+    // Clone groups + activities
+    for (let gi = 0; gi < cfgActGroups.length; gi++) {
+      const grp = cfgActGroups[gi];
+      const grpRes = await fp('qs_scope_activity_groups', {
+        scope_id: tplScope.id, group_name: grp.group_name, group_weight: grp.group_weight, sort_order: gi
+      });
+      const grpActs = cfgActivities.filter(a => a._gi === gi);
+      if (grpRes?.id && grpActs.length) {
+        await fp('qs_scope_activities', grpActs.map((a, ai) => ({
+          group_id: grpRes.id,
+          activity_code: a.activity_code, activity_name: a.activity_name,
+          activity_weight: a.activity_weight, base_code: a.base_code || a.activity_code,
+          part_label: (a.part_label && String(a.part_label).trim()) ? String(a.part_label).trim().toUpperCase() : null,
+          sort_order: ai
+        })));
+      }
+    }
+    allTemplates.push({ ...tplScope, subcontractor_name: trimmed });
+    allTemplates.sort((a, b) => a.subcontractor_name.localeCompare(b.subcontractor_name));
+    renderTemplateList();
+    showMsg(document.getElementById('cfg-acts-msg'), 'ok', `Template "${trimmed}" saved! You can now load it into any scope.`);
+  } catch(e) {
+    showMsg(document.getElementById('cfg-acts-msg'), 'err', 'Failed to save template: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save as template'; }
+  }
+}
+
+async function deleteTemplate(tplId) {
+  const tpl = allTemplates.find(t => t.id === tplId);
+  if (!tpl) return;
+  if (!confirm(`Delete template "${tpl.subcontractor_name}"?\nThis cannot be undone.`)) return;
+  try {
+    await fdel(`qs_scope_activity_groups?scope_id=eq.${tplId}`);
+    await fdel(`qs_scopes?id=eq.${tplId}`);
+    allTemplates = allTemplates.filter(t => t.id !== tplId);
+    renderTemplateList();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
+
+async function openNewTemplate() {
+  const name = prompt('Template name:');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  try {
+    const tplScope = await fp('qs_scopes', {
+      subcontractor_name: trimmed, scope_title: trimmed, is_template: true, project: ''
+    });
+    allTemplates.push({ ...tplScope, subcontractor_name: trimmed });
+    allTemplates.sort((a, b) => a.subcontractor_name.localeCompare(b.subcontractor_name));
+    renderTemplateList();
+    openConfigTemplate(tplScope);
+  } catch(e) { alert('Failed: ' + e.message); }
+}
+
+async function openConfigTemplate(tplScope) {
+  // Open the Configure modal but scoped to a template — only Activities tab shown
+  const prevScope = selectedScope;
+  selectedScope = tplScope;
+  // Load template's groups/activities
+  const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${tplScope.id}&order=sort_order.asc`);
+  const grpIds = grps.map(g => g.id);
+  const acts = grpIds.length ? await fa(`qs_scope_activities?group_id=in.(${grpIds.join(',')})&order=sort_order.asc`) : [];
+  cfgActGroups = JSON.parse(JSON.stringify(grps));
+  cfgActivities = acts.map(a => ({ ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id) }));
+  // Show only the Activities tab — hide others
+  ['types','villas','sigs','contract'].forEach(k => {
+    const el = document.getElementById('cfg-tab-' + k);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById('cfg-scope-name').textContent = '⭐ ' + tplScope.subcontractor_name + ' (template)';
+  // Override save to write back to template scope
+  _tplEditMode = true;
+  _tplEditId = tplScope.id;
+  _prevScopeBeforeTpl = prevScope;
+  switchCfgTab('acts');
+  _refreshTplSelect();
+  renderCfgActs();
+  document.getElementById('modal-config-scope').style.display = 'flex';
+}
+
+// ── Vars for template-edit mode ──
+let _tplEditMode = false;
+let _tplEditId = null;
+let _prevScopeBeforeTpl = null;
 
 // ══════════════════════════════════════════════
 // DASHBOARD
@@ -1483,15 +1714,21 @@ async function loadPCData() {
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
   ]);
 
-  // Index WIR data — fan each base-code WIR row out to all its split activity_codes
+  // Index WIR data — fan each base-code WIR row out to all its split activity_codes.
+  // Period-date gate: a WIR only counts as approved if its response_date falls on or
+  // before the PC's period_date. If the PC has no period_date, no date restriction applies.
+  const periodDate = selectedPC.period_date || null; // "YYYY-MM-DD" or null
   wirData = {};
   wirRows.forEach(w => {
     const splits = baseToSplits[w.raw_activity_code] || [w.raw_activity_code];
     splits.forEach(actCode => {
       const key = w.villa_id + ':' + actCode;
       const existing = wirData[key];
-      if (!existing || w.normalised_status === 'approved') {
-        wirData[key] = { approved: w.normalised_status === 'approved', response_date: w.response_date };
+      // Only count as approved if: status is approved AND (no period gate OR response_date ≤ period)
+      const withinPeriod = !periodDate || (w.response_date && w.response_date <= periodDate);
+      const approved = w.normalised_status === 'approved' && withinPeriod;
+      if (!existing || approved) {
+        wirData[key] = { approved, response_date: w.response_date };
       }
     });
   });
@@ -1685,14 +1922,16 @@ function ctxWorkdone(ctx, villa_id) {
 // Aggregate a scope context into per-villa-type rows + section totals
 function ctxSection(ctx) {
   const typeMap = {};
-  ctx.villaTypes.forEach(t => { typeMap[t.villa_type_label] = { type:t, prev:0, current:0, toDate:0, rate:parseFloat(t.rate_aed)||0, qty:parseInt(t.qty_contracted)||0 }; });
+  ctx.villaTypes.forEach(t => { typeMap[t.villa_type_label] = { type:t, prev:0, current:0, toDate:0, rate:parseFloat(t.rate_aed)||0, qty:parseInt(t.qty_contracted)||0, detectedQty:0 }; });
   ctx.villas.forEach(sv => {
     const tm = typeMap[sv.villa_type_label]; if (!tm) return;
+    tm.detectedQty++;
     const w = ctxWorkdone(ctx, sv.villa_id);
     tm.prev += w.prev; tm.current += w.current; tm.toDate += w.toDate;
   });
   const entries = Object.values(typeMap);
-  const subContract = entries.reduce((a,t)=>a+t.qty*t.rate, 0);
+  // subContract uses detectedQty per scope so sibling scopes don't double-count qty_contracted
+  const subContract = entries.reduce((a,t)=>a+t.detectedQty*t.rate, 0);
   const subPrev = entries.reduce((a,t)=>a+t.prev*t.rate, 0);
   const subCur  = entries.reduce((a,t)=>a+t.current*t.rate, 0);
   const subTod  = entries.reduce((a,t)=>a+t.toDate*t.rate, 0);
@@ -1834,7 +2073,7 @@ function _buildPrintHeader() {
       </tr>
       <tr>
         <td ${tdL}>SUBCONTRACTOR:</td>
-        <td ${tdV} colspan="3">${escH(selectedScope.subcontractor_name)}</td>
+        <td ${tdV} colspan="3">${escH(scopeDisplayName(selectedScope))}</td>
         <td ${tdL} style="padding:3px 10px 3px 12px;color:#555;font-weight:700;font-size:8pt;white-space:nowrap;vertical-align:middle">PC NO:</td>
         <td ${tdV} style="padding:3px 16px 3px 0;font-size:8.5pt;color:#000;vertical-align:middle">${selectedPC.pc_number}</td>
         <td colspan="2"></td>
@@ -1985,10 +2224,17 @@ function renderPaymentSummarySingle() {
 
   // Prev PC calculations (use same deduction/adv/ret for simplicity)
   const advPrev   = totPrevAmt * advPct;
-  const retPrev   = (totPrevAmt - advPrev) * retPct;
+  const retPrev   = selectedPC.retention_applicable ? (totPrevAmt - advPrev) * retPct : 0;
   const certPrev  = totPrevAmt - advPrev - ded - retPrev;
   const vatPrev   = certPrev * vr;
   const netPrev   = certPrev + vatPrev;
+
+  // Current PC calculations (derived from to-date minus previous)
+  const advCur  = totCurAmt * advPct;
+  const retCur  = selectedPC.retention_applicable ? (totCurAmt - advCur) * retPct : 0;
+  const certCur = totCurAmt - advCur - retCur;   // ded already in both tod & prev, cancels
+  const vatCur  = certCur * vr;
+  const netCur  = certCur + vatCur;
 
   // Contract position (running totals from all scope PCs)
   const contractValue = parseFloat(selectedScope.contract_value_aed)||0;
@@ -2082,7 +2328,7 @@ function renderPaymentSummarySingle() {
         <!-- Project details -->
         <div style="flex:1;min-width:200px">
           <div class="psum-hdr-row"><span class="psum-hdr-label">PROJECT:</span><span class="psum-hdr-val">${escH(selectedScope.project||'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT')}</span></div>
-          <div class="psum-hdr-row"><span class="psum-hdr-label">SUBCONTRACTOR:</span><span class="psum-hdr-val">${escH(selectedScope.subcontractor_name)}</span></div>
+          <div class="psum-hdr-row"><span class="psum-hdr-label">SUBCONTRACTOR:</span><span class="psum-hdr-val">${escH(scopeDisplayName(selectedScope))}</span></div>
           <div class="psum-hdr-row"><span class="psum-hdr-label">SCOPE OF WORKS:</span><span class="psum-hdr-val">${escH(selectedScope.scope_title||'')}</span></div>
           <div class="psum-hdr-row"><span class="psum-hdr-label">SCA REF #:</span><span class="psum-hdr-val">${escH(selectedScope.sca_ref||'—')}</span></div>
         </div>
@@ -2181,7 +2427,7 @@ function renderPaymentSummarySingle() {
         </div>
         <div class="fin-vals">
           <span class="fin-val prev">${fmtAED(advPrev)}</span>
-          <span class="fin-val cur">—</span>
+          <span class="fin-val cur">${fmtAED(advCur)}</span>
           <span class="fin-val total">${fmtAED(adv)}</span>
         </div>
       </div>` : ''}
@@ -2192,7 +2438,7 @@ function renderPaymentSummarySingle() {
         </div>
         <div class="fin-vals">
           <span class="fin-val prev">—</span>
-          <span class="fin-val cur">—</span>
+          <span class="fin-val cur">${ded > 0 ? fmtAED(ded) : '—'}</span>
           <span class="fin-val total">${fmtAED(ded)}</span>
         </div>
       </div>
@@ -2204,7 +2450,7 @@ function renderPaymentSummarySingle() {
         </div>
         <div class="fin-vals">
           <span class="fin-val prev">${fmtAED(retPrev)}</span>
-          <span class="fin-val cur">—</span>
+          <span class="fin-val cur">${selectedPC.retention_applicable ? fmtAED(retCur) : '—'}</span>
           <span class="fin-val total">${selectedPC.retention_applicable ? fmtAED(ret) : 'Not Applicable'}</span>
         </div>
       </div>
@@ -2212,7 +2458,7 @@ function renderPaymentSummarySingle() {
         <span class="fin-label">Total Certified Amount</span>
         <div class="fin-vals">
           <span class="fin-val prev">${fmtAED(certPrev)}</span>
-          <span class="fin-val cur">—</span>
+          <span class="fin-val cur">${fmtAED(certCur)}</span>
           <span class="fin-val total">${fmtAED(certified)}</span>
         </div>
       </div>
@@ -2223,7 +2469,7 @@ function renderPaymentSummarySingle() {
         </div>
         <div class="fin-vals">
           <span class="fin-val prev">${fmtAED(vatPrev)}</span>
-          <span class="fin-val cur">—</span>
+          <span class="fin-val cur">${fmtAED(vatCur)}</span>
           <span class="fin-val total">${fmtAED(vat)}</span>
         </div>
       </div>
@@ -2231,7 +2477,7 @@ function renderPaymentSummarySingle() {
         <span class="fin-label" style="font-size:13px;color:var(--gold)">Net Total</span>
         <div class="fin-vals">
           <span class="fin-val prev grand">${fmtAED(netPrev)}</span>
-          <span class="fin-val cur grand">—</span>
+          <span class="fin-val cur grand">${fmtAED(netCur)}</span>
           <span class="fin-val total grand">${fmtAED(net)}</span>
         </div>
       </div>
@@ -2308,7 +2554,13 @@ function renderPaymentSummarySingle() {
 // ── Combined certificate for a PC that spans multiple scopes ──
 function renderPaymentSummaryMulti() {
   const sections = pcSections.map(s => ctxSection(s.ctx));
-  const totSubcon = sections.reduce((a,s)=>a+s.subContract,0);
+  // qty_contracted is the TOTAL across all cluster scopes for the same sub — deduplicate
+  // by villa type label so 50×rate is counted once, not once-per-scope.
+  const mergedTypes = {};
+  sections.forEach(sec => {
+    sec.entries.forEach(t => { if (!mergedTypes[t.type.villa_type_label]) mergedTypes[t.type.villa_type_label] = t; });
+  });
+  const totSubcon = Object.values(mergedTypes).reduce((a,t)=>a+t.qty*t.rate, 0);
   const combPrev  = sections.reduce((a,s)=>a+s.subPrev,0);
   const combCur   = sections.reduce((a,s)=>a+s.subCur,0);
   const combTod   = sections.reduce((a,s)=>a+s.subTod,0);
@@ -2339,6 +2591,13 @@ function renderPaymentSummaryMulti() {
   const vatTod = certTod*vr, vatPrev = certPrev*vr;
   const netTod = certTod+vatTod, netPrev = certPrev+vatPrev;
 
+  // Current period calculations (combined)
+  const advCur  = advTod - advPrev;
+  const retCur  = selectedPC.retention_applicable ? Math.max(0, retTod - retPrev) : 0;
+  const certCur = certTod - certPrev;
+  const vatCur  = vatTod - vatPrev;
+  const netCur  = netTod - netPrev;
+
   const isLocked = selectedPC.status === 'locked';
   const canEditFin = !isLocked || canAdmin;
   const canEditSigs = canManage || canAdmin;
@@ -2351,25 +2610,30 @@ function renderPaymentSummaryMulti() {
     const label = (sc.sca_ref ? escH(sc.sca_ref)+': ' : '') + escH(sc.scope_title || sc.subcontractor_name || ('Scope '+(si+1)));
     bodyRows += `<tr class="section-row"><td class="center">${si+1}</td><td colspan="14">${label}</td></tr>`;
     sec.entries.forEach(t => {
+      // Per cluster/scope: show detected villas in this scope (not total qty_contracted)
+      const dq = t.detectedQty;
       bodyRows += `<tr>
         <td class="center"></td><td>${escH(t.type.villa_type_label)}</td><td class="center">${escH(t.type.unit||'Villa')}</td>
-        <td class="center">${t.qty}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(t.qty*t.rate)}</td>
+        <td class="center">${dq}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(dq*t.rate)}</td>
         <td class="center">${fmtQty(t.prev)}</td><td class="center">${fmtQty(t.current)}</td><td class="center bold">${fmtQty(t.toDate)}</td>
-        <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td><td class="right">${fmtAED(t.prev*t.rate)}</td>
-        <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td><td class="right">${fmtAED(t.current*t.rate)}</td>
-        <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td><td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+        <td class="center">${fmtPct(t.prev/Math.max(dq,1))}</td><td class="right">${fmtAED(t.prev*t.rate)}</td>
+        <td class="center">${fmtPct(t.current/Math.max(dq,1))}</td><td class="right">${fmtAED(t.current*t.rate)}</td>
+        <td class="center bold">${fmtPct(t.toDate/Math.max(dq,1))}</td><td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
       </tr>`;
     });
-    const sQty = sec.entries.reduce((a,t)=>a+t.qty,0);
+    const sQty = sec.entries.reduce((a,t)=>a+t.detectedQty,0);
+    const sContract = sec.entries.reduce((a,t)=>a+t.detectedQty*t.rate,0);
     bodyRows += `<tr class="total-row">
       <td colspan="2" class="bold">SUB TOTAL</td><td></td><td class="center bold">${sQty}</td><td></td>
-      <td class="right bold">${fmtAED(sec.subContract)}</td><td></td><td></td><td></td>
+      <td class="right bold">${fmtAED(sContract)}</td><td></td><td></td><td></td>
       <td></td><td class="right">${fmtAED(sec.subPrev)}</td><td></td><td class="right">${fmtAED(sec.subCur)}</td>
       <td></td><td class="right bold">${fmtAED(sec.subTod)}</td>
     </tr>`;
   });
+  // GROSS TOTAL uses total qty_contracted (deduped across sibling scopes)
+  const grossTotQty = Object.values(mergedTypes).reduce((a,t)=>a+t.qty, 0);
   bodyRows += `<tr class="total-row" style="border-top:3px double var(--bdr2)">
-    <td colspan="2" class="bold gold">GROSS TOTAL</td><td></td><td></td><td></td>
+    <td colspan="2" class="bold gold">GROSS TOTAL</td><td></td><td class="center bold">${grossTotQty}</td><td></td>
     <td class="right bold">${fmtAED(totSubcon)}</td><td></td><td></td><td></td>
     <td></td><td class="right bold">${fmtAED(combPrev)}</td><td></td><td class="right bold">${fmtAED(combCur)}</td>
     <td></td><td class="right bold gold">${fmtAED(combTod)}</td>
@@ -2409,34 +2673,34 @@ function renderPaymentSummaryMulti() {
       ${anyAdv ? `
       <div class="fin-row">
         <div class="fin-row-label-group"><span class="fin-label">Advance Recovery</span><span class="fin-auto-hint">auto · per scope</span></div>
-        <div class="fin-vals"><span class="fin-val prev">${fmtAED(advPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(advTod)}</span></div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(advPrev)}</span><span class="fin-val cur">${fmtAED(advCur)}</span><span class="fin-val total">${fmtAED(advTod)}</span></div>
       </div>` : ''}
       <div class="fin-row">
         <div class="fin-row-label-group"><span class="fin-label">Deductions</span>
           ${canEditFin ? `<input class="fin-input" id="fin-ded" type="number" value="${ded}" min="0" onchange="saveFinancials()" ${finInputAttr}>` : `<span class="fin-val">${fmtAED(ded)}</span>`}
         </div>
-        <div class="fin-vals"><span class="fin-val prev">—</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(ded)}</span></div>
+        <div class="fin-vals"><span class="fin-val prev">—</span><span class="fin-val cur">${ded > 0 ? fmtAED(ded) : '—'}</span><span class="fin-val total">${fmtAED(ded)}</span></div>
       </div>
       <div class="fin-row">
         <div class="fin-row-label-group">
           <label class="fin-toggle"><input type="checkbox" id="fin-ret-toggle" ${retCheck} onchange="saveFinancials()" ${canEditFin?'':'disabled'}> Retention${effRetPct>0?` (${(effRetPct*100).toFixed(1)}%)`:''}</label>
           ${canEditFin ? `<span style="display:inline-flex;align-items:center;gap:4px"><input class="fin-input" id="fin-ret" type="number" value="${retOvr!==null?+(retOvr*100).toFixed(4):''}" min="0" max="100" step="0.1" placeholder="${(scopeRetPct*100).toFixed(1)}" ${retCheck?'':'disabled'} onchange="saveFinancials()" title="Retention rate (%) — blank uses the primary scope default"><span style="color:var(--tx3);font-size:12px">%</span></span>` : `<span class="fin-val">${fmtAED(retTod)}</span>`}
         </div>
-        <div class="fin-vals"><span class="fin-val prev">${fmtAED(retPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${selectedPC.retention_applicable?fmtAED(retTod):'Not Applicable'}</span></div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(retPrev)}</span><span class="fin-val cur">${selectedPC.retention_applicable ? fmtAED(retCur) : '—'}</span><span class="fin-val total">${selectedPC.retention_applicable?fmtAED(retTod):'Not Applicable'}</span></div>
       </div>
       <div class="fin-row" style="border-top:2px solid var(--bdr2)">
         <span class="fin-label">Total Certified Amount</span>
-        <div class="fin-vals"><span class="fin-val prev">${fmtAED(certPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(certTod)}</span></div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(certPrev)}</span><span class="fin-val cur">${fmtAED(certCur)}</span><span class="fin-val total">${fmtAED(certTod)}</span></div>
       </div>
       <div class="fin-row">
         <div class="fin-row-label-group"><span class="fin-label">VAT</span>
           ${canEditFin ? `<input class="fin-input" id="fin-vat" type="number" value="${(vr*100).toFixed(1)}" min="0" max="100" step="0.1" onchange="saveFinancials()" ${finInputAttr}> %` : `<span class="fin-val">${(vr*100).toFixed(1)}%</span>`}
         </div>
-        <div class="fin-vals"><span class="fin-val prev">${fmtAED(vatPrev)}</span><span class="fin-val cur">—</span><span class="fin-val total">${fmtAED(vatTod)}</span></div>
+        <div class="fin-vals"><span class="fin-val prev">${fmtAED(vatPrev)}</span><span class="fin-val cur">${fmtAED(vatCur)}</span><span class="fin-val total">${fmtAED(vatTod)}</span></div>
       </div>
       <div class="fin-row" style="border-top:2px solid var(--bdr2)">
         <span class="fin-label" style="font-size:13px;color:var(--gold)">Net Total</span>
-        <div class="fin-vals"><span class="fin-val prev grand">${fmtAED(netPrev)}</span><span class="fin-val cur grand">—</span><span class="fin-val total grand">${fmtAED(netTod)}</span></div>
+        <div class="fin-vals"><span class="fin-val prev grand">${fmtAED(netPrev)}</span><span class="fin-val cur grand">${fmtAED(netCur)}</span><span class="fin-val total grand">${fmtAED(netTod)}</span></div>
       </div>
     </div>
 
@@ -2795,6 +3059,7 @@ async function openNewScope(prefillSub) {
   document.getElementById('ns-submit-btn').textContent = 'Create Scope';
   document.getElementById('ns-sub-search').value = prefillSub || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-display-name').value = '';
   document.getElementById('ns-scope').value = '';
   document.getElementById('ns-sca').value = '';
   document.getElementById('ns-package').value = '';
@@ -2818,6 +3083,7 @@ async function openEditScope() {
   document.getElementById('ns-submit-btn').textContent = 'Save Changes';
   document.getElementById('ns-sub-search').value = selectedScope.subcontractor_name || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
+  document.getElementById('ns-display-name').value = selectedScope.display_name || '';
   document.getElementById('ns-scope').value = selectedScope.scope_title || '';
   document.getElementById('ns-sca').value = selectedScope.sca_ref || '';
   document.getElementById('ns-package').value = selectedScope.package || '';
@@ -2860,8 +3126,10 @@ async function submitScope() {
   const msg = document.getElementById('ns-msg');
   if (!name) { showMsg(msg,'err','Subcontractor name is required.'); return; }
   if (!scope) { showMsg(msg,'err','Scope of Works is required.'); return; }
+  const displayName = (document.getElementById('ns-display-name').value || '').trim();
   const body = {
     subcontractor_name: name,
+    display_name: displayName || null,
     project: (document.getElementById('ns-project').value || '').trim() || 'RA4104- BAGHAIYLUM VILLAS DEVELOPMENT',
     scope_title: scope,
     sca_ref: (document.getElementById('ns-sca').value || '').trim(),
@@ -3501,6 +3769,7 @@ async function openConfigScope() {
   document.getElementById('cfg-advance-pct').value = selectedScope.advance_recovery_pct > 0 ? (parseFloat(selectedScope.advance_recovery_pct)*100).toFixed(1) : '';
   switchCfgTab('types');
   renderCfgTypes();
+  _refreshTplSelect();
   renderCfgActs();
   renderDetectedVillas();
   await loadGlobalSigs();
@@ -3727,7 +3996,8 @@ async function saveConfigScope() {
   const msg1 = document.getElementById('cfg-types-msg');
   const msg2 = document.getElementById('cfg-acts-msg');
   const msg3 = document.getElementById('cfg-sigs-msg');
-  const sid = selectedScope.id;
+  // In template-edit mode, save writes to the template scope, not the real selected scope
+  const sid = _tplEditMode ? _tplEditId : selectedScope.id;
 
   try {
     if (cfgTab === 'types') {
@@ -3770,13 +4040,23 @@ async function saveConfigScope() {
           await fp('qs_scope_activities', actRows);
         }
       }
-      audit('qs_scope_activity_groups', 'UPDATE_ACTIVITIES', sid, { scope: selectedScope.subcontractor_name, groups_count: cfgActGroups.length, activities_count: cfgActivities.length });
+      audit('qs_scope_activity_groups', 'UPDATE_ACTIVITIES', sid, { scope: (selectedScope||{}).subcontractor_name, groups_count: cfgActGroups.length, activities_count: cfgActivities.length });
       showMsg(msg2, 'ok', 'Activities saved.');
-      await loadScopeConfig();
-      cfgActGroups = JSON.parse(JSON.stringify(scopeActivityGroups));
-      cfgActivities = scopeActivities.map(a => ({
-        ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id)
-      }));
+      if (_tplEditMode) {
+        // Refresh template groups/activities in memory
+        const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${sid}&order=sort_order.asc`);
+        const grpIds = grps.map(g => g.id);
+        const acts = grpIds.length ? await fa(`qs_scope_activities?group_id=in.(${grpIds.join(',')})&order=sort_order.asc`) : [];
+        cfgActGroups = JSON.parse(JSON.stringify(grps));
+        cfgActivities = acts.map(a => ({ ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id) }));
+        renderTemplateList(); // refresh group count badges
+      } else {
+        await loadScopeConfig();
+        cfgActGroups = JSON.parse(JSON.stringify(scopeActivityGroups));
+        cfgActivities = scopeActivities.map(a => ({
+          ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id)
+        }));
+      }
       renderCfgActs();
     }
     else if (cfgTab === 'villas') {
@@ -3811,7 +4091,7 @@ async function saveConfigScope() {
       // Update local scope data
       Object.assign(selectedScope, body);
       // Refresh loadScopes so sidebar scope cards reflect new data
-      const freshScopes = await fa('qs_scopes?select=id,subcontractor_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc');
+      const freshScopes = await fa('qs_scopes?select=id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct&order=subcontractor_name.asc');
       freshScopes.forEach(s => {
         const existing = allScopes.find(e => e.id === s.id);
         if (existing) Object.assign(existing, s);
@@ -4070,6 +4350,16 @@ async function savePcSigs() {
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
+  // If we were editing a template, restore scope + tab visibility
+  if (id === 'modal-config-scope' && _tplEditMode) {
+    _tplEditMode = false;
+    selectedScope = _prevScopeBeforeTpl;
+    _prevScopeBeforeTpl = null;
+    ['types','villas','sigs','contract'].forEach(k => {
+      const tab = document.getElementById('cfg-tab-' + k);
+      if (tab) tab.style.display = '';
+    });
+  }
 }
 
 function showMsg(el, type, txt) {

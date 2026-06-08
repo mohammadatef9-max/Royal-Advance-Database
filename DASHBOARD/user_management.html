@@ -508,6 +508,32 @@ body.in-shell .topbar{display:none!important}
       <div class="section-div">Side Roles <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(job title — stack multiple)</span></div>
       <div class="side-role-grid" id="side-role-grid"></div>
 
+      <div class="section-div">OBS Assignment <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(daily output entry access)</span></div>
+      <div class="form-row-2">
+        <div class="form-row">
+          <label>OBS Cluster</label>
+          <input type="text" id="f-obs-cluster" placeholder="e.g. ALL, C1, C2, North…" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+          <div class="form-hint">Leave blank if user has no OBS entry access</div>
+        </div>
+        <div class="form-row">
+          <label>OBS Discipline</label>
+          <select id="f-obs-discipline">
+            <option value="">— None / All disciplines —</option>
+            <option value="DRAINAGE ACTIVITIES">Drainage Activities</option>
+            <option value="WATER SUPPLY ACTIVITIES">Water Supply Activities</option>
+            <option value="HVAC ACTIVITIES">HVAC Activities</option>
+            <option value="ELECTRICAL ACTIVITIES">Electrical Activities</option>
+            <option value="PRECAST">Precast</option>
+            <option value="Functional Test">Functional Test</option>
+            <option value="Internal Rectification">Internal Rectification</option>
+            <option value="General Indirect">General Indirect</option>
+            <option value="logistic">Logistic</option>
+            <option value="Snagging and de-snagging">Snagging & De-snagging</option>
+          </select>
+          <div class="form-hint">Restricts the activities shown in OBS Entry form</div>
+        </div>
+      </div>
+
       <div class="section-div">Telegram Bot Access <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-dim)">(optional)</span></div>
       <div class="form-row-2">
         <div class="form-row">
@@ -843,10 +869,11 @@ function openAddModal() {
   document.getElementById('status-section').style.display = 'none';
 
   // Clear all fields
-  ['f-fullname','f-displayname','f-email','f-password','f-phone'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-mainrole').value  = '';
-  document.getElementById('f-discipline').value = '';
-  document.getElementById('f-bot-role').value  = 'site';
+  ['f-fullname','f-displayname','f-email','f-password','f-phone','f-obs-cluster'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-mainrole').value       = '';
+  document.getElementById('f-discipline').value     = '';
+  document.getElementById('f-bot-role').value       = 'site';
+  document.getElementById('f-obs-discipline').value = '';
   document.getElementById('pw-bar').style.width = '0';
   document.getElementById('pw-hint').textContent = 'Enter a secure password';
   document.querySelectorAll('.side-role-item').forEach(el => { el.classList.remove('checked'); el.querySelector('input').checked = false; });
@@ -876,8 +903,10 @@ async function openEditModal(userId) {
   document.getElementById('f-email').value       = user.email || '';
   document.getElementById('f-discipline').value  = user.discipline || '';
   document.getElementById('f-status').value      = String(user.is_active !== false);
-  document.getElementById('f-phone').value       = user.phone || '';
-  document.getElementById('f-bot-role').value    = user.bot_role || 'site';
+  document.getElementById('f-phone').value         = user.phone || '';
+  document.getElementById('f-bot-role').value      = user.bot_role || 'site';
+  document.getElementById('f-obs-cluster').value   = user.obs_cluster || '';
+  document.getElementById('f-obs-discipline').value= user.obs_discipline || '';
 
   // Set main role
   const mainRoleObj = mainRoles.find(r => r.role_name === user.main_role);
@@ -942,9 +971,11 @@ async function saveUser() {
   const discipline  = document.getElementById('f-discipline').value;
   const mainRoleId  = parseInt(document.getElementById('f-mainrole').value);
   const isActive    = document.getElementById('f-status').value !== 'false';
-  const rawPhone    = document.getElementById('f-phone').value.trim();
-  const botRole     = document.getElementById('f-bot-role').value || 'site';
-  const phone       = rawPhone ? normalizePhone(rawPhone) : '';
+  const rawPhone      = document.getElementById('f-phone').value.trim();
+  const botRole       = document.getElementById('f-bot-role').value || 'site';
+  const phone         = rawPhone ? normalizePhone(rawPhone) : '';
+  const obsCluster    = document.getElementById('f-obs-cluster').value.trim().toUpperCase() || null;
+  const obsDiscipline = document.getElementById('f-obs-discipline').value || null;
 
   // Validation
   if (!fullName) return showModalAlert('Full name is required.', 'error');
@@ -966,7 +997,7 @@ async function saveUser() {
       await fetch(`${SB}/rest/v1/users?id=eq.${editingUserId}`, {
         method: 'PATCH',
         headers: getH({ 'Prefer': 'return=minimal' }),
-        body: JSON.stringify({ full_name: fullName, display_name: displayName, email, discipline, main_role_id: mainRoleId, is_active: isActive, phone: phone || null, bot_role: botRole })
+        body: JSON.stringify({ full_name: fullName, display_name: displayName, email, discipline, main_role_id: mainRoleId, is_active: isActive, phone: phone || null, bot_role: botRole, obs_cluster: obsCluster, obs_discipline: obsDiscipline })
       });
 
       // Update side roles: delete all then re-insert
@@ -1003,14 +1034,18 @@ async function saveUser() {
       if (rpcData.error) throw new Error(rpcData.error);
       if (!rpcData.success) throw new Error('User creation failed');
 
-      // Save phone on the newly created user record
-      if (phone) {
+      // Save phone + OBS fields on the newly created user record
+      if (phone || obsCluster || obsDiscipline) {
+        const extra = {};
+        if (phone)         { extra.phone = phone; extra.bot_role = botRole; }
+        if (obsCluster)    extra.obs_cluster = obsCluster;
+        if (obsDiscipline) extra.obs_discipline = obsDiscipline;
         await fetch(`${SB}/rest/v1/users?email=eq.${encodeURIComponent(email)}`, {
           method: 'PATCH',
           headers: getH({ 'Prefer': 'return=minimal' }),
-          body: JSON.stringify({ phone, bot_role: botRole })
+          body: JSON.stringify(extra)
         });
-        await syncBotPhone(phone, fullName, botRole, discipline);
+        if (phone) await syncBotPhone(phone, fullName, botRole, discipline);
       }
 
       showModalAlert('User created successfully!', 'success');
@@ -1180,6 +1215,9 @@ const PERM_LABELS = {
   view_qs:               { label: 'View QS',               desc: 'View QS payment certificates and progress sheets (read-only)' },
   manage_qs:             { label: 'Manage QS',             desc: 'Create and manage QS payment certificates and overrides' },
   admin_qs:              { label: 'QS Admin',              desc: 'Full QS admin: scopes, rates, activity weights, locked PC corrections' },
+  view_obs:              { label: 'View OBS Tracker',      desc: 'View OBS Labour Tracker dashboard and reports' },
+  obs_entry:             { label: 'OBS Data Entry',        desc: 'Enter daily OBS activity data (foremen and site engineers)' },
+  edit_obs:              { label: 'Edit OBS Data',         desc: 'Edit and correct existing OBS entries (supervisors and managers)' },
 };
 
 const ROLE_ICONS = { super_admin: '👑', admin: '🔑', staff: '👤' };

@@ -626,7 +626,7 @@ body.in-shell header { display: none !important; }
     </div>
   </div>
   <div id="tab-subs-content" style="display:none">
-      <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px">
         Merge sub-contractors with different spellings into a single canonical name.
         Raw data stays untouched — only the displayed name changes.
       </div>
@@ -634,12 +634,12 @@ body.in-shell header { display: none !important; }
         <input type="text" id="subs-search" placeholder="🔍 Search..." oninput="buildSubsTab()" style="flex:1">
         <button class="btn btn-gray" onclick="buildSubsTab()">↻ Refresh</button>
       </div>
-      <div style="font-size:10px;color:#64748b;margin-bottom:6px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">
         ☐ Tick duplicates, then pick a canonical name below and click Merge.
       </div>
-      <div id="subs-list" style="max-height:320px;overflow-y:auto;border:1px solid #2d3748;border-radius:6px;background:#0f1117"></div>
-      <div id="subs-merge-bar" style="display:none;margin-top:10px;background:#0f1117;border:1px solid #3b82f6;border-radius:7px;padding:10px">
-        <div style="font-size:10px;color:#60a5fa;margin-bottom:6px"><b><span id="subs-sel-count">0</span></b> selected — merge into:</div>
+      <div id="subs-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-input)"></div>
+      <div id="subs-merge-bar" style="display:none;margin-top:10px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:7px;padding:10px">
+        <div style="font-size:10px;color:var(--accent-text);margin-bottom:6px"><b><span id="subs-sel-count">0</span></b> selected — merge into:</div>
         <div style="display:flex;gap:6px">
           <input type="text" id="subs-canon" placeholder="Canonical name (e.g. Kolta Al Kamal)" style="flex:1" list="subs-canon-list">
           <datalist id="subs-canon-list"></datalist>
@@ -648,9 +648,9 @@ body.in-shell header { display: none !important; }
         </div>
         <div id="subs-msg" style="font-size:10px;margin-top:6px"></div>
       </div>
-      <div style="margin-top:14px;border-top:1px solid #2d3748;padding-top:10px">
-        <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;font-weight:600">Current aliases (<span id="aliases-count">0</span>)</div>
-        <div id="aliases-list" style="max-height:180px;overflow-y:auto;border:1px solid #2d3748;border-radius:6px;background:#0f1117;font-size:10px"></div>
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;font-weight:600">Current aliases (<span id="aliases-count">0</span>)</div>
+        <div id="aliases-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);font-size:10px"></div>
       </div>
     </div>
 
@@ -1699,7 +1699,7 @@ function buildSubsTab(){
   const rows=Object.entries(counts).filter(([s])=>!q||s.toLowerCase().includes(q))
     .sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
   const list=document.getElementById('subs-list');
-  if(!rows.length){list.innerHTML='<div style="padding:12px;color:#64748b;font-size:11px;text-align:center">No sub-contractors found.</div>';}
+  if(!rows.length){list.innerHTML='<div style="padding:12px;color:var(--text-dim);font-size:11px;text-align:center">No sub-contractors found.</div>';}
   else{
     list.innerHTML=rows.map(([raw,cnt])=>{
       const alias=subAliases[raw];
@@ -1720,7 +1720,7 @@ function buildSubsTab(){
   const al=Object.entries(subAliases).sort((a,b)=>a[1].localeCompare(b[1])||a[0].localeCompare(b[0]));
   document.getElementById('aliases-count').textContent=al.length;
   const alList=document.getElementById('aliases-list');
-  if(!al.length){alList.innerHTML='<div style="padding:10px;color:#64748b;text-align:center">No aliases yet.</div>';}
+  if(!al.length){alList.innerHTML='<div style="padding:10px;color:var(--text-dim);text-align:center">No aliases yet.</div>';}
   else{
     alList.innerHTML=al.map(([from,to])=>{
       const safeAttr=from.replace(/\\/g,'\\\\').replace(/'/g,'&#39;').replace(/"/g,'&quot;');
