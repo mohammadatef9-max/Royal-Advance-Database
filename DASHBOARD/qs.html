@@ -1079,8 +1079,13 @@ async function init() {
 // SCOPES
 // ══════════════════════════════════════════════
 async function loadScopes() {
-  const [scopes, pcs, vos, pcScopes] = await Promise.all([
-    fa('qs_scopes?select=id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template&order=subcontractor_name.asc'),
+  // Use explicit is_template filters in the query so the DB does the separation —
+  // avoids any risk of templates leaking into the scope list if is_template is
+  // ever returned as null/undefined by PostgREST (e.g. column visibility, old cache).
+  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template';
+  const [realScopes, templates, pcs, vos, pcScopes] = await Promise.all([
+    fa(`qs_scopes?select=${SCOPE_COLS}&is_template=eq.false&order=subcontractor_name.asc`),
+    fa('qs_scopes?select=id,subcontractor_name,scope_title,is_template&is_template=eq.true&order=subcontractor_name.asc'),
     fa('qs_payment_certificates?select=id,scope_id,pc_number,period_label,status,gross_aed,retention_aed,advance_recovery_aed&order=pc_number.desc'),
     fa('qs_variation_orders?select=id,scope_id,value_aed,status&order=created_at.asc'),
     fa('qs_pc_scopes?select=pc_id,scope_id,gross_aed,retention_aed,advance_recovery_aed')
@@ -1089,9 +1094,9 @@ async function loadScopes() {
   allVOsGlobal = vos;
   const latestPcByScopeId = {};
   pcs.forEach(p => { if (!latestPcByScopeId[p.scope_id]) latestPcByScopeId[p.scope_id] = p; });
-  // Split templates from real scopes
-  allTemplates = scopes.filter(s => s.is_template).sort((a,b)=>a.subcontractor_name.localeCompare(b.subcontractor_name));
-  allScopes = scopes.filter(s => !s.is_template).map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
+  // Templates and real scopes come from separate DB-filtered queries — no JS split needed
+  allTemplates = templates.sort((a,b)=>a.subcontractor_name.localeCompare(b.subcontractor_name));
+  allScopes = realScopes.map(s => ({ ...s, latestPc: latestPcByScopeId[s.id] || null }));
   // Per-scope locked totals from section snapshots (correctly splits combined PCs by scope)
   const pcStatusById = {}; pcs.forEach(p => pcStatusById[p.id] = p.status);
   scopeLockedTotals = {};
