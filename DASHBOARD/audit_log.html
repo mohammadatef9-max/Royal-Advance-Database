@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+<script src="shared.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Audit Log · MEP</title>
@@ -263,8 +264,7 @@ body.in-shell .topbar{display:none!important}
 </div>
 
 <script>
-const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+// SB and KEY are provided by shared.js
 
 let __token = null;
 let __user  = null;
@@ -700,41 +700,6 @@ document.getElementById('f-user').addEventListener('keydown',function(e){
   if(e.key==='Enter') applyFilters();
 });
 </script>
-<script>
-/* ===== Global ESC-to-close for modals & popups — v6.4 ===== */
-(function(){
-  function vis(el){
-    if(!el||el.nodeType!==1)return false;
-    var cs=getComputedStyle(el);
-    if(cs.display==='none'||cs.visibility==='hidden'||cs.visibility==='collapse'||parseFloat(cs.opacity)===0)return false;
-    return el.getClientRects().length>0;
-  }
-  function clsOf(n){var c=n.className;if(c&&typeof c!=='string'&&'baseVal'in c)c=c.baseVal;return(c||'').toString().toLowerCase();}
-  function dismisser(modal){
-    var nodes=modal.querySelectorAll('button,a,span,div,i,[onclick],[data-close]'),i,n,cl,tx;
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;cl=clsOf(n);tx=(n.textContent||'').trim().toLowerCase();
-      if(/(^|[\s_-])close([\s_-]|$)/.test(cl)||n.hasAttribute('data-close')||tx==='cancel'||tx==='close'||tx==='✕'||tx==='×'||tx==='✖')return n;}
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;
-      if(/close|cancel|dismiss|hide/.test((n.getAttribute('onclick')||'').toLowerCase()))return n;}
-    return null;
-  }
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27)return;
-    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
-    var all=document.querySelectorAll(sel),open=[],i;
-    for(i=0;i<all.length;i++){if(vis(all[i]))open.push(all[i]);}
-    if(!open.length)return;
-    var outer=open.filter(function(el){return!open.some(function(o){return o!==el&&o.contains(el);});});
-    var top=outer[outer.length-1]||open[open.length-1];
-    e.preventDefault();e.stopPropagation();
-    var btn=dismisser(top);
-    if(btn){btn.click();return;}
-    var toc=(top.getAttribute('onclick')||'').toLowerCase();
-    if(/close|cancel|dismiss|hide/.test(toc)){top.click();if(!vis(top))return;}
-    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
-    if(vis(top))top.style.display='none';
-  },true);
-})();
-</script>
+
 </body>
 </html>

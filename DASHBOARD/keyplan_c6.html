@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+<script src="shared.js?v=1"></script>
 <meta charset="UTF-8">
 <title>Cluster 6 &mdash; Keyplan</title>
 <style>
@@ -348,11 +349,11 @@ var VILLAS=JSON.parse(JSON.stringify(VILLAS_DEFAULT));
 var VILLA_ANGLES={1:-49,2:-49,3:-49,4:-49,5:-49,6:-49,7:-49,8:-49,9:40,10:40,11:40,12:40,13:-49,14:-49,15:-49,16:-49,17:-49,18:-49,19:-49,20:-49,21:-49,22:-49,23:-49,24:-49,25:-49,26:-49,27:-49,28:-49,29:-49,30:40,31:40,32:40,33:40,34:-49,35:-49,36:-49,37:-49,38:-49,39:-49,40:-49,41:-49,42:-49,43:-49,44:-49,45:-49,46:-49,47:-49,48:-49,49:-49,50:-49,51:-49,52:-49,53:-49,54:-49,55:-49,56:-49,57:-49,58:-49,59:-49,60:-49,61:-49,62:-49,63:-49,64:-50,65:-50,66:-50,67:90,68:90,69:-90,70:90,71:90,72:90,73:88,74:85,75:80,76:75,77:75,78:70,79:65,80:60,81:-30,82:-35,83:-40,84:-45,85:-50,86:-60,87:-65,88:-71,89:-80,90:-81,91:-85,92:-90,93:40,94:40,95:40,96:40,97:40,98:40,99:40,100:40,101:40,102:40,103:40,104:40,105:40,106:40,107:40,108:40,109:40,110:40,111:40,112:40,113:40,114:40,115:40,116:40,117:40,118:40,119:40,120:40,121:40,122:40,123:40,124:40,125:65,126:69,127:73,128:90,129:90,130:90,131:90,132:90,133:90,134:90,135:90,136:40,137:40,138:40,139:40,140:40,141:40,142:40,143:40,144:40,145:40,146:15,147:-25,148:-50,149:-50,150:-50,151:-55,152:-71,153:-80,154:85,155:70,156:55,157:43,158:42,159:40,160:40,161:40,162:40,163:40,164:40,165:40,166:40,167:40,168:40,169:40,170:40,171:40,172:40,173:40,174:40,175:40,176:40,177:40,178:40,179:40,180:40,181:40,182:40,183:40,184:40,185:40,186:40,187:40,188:40,189:40,190:40,191:40,192:40,193:40,194:40,195:40,196:40,197:40,198:40,199:40,200:40};
 var OPEN_FRONT_CLR_CODES=[];
 var priorityVillas=new Set();
+var priority2Villas=new Set(); // priority 2 (blue)
 var OPEN_FRONT_LINKS={};
 var SUB_COLORS=['#b91c1c','#15803d','#1d4ed8','#a16207','#0f766e','#be185d',
   '#c2410c','#065f46','#6d28d9','#4d7c0f','#0e7490','#9d174d','#9a3412','#3730a3','#7e22ce'];
-var SB='https://tactslhsxglzcbsteokf.supabase.co';
-var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+// SB and KEY are provided by shared.js
 var CLUSTER='C6';
 var IMG_W=1800, IMG_H=1271;
 var TOTAL_VILLAS=200;
@@ -454,7 +455,28 @@ function renderVillas(dm, dm2){
       star.className='pri-star';
       star.style.left=(pos.x+rx-6)+'px';
       star.style.top=(pos.y+ry-6)+'px';
-      star.textContent='⭐';
+      star.style.color='#fbbf24';
+      star.style.fontSize='13px';
+      star.textContent='★';
+      layer.appendChild(star);
+    });
+  }
+  if(priority2Villas.size>0){
+    Object.keys(VILLAS).forEach(function(vNum){
+      if(!priority2Villas.has(vNum)) return;
+      var pos=VILLAS[vNum];
+      var angle=VILLA_ANGLES[parseInt(vNum)]||0;
+      var rad=angle*Math.PI/180;
+      var ox=-23, oy=-16; // top-left corner so it never overlaps a gold star
+      var rx=ox*Math.cos(rad)-oy*Math.sin(rad);
+      var ry=ox*Math.sin(rad)+oy*Math.cos(rad);
+      var star=document.createElement('span');
+      star.className='pri-star';
+      star.style.left=(pos.x+rx-6)+'px';
+      star.style.top=(pos.y+ry-6)+'px';
+      star.style.color='#3b82f6';
+      star.style.fontSize='13px';
+      star.textContent='★';
       layer.appendChild(star);
     });
   }
@@ -748,7 +770,7 @@ document.getElementById('villa-layer').addEventListener('mouseover',function(e){
   var st=v.getAttribute('data-s')||'NS';
   var sub=v.getAttribute('data-sub')||'—';
   var type=v.getAttribute('data-type')||'—';
-  document.getElementById('tt-num').textContent='Villa '+vNum;
+  document.getElementById('tt-num').textContent=(priorityVillas.has(vNum)?'★ ':'')+(priority2Villas.has(vNum)?'★ ':'')+'Villa '+vNum;
   var badge=document.getElementById('tt-badge');
   var labels=currentMode==='clr'?CLR_LABELS:WIR_LABELS;
   badge.textContent=labels[st]||st;
@@ -855,7 +877,8 @@ function doPrint(){
     (currentMode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected</span></div>':'')+
     '<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>';
   if(openFrontVillas.size>0){legendHtml+='<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>';}
-  if(priorityVillas.size>0){legendHtml+='<div class="pl-item"><span style="font-size:9pt">&#11088;</span><span>Priority ('+priorityVillas.size+')</span></div>';}
+  if(priorityVillas.size>0){legendHtml+='<div class="pl-item"><span style="font-size:9pt;color:#f59e0b">&#9733;</span><span>Priority ('+priorityVillas.size+')</span></div>';}
+  if(priority2Villas.size>0){legendHtml+='<div class="pl-item"><span style="font-size:9pt;color:#3b82f6">&#9733;</span><span>Priority 2 ('+priority2Villas.size+')</span></div>';}
   var subNames=Object.keys(subColorMap).sort();
   if(subNames.length>0){
     legendHtml+='<span style="margin:0 4pt;color:#999;font-size:6pt">|</span>';
@@ -918,9 +941,12 @@ async function loadData(){
     }
   }catch(e){console.warn('[keyplan] open front links',e);}
   try{
-    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no&is_priority=eq.true&is_active=eq.true&cluster_id=eq.6',{headers:getH()});
+    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no,is_priority,is_priority2&or=(is_priority.eq.true,is_priority2.eq.true)&is_active=eq.true&cluster_id=eq.6',{headers:getH()});
     var priD=await priR.json();
-    if(Array.isArray(priD))priD.forEach(function(r){priorityVillas.add(String(r.villa_no));});
+    if(Array.isArray(priD))priD.forEach(function(r){
+      if(r.is_priority)priorityVillas.add(String(r.villa_no));
+      if(r.is_priority2)priority2Villas.add(String(r.villa_no));
+    });
   }catch(e){console.warn('[keyplan] priority villas',e);}
   var _aa=await Promise.all([
     fetchAll('activities?select=activity_code,activity_name&is_active=eq.true'),
@@ -1017,41 +1043,6 @@ if(window.self!==window.top){
   setTimeout(_tryInit,1000);
 }else{_tryInit();}
 </script>
-<script>
-/* ===== Global ESC-to-close for modals & popups — v6.4 ===== */
-(function(){
-  function vis(el){
-    if(!el||el.nodeType!==1)return false;
-    var cs=getComputedStyle(el);
-    if(cs.display==='none'||cs.visibility==='hidden'||cs.visibility==='collapse'||parseFloat(cs.opacity)===0)return false;
-    return el.getClientRects().length>0;
-  }
-  function clsOf(n){var c=n.className;if(c&&typeof c!=='string'&&'baseVal'in c)c=c.baseVal;return(c||'').toString().toLowerCase();}
-  function dismisser(modal){
-    var nodes=modal.querySelectorAll('button,a,span,div,i,[onclick],[data-close]'),i,n,cl,tx;
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;cl=clsOf(n);tx=(n.textContent||'').trim().toLowerCase();
-      if(/(^|[\s_-])close([\s_-]|$)/.test(cl)||n.hasAttribute('data-close')||tx==='cancel'||tx==='close'||tx==='✕'||tx==='×'||tx==='✖')return n;}
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;
-      if(/close|cancel|dismiss|hide/.test((n.getAttribute('onclick')||'').toLowerCase()))return n;}
-    return null;
-  }
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27)return;
-    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
-    var all=document.querySelectorAll(sel),open=[],i;
-    for(i=0;i<all.length;i++){if(vis(all[i]))open.push(all[i]);}
-    if(!open.length)return;
-    var outer=open.filter(function(el){return!open.some(function(o){return o!==el&&o.contains(el);});});
-    var top=outer[outer.length-1]||open[open.length-1];
-    e.preventDefault();e.stopPropagation();
-    var btn=dismisser(top);
-    if(btn){btn.click();return;}
-    var toc=(top.getAttribute('onclick')||'').toLowerCase();
-    if(/close|cancel|dismiss|hide/.test(toc)){top.click();if(!vis(top))return;}
-    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
-    if(vis(top))top.style.display='none';
-  },true);
-})();
-</script>
+
 </body>
 </html>

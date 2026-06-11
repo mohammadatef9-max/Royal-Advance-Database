@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="shared.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Notifications · MEP Tracker</title>
@@ -210,8 +211,7 @@ a{color:var(--accent-text);text-decoration:none}
 <div class="toasts" id="toasts"></div>
 
 <script>
-const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+// SB and KEY are provided by shared.js
 
 function getH(){
   let tok = window.__MEP_TOKEN__;

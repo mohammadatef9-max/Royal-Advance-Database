@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script src="shared.js?v=1"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reference Data · MEP Tracker</title>
@@ -645,8 +646,15 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
   <!-- ══ PRIORITY MODAL ══ -->
   <div class="modal-overlay" id="pri-modal" style="display:none" onclick="if(event.target===this)closePriModal()">
     <div class="modal" style="width:480px;max-width:95vw">
-      <h2>⭐ Add Priority Villa</h2>
-      <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px">Select a cluster and villa to mark as priority.</p>
+      <h2><span style="color:#f59e0b">★</span> Add Priority Villa</h2>
+      <p style="font-size:12px;color:var(--muted);margin-top:-8px;margin-bottom:16px">Select a tier, cluster and villas to mark as priority.</p>
+      <div class="form-group">
+        <label class="form-label">Priority Tier</label>
+        <select class="form-select" id="pri-m-tier" onchange="onPriVillaInput()">
+          <option value="1">★ Priority 1 — Gold</option>
+          <option value="2">★ Priority 2 — Blue</option>
+        </select>
+      </div>
       <div class="form-group">
         <label class="form-label">Cluster</label>
         <select class="form-select" id="pri-m-cluster" onchange="loadPriModalVillas()">
@@ -671,7 +679,7 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
       </div>
       <div id="pri-m-alert" style="margin-bottom:8px"></div>
       <div style="display:flex;gap:8px;margin-top:16px">
-        <button class="btn btn-primary" style="flex:1" id="pri-m-add-btn" onclick="addPriorityVilla()" disabled>⭐ Mark as Priority</button>
+        <button class="btn btn-primary" style="flex:1" id="pri-m-add-btn" onclick="addPriorityVilla()" disabled>★ Mark as Priority</button>
         <button class="btn btn-ghost" onclick="closePriModal()">Cancel</button>
       </div>
     </div>
@@ -766,8 +774,7 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
 
 <script>
 // ── CONFIG ──
-const SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
-const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+// SB and KEY are provided by shared.js
 
 function getH() {
   let tok = window.__MEP_TOKEN__;
@@ -1843,7 +1850,7 @@ async function sbFetch(path){
 function esc2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 
 /* ══ PRIORITY TAB ══ */
-var _priList = []; // currently priority villas: [{id, villa_no, cluster_name, priority_note}]
+var _priList = []; // one entry per villa+tier: [{id, villa_no, cluster_name, note, tier}]
 var _priModalVillas = []; // villas for modal selection
 var _priSelectedVillaId = null;
 
@@ -1852,15 +1859,20 @@ async function loadPriority(){
   if(listEl) listEl.innerHTML='<div style="padding:20px;color:var(--muted);font-size:13px">Loading...</div>';
   var clusterNames={'1':'Cluster 1','2':'Cluster 2','3':'Cluster 3','4':'Cluster 4','5':'Cluster 5','6':'Cluster 6','7':'Cluster 7'};
   try{
-    var r = await fetch(SB+'/rest/v1/villas?select=id,villa_no,cluster_id,priority_note&is_active=eq.true&is_priority=eq.true&order=cluster_id,villa_no&limit=500',{headers:getH()});
+    var r = await fetch(SB+'/rest/v1/villas?select=id,villa_no,cluster_id,priority_note,priority2_note,is_priority,is_priority2&is_active=eq.true&or=(is_priority.eq.true,is_priority2.eq.true)&order=cluster_id,villa_no&limit=1000',{headers:getH()});
     if(!r.ok) throw new Error('HTTP '+r.status);
     var d = await r.json();
     if(!Array.isArray(d)) throw new Error(JSON.stringify(d));
-    _priList = d.map(function(v){
-      return {id:v.id, villa_no:v.villa_no, cluster_name:clusterNames[String(v.cluster_id)]||('Cluster '+v.cluster_id), priority_note:v.priority_note||''};
+    _priList = [];
+    d.forEach(function(v){
+      var cn = clusterNames[String(v.cluster_id)]||('Cluster '+v.cluster_id);
+      if(v.is_priority)  _priList.push({id:v.id, villa_no:v.villa_no, cluster_name:cn, note:v.priority_note||'',  tier:1});
+      if(v.is_priority2) _priList.push({id:v.id, villa_no:v.villa_no, cluster_name:cn, note:v.priority2_note||'', tier:2});
     });
+    var n1=_priList.filter(function(v){return v.tier===1;}).length;
+    var n2=_priList.filter(function(v){return v.tier===2;}).length;
     var badge = document.getElementById('badge-priority');
-    if(badge) badge.textContent = _priList.length ? _priList.length+' priority' : '—';
+    if(badge) badge.textContent = (n1||n2) ? (n1+' P1 / '+n2+' P2') : '—';
     renderPriority();
   }catch(e){
     if(listEl) listEl.innerHTML='<div style="padding:20px;color:var(--rejected);font-size:13px">Error: '+esc2(e.message)+'</div>';
@@ -1873,22 +1885,30 @@ function renderPriority(){
   if(!listEl) return;
   var q = ((document.getElementById('pri-search')||{}).value||'').toLowerCase();
   var filtered = _priList.filter(function(v){
-    return !q || String(v.villa_no).includes(q) || v.cluster_name.toLowerCase().includes(q) || v.priority_note.toLowerCase().includes(q);
+    return !q || String(v.villa_no).includes(q) || v.cluster_name.toLowerCase().includes(q) || v.note.toLowerCase().includes(q);
   });
   if(!filtered.length){
     listEl.innerHTML='<div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">'+(q?'No results for "'+esc2(q)+'"':'No priority villas yet. Click <b>+ Add Priority Villa</b> to get started.')+'</div>';
     return;
   }
+  // Sort tier 1 first, then cluster/villa (list is already cluster/villa ordered)
+  filtered.sort(function(a,b){ return a.tier-b.tier; });
   var html='<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
-  html+='<div style="display:grid;grid-template-columns:80px 120px 1fr auto;gap:0;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--bg-panel)">';
-  html+='<span>Villa</span><span>Cluster</span><span>Note</span><span>Actions</span></div>';
+  html+='<div style="display:grid;grid-template-columns:90px 90px 120px 1fr auto;gap:0;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--bg-panel)">';
+  html+='<span>Villa</span><span>Tier</span><span>Cluster</span><span>Note</span><span>Actions</span></div>';
   filtered.forEach(function(v){
-    html+='<div style="display:grid;grid-template-columns:80px 120px 1fr auto;gap:0;padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;background:rgba(245,158,11,0.04)">';
-    html+='<span style="font-family:JetBrains Mono,monospace;font-weight:700;color:#f59e0b;font-size:13px">⭐ '+v.villa_no+'</span>';
+    var isP1 = v.tier===1;
+    var starHtml = '★';
+    var tierBadge = isP1
+      ? '<span style="background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:5px;padding:1px 8px;font-size:10px;font-weight:700">P1</span>'
+      : '<span style="background:rgba(59,130,246,0.12);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:5px;padding:1px 8px;font-size:10px;font-weight:700">P2</span>';
+    html+='<div style="display:grid;grid-template-columns:90px 90px 120px 1fr auto;gap:0;padding:8px 16px;border-bottom:1px solid var(--border);font-size:12px;align-items:center;background:'+(isP1?'rgba(245,158,11,0.04)':'rgba(59,130,246,0.04)')+'">';
+    html+='<span style="font-family:JetBrains Mono,monospace;font-weight:700;color:'+(isP1?'#f59e0b':'#3b82f6')+';font-size:13px">'+starHtml+' '+v.villa_no+'</span>';
+    html+='<span>'+tierBadge+'</span>';
     html+='<span style="color:var(--muted);font-size:11px">'+esc2(v.cluster_name)+'</span>';
-    html+='<input type="text" value="'+esc2(v.priority_note)+'" placeholder="Add note…" onchange="updatePriNote('+v.id+',this.value)"'+
+    html+='<input type="text" value="'+esc2(v.note)+'" placeholder="Add note…" onchange="updatePriNote('+v.id+','+v.tier+',this.value)"'+
           ' style="background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:3px 8px;width:90%">';
-    html+='<button onclick="removePriorityVilla('+v.id+')" class="btn btn-ghost" style="padding:3px 10px;font-size:11px;color:var(--rejected);border-color:var(--rejected)">✕ Remove</button>';
+    html+='<button onclick="removePriorityVilla('+v.id+','+v.tier+')" class="btn btn-ghost" style="padding:3px 10px;font-size:11px;color:var(--rejected);border-color:var(--rejected)">✕ Remove</button>';
     html+='</div>';
   });
   html+='</div>';
@@ -1900,6 +1920,7 @@ function filterPriority(){ renderPriority(); }
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function openPriModal(){
   _priSelectedVillaId=null; _priModalVillas=[];
+  document.getElementById('pri-m-tier').value='1';
   document.getElementById('pri-m-cluster').value='';
   document.getElementById('pri-m-note').value='';
   document.getElementById('pri-villa-wrap').style.display='none';
@@ -1914,6 +1935,8 @@ function openPriModal(){
 }
 function closePriModal(){ document.getElementById('pri-modal').style.display='none'; }
 
+function _priTier(){ return parseInt((document.getElementById('pri-m-tier')||{value:'1'}).value)||1; }
+
 async function loadPriModalVillas(){
   var clusterId = document.getElementById('pri-m-cluster').value;
   if(!clusterId){ document.getElementById('pri-villa-wrap').style.display='none'; return; }
@@ -1923,11 +1946,11 @@ async function loadPriModalVillas(){
   document.getElementById('pri-villa-search').value='';
   document.getElementById('pri-villa-preview').textContent='Loading villas...';
   try{
-    var r=await fetch(SB+'/rest/v1/villas?select=id,villa_no,is_priority&is_active=eq.true&cluster_id=eq.'+clusterId+'&order=villa_no&limit=500',{headers:getH()});
+    var r=await fetch(SB+'/rest/v1/villas?select=id,villa_no,is_priority,is_priority2&is_active=eq.true&cluster_id=eq.'+clusterId+'&order=villa_no&limit=500',{headers:getH()});
     var d=await r.json();
     if(!Array.isArray(d)) throw new Error(JSON.stringify(d));
     _priModalVillas=d;
-    document.getElementById('pri-villa-preview').textContent='Enter villa numbers above. Already priority villas will be skipped.';
+    document.getElementById('pri-villa-preview').textContent='Enter villa numbers above. Villas already in the selected tier will be skipped.';
   }catch(e){
     document.getElementById('pri-villa-preview').textContent='Error loading villas: '+e.message;
   }
@@ -1935,23 +1958,24 @@ async function loadPriModalVillas(){
 
 function onPriVillaInput(){
   var val=document.getElementById('pri-villa-search').value;
+  var tier=_priTier();
   var nums=val.split(',').map(function(s){return parseInt(s.trim());}).filter(function(n){return !isNaN(n)&&n>0;});
   if(!nums.length){
     document.getElementById('pri-villa-preview').textContent='Enter villa numbers separated by commas.';
     document.getElementById('pri-m-add-btn').disabled=true;
     return;
   }
-  // Validate against loaded villas
+  // Validate against loaded villas (per selected tier)
   var valid=[],already=[],notFound=[];
   nums.forEach(function(n){
     var v=_priModalVillas.find(function(x){return x.villa_no===n;});
     if(!v) notFound.push(n);
-    else if(v.is_priority) already.push(n);
+    else if(tier===1?v.is_priority:v.is_priority2) already.push(n);
     else valid.push(n);
   });
   var parts=[];
-  if(valid.length) parts.push('<span style="color:#22c55e">✓ '+valid.length+' will be marked priority</span>');
-  if(already.length) parts.push('<span style="color:#f59e0b">⭐ '+already.length+' already priority</span>');
+  if(valid.length) parts.push('<span style="color:#22c55e">✓ '+valid.length+' will be marked Priority '+tier+'</span>');
+  if(already.length) parts.push('<span style="color:'+(tier===1?'#f59e0b':'#3b82f6')+'">★ '+already.length+' already Priority '+tier+'</span>');
   if(notFound.length) parts.push('<span style="color:var(--rejected)">✕ '+notFound.join(', ')+' not found in cluster</span>');
   document.getElementById('pri-villa-preview').innerHTML=parts.join(' &nbsp;·&nbsp; ');
   document.getElementById('pri-m-add-btn').disabled=valid.length===0;
@@ -1959,48 +1983,53 @@ function onPriVillaInput(){
 
 async function addPriorityVilla(){
   var val=document.getElementById('pri-villa-search').value;
+  var tier=_priTier();
   var nums=val.split(',').map(function(s){return parseInt(s.trim());}).filter(function(n){return !isNaN(n)&&n>0;});
   var note=document.getElementById('pri-m-note').value||null;
   var al=document.getElementById('pri-m-alert');
-  // Find valid villa IDs
-  var toMark=_priModalVillas.filter(function(v){return nums.indexOf(v.villa_no)>=0&&!v.is_priority;});
+  // Find valid villa IDs (not already in the selected tier)
+  var toMark=_priModalVillas.filter(function(v){return nums.indexOf(v.villa_no)>=0&&!(tier===1?v.is_priority:v.is_priority2);});
   if(!toMark.length){ al.innerHTML='<div style="color:var(--rejected);font-size:12px;margin-bottom:8px">No valid villas to mark.</div>'; return; }
   al.innerHTML='<div style="color:var(--muted);font-size:12px;margin-bottom:8px">Saving '+toMark.length+' villa(s)...</div>';
+  var body = tier===1 ? {is_priority:true,priority_note:note} : {is_priority2:true,priority2_note:note};
+  // One batched PATCH for all villas instead of one request each
   var errs=0;
-  for(var i=0;i<toMark.length;i++){
-    var res=await fetch(SB+'/rest/v1/villas?id=eq.'+toMark[i].id,{
-      method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
-      body:JSON.stringify({is_priority:true,priority_note:note})
-    });
-    if(!res.ok) errs++;
-  }
+  var idList=toMark.map(function(v){return v.id;}).join(',');
+  var res=await fetch(SB+'/rest/v1/villas?id=in.('+idList+')',{
+    method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
+    body:JSON.stringify(body)
+  });
+  if(!res.ok) errs=toMark.length;
   closePriModal();
-  toast(errs===0?'⭐ '+toMark.length+' villa(s) marked as priority':'Saved with '+errs+' errors', errs===0?'success':'error');
+  toast(errs===0?'★ '+toMark.length+' villa(s) marked as Priority '+tier:'Save failed ('+res.status+')', errs===0?'success':'error');
   await loadPriority();
 }
 
-async function removePriorityVilla(id){
-  if(!confirm('Remove priority from this villa?')) return;
+async function removePriorityVilla(id, tier){
+  tier=tier||1;
+  if(!confirm('Remove Priority '+tier+' from this villa?')) return;
+  var body = tier===1 ? {is_priority:false,priority_note:null} : {is_priority2:false,priority2_note:null};
   try{
     var res=await fetch(SB+'/rest/v1/villas?id=eq.'+id,{
       method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
-      body:JSON.stringify({is_priority:false,priority_note:null})
+      body:JSON.stringify(body)
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
-    toast('Priority removed','info');
+    toast('Priority '+tier+' removed','info');
     await loadPriority();
   }catch(e){ toast('Error: '+esc2(e.message),'error'); }
 }
 
-async function updatePriNote(id, val){
+async function updatePriNote(id, tier, val){
+  var body = tier===2 ? {priority2_note:val||null} : {priority_note:val||null};
   try{
     await fetch(SB+'/rest/v1/villas?id=eq.'+id,{
       method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
-      body:JSON.stringify({priority_note:val||null})
+      body:JSON.stringify(body)
     });
     // Update local
-    var v=_priList.find(function(x){return x.id===id;});
-    if(v) v.priority_note=val;
+    var v=_priList.find(function(x){return x.id===id&&x.tier===(tier===2?2:1);});
+    if(v) v.note=val;
   }catch(e){ toast('Error saving note','error'); }
 }
 
@@ -2162,41 +2191,6 @@ async function deleteOFLink(id){
   <div style="font-size:18px;font-weight:700;color:var(--text)">Access Denied</div>
   <div style="font-size:13px;color:var(--text-muted);text-align:center;max-width:320px">You need the <strong style="color:var(--accent-text)">Manage Activities</strong> permission to access Reference Data.<br>Contact your administrator.</div>
 </div>
-<script>
-/* ===== Global ESC-to-close for modals & popups — v6.4 ===== */
-(function(){
-  function vis(el){
-    if(!el||el.nodeType!==1)return false;
-    var cs=getComputedStyle(el);
-    if(cs.display==='none'||cs.visibility==='hidden'||cs.visibility==='collapse'||parseFloat(cs.opacity)===0)return false;
-    return el.getClientRects().length>0;
-  }
-  function clsOf(n){var c=n.className;if(c&&typeof c!=='string'&&'baseVal'in c)c=c.baseVal;return(c||'').toString().toLowerCase();}
-  function dismisser(modal){
-    var nodes=modal.querySelectorAll('button,a,span,div,i,[onclick],[data-close]'),i,n,cl,tx;
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;cl=clsOf(n);tx=(n.textContent||'').trim().toLowerCase();
-      if(/(^|[\s_-])close([\s_-]|$)/.test(cl)||n.hasAttribute('data-close')||tx==='cancel'||tx==='close'||tx==='✕'||tx==='×'||tx==='✖')return n;}
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;
-      if(/close|cancel|dismiss|hide/.test((n.getAttribute('onclick')||'').toLowerCase()))return n;}
-    return null;
-  }
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27)return;
-    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
-    var all=document.querySelectorAll(sel),open=[],i;
-    for(i=0;i<all.length;i++){if(vis(all[i]))open.push(all[i]);}
-    if(!open.length)return;
-    var outer=open.filter(function(el){return!open.some(function(o){return o!==el&&o.contains(el);});});
-    var top=outer[outer.length-1]||open[open.length-1];
-    e.preventDefault();e.stopPropagation();
-    var btn=dismisser(top);
-    if(btn){btn.click();return;}
-    var toc=(top.getAttribute('onclick')||'').toLowerCase();
-    if(/close|cancel|dismiss|hide/.test(toc)){top.click();if(!vis(top))return;}
-    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
-    if(vis(top))top.style.display='none';
-  },true);
-})();
-</script>
+
 </body>
 </html>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+<script src="shared.js?v=1"></script>
 <meta charset="UTF-8">
 <title>Cluster 5 — Keyplan</title>
 <style>
@@ -400,12 +401,12 @@ var VILLA_ANGLES={"1":0,"2":0,"3":0,"4":0,"5":0,"6":0,"7":0,"8":0,"9":0,"10":0,"
 var ANGLES_DEFAULT=Object.assign({},VILLA_ANGLES);
 var OPEN_FRONT_CLR_CODES=[]; // all clearance codes across all links
 var priorityVillas=new Set(); // villa numbers marked as priority
+var priority2Villas=new Set(); // villa numbers marked as priority 2 (blue)
 var OPEN_FRONT_LINKS={}; // activity_code → [clearance_codes]
 
 var SUB_COLORS=['#b91c1c','#15803d','#1d4ed8','#a16207','#0f766e','#be185d',
   '#c2410c','#065f46','#6d28d9','#4d7c0f','#0e7490','#9d174d','#9a3412','#3730a3','#7e22ce'];
-var SB='https://tactslhsxglzcbsteokf.supabase.co';
-var KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+// SB and KEY are provided by shared.js
 var CLUSTER='C5';
 
 // Show edit button only for superadmin
@@ -513,7 +514,28 @@ function renderVillas(dm, dm2){
       star.className='pri-star';
       star.style.left=(pos.x+rx-6)+'px';
       star.style.top=(pos.y+ry-6)+'px';
-      star.textContent='⭐';
+      star.style.color='#fbbf24';
+      star.style.fontSize='13px';
+      star.textContent='★';
+      layer.appendChild(star);
+    });
+  }
+  if(priority2Villas.size>0){
+    Object.keys(VILLAS).forEach(function(vNum){
+      if(!priority2Villas.has(vNum)) return;
+      var pos=VILLAS[vNum]; if(!pos) return;
+      var angleDeg=VILLA_ANGLES[parseInt(vNum)]||0;
+      var rad=angleDeg*Math.PI/180;
+      var ox=-23, oy=-16; // top-left corner so it never overlaps a gold star
+      var rx=ox*Math.cos(rad)-oy*Math.sin(rad);
+      var ry=ox*Math.sin(rad)+oy*Math.cos(rad);
+      var star=document.createElement('span');
+      star.className='pri-star';
+      star.style.left=(pos.x+rx-6)+'px';
+      star.style.top=(pos.y+ry-6)+'px';
+      star.style.color='#3b82f6';
+      star.style.fontSize='13px';
+      star.textContent='★';
       layer.appendChild(star);
     });
   }
@@ -672,7 +694,7 @@ document.getElementById('villa-layer').addEventListener('mouseover',function(e){
   var v=e.target.closest('.villa');if(!v)return;
   var st=v.getAttribute('data-s'),labels=currentMode==='clr'?CLR_LABELS:WIR_LABELS;
   var vNum=v.getAttribute('data-v');
-  document.getElementById('tt-num').textContent='Villa '+vNum;
+  document.getElementById('tt-num').textContent=(priorityVillas.has(vNum)?'★ ':'')+(priority2Villas.has(vNum)?'★ ':'')+'Villa '+vNum;
   var badge=document.getElementById('tt-badge');
   badge.textContent=labels[st]||st;badge.style.background=ST_BG[st];badge.style.color=ST_COLORS[st];
   document.getElementById('tt-sub').textContent=v.getAttribute('data-sub');
@@ -976,7 +998,8 @@ function doPrint(){
     (currentMode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected / Not Approved</span></div>':'')+
     '<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>'+
     (openFrontVillas.size>0 ? '<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>' : '')+
-    (priorityVillas.size>0 ? '<div class="pl-item"><span style="font-size:9pt">&#11088;</span><span>Priority ('+priorityVillas.size+')</span></div>' : '');
+    (priorityVillas.size>0 ? '<div class="pl-item"><span style="font-size:9pt;color:#f59e0b">&#9733;</span><span>Priority ('+priorityVillas.size+')</span></div>' : '')+
+    (priority2Villas.size>0 ? '<div class="pl-item"><span style="font-size:9pt;color:#3b82f6">&#9733;</span><span>Priority 2 ('+priority2Villas.size+')</span></div>' : '');
   if(compareMode && currentActivity2){
     var a1code=currentActivity.split(' — ')[0];
     var a2code=currentActivity2.split(' — ')[0];
@@ -1060,10 +1083,13 @@ async function loadData(){
   document.getElementById('lm').textContent='Loading activities...';
   // Load priority villas from DB
   try{
-    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no&is_priority=eq.true&is_active=eq.true&cluster_id=eq.5',{headers:getH()});
+    var priR=await fetch(SB+'/rest/v1/villas?select=villa_no,is_priority,is_priority2&or=(is_priority.eq.true,is_priority2.eq.true)&is_active=eq.true&cluster_id=eq.5',{headers:getH()});
     var priD=await priR.json();
-    if(Array.isArray(priD)) priD.forEach(function(r){ priorityVillas.add(String(r.villa_no)); });
-    console.log('[C5 keyplan] Priority villas:',priorityVillas.size);
+    if(Array.isArray(priD)) priD.forEach(function(r){
+      if(r.is_priority) priorityVillas.add(String(r.villa_no));
+      if(r.is_priority2) priority2Villas.add(String(r.villa_no));
+    });
+    console.log('[C5 keyplan] Priority villas:',priorityVillas.size,'| Priority 2:',priority2Villas.size);
   }catch(e){ console.warn('[C5 keyplan] Could not load priority villas',e); }
 
   // Load open front WIR→clearance links from DB
@@ -1183,42 +1209,7 @@ if(window.self!==window.top){
   setTimeout(_tryInit,1000);
 }else{_tryInit();}
 </script>
-<script>
-/* ===== Global ESC-to-close for modals & popups — v6.4 ===== */
-(function(){
-  function vis(el){
-    if(!el||el.nodeType!==1)return false;
-    var cs=getComputedStyle(el);
-    if(cs.display==='none'||cs.visibility==='hidden'||cs.visibility==='collapse'||parseFloat(cs.opacity)===0)return false;
-    return el.getClientRects().length>0;
-  }
-  function clsOf(n){var c=n.className;if(c&&typeof c!=='string'&&'baseVal'in c)c=c.baseVal;return(c||'').toString().toLowerCase();}
-  function dismisser(modal){
-    var nodes=modal.querySelectorAll('button,a,span,div,i,[onclick],[data-close]'),i,n,cl,tx;
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;cl=clsOf(n);tx=(n.textContent||'').trim().toLowerCase();
-      if(/(^|[\s_-])close([\s_-]|$)/.test(cl)||n.hasAttribute('data-close')||tx==='cancel'||tx==='close'||tx==='✕'||tx==='×'||tx==='✖')return n;}
-    for(i=0;i<nodes.length;i++){n=nodes[i];if(!vis(n))continue;
-      if(/close|cancel|dismiss|hide/.test((n.getAttribute('onclick')||'').toLowerCase()))return n;}
-    return null;
-  }
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27)return;
-    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
-    var all=document.querySelectorAll(sel),open=[],i;
-    for(i=0;i<all.length;i++){if(vis(all[i]))open.push(all[i]);}
-    if(!open.length)return;
-    var outer=open.filter(function(el){return!open.some(function(o){return o!==el&&o.contains(el);});});
-    var top=outer[outer.length-1]||open[open.length-1];
-    e.preventDefault();e.stopPropagation();
-    var btn=dismisser(top);
-    if(btn){btn.click();return;}
-    var toc=(top.getAttribute('onclick')||'').toLowerCase();
-    if(/close|cancel|dismiss|hide/.test(toc)){top.click();if(!vis(top))return;}
-    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
-    if(vis(top))top.style.display='none';
-  },true);
-})();
-</script>
+
 
 <div id="edit-panel">
   <div class="ep-section"><div class="ep-title">EDIT TOOLS</div><div class="ep-hint">Click villa = select · Shift+click = multi · drag empty = marquee · Esc = clear · Ctrl+A = all</div></div>
