@@ -396,6 +396,14 @@ async function fetchAll(path){
 }
 function getWirStatus(s){s=(s||'').toLowerCase().trim();if(s==='approved'||s==='a'||s==='b')return 'AP';if(s==='rejected'||s==='c'||s==='d')return 'RJ';if(s==='under_review'||s==='ur')return 'UR';return 'NS';}
 function getClrStatus(s){s=(s||'').toLowerCase().trim();if(s==='fully_approved')return 'FA';if(s==='not_approved')return 'NA';if(s==='pending')return 'PN';return 'NS';}
+var act2Kind='wir'; // dataset of the 2nd compare activity: 'wir' | 'clr'
+function statusOf(kind,raw){return kind==='clr'?getClrStatus(raw):getWirStatus(raw);}
+function buildDataMapKind(act,kind){
+  if(!act)return null;
+  var data=kind==='clr'?clrCsvData:wirCsvData;
+  var dm={};data.forEach(function(r){if(r.actKey===act)dm[r.villa]=r;});
+  return dm;
+}
 var WIR_LABELS={AP:'Approved',RJ:'Rejected',UR:'Under Review',NS:'Not Submitted'};
 var CLR_LABELS={FA:'Fully Approved',NA:'Not Approved',PN:'Pending',NS:'Not Submitted'};
 var ST_COLORS={AP:'#22c55e',RJ:'#ef4444',UR:'#818cf8',PN:'#f59e0b',FA:'#22c55e',NA:'#ef4444',NS:'#cbd5e1'};
@@ -426,8 +434,8 @@ function renderVillas(dm, dm2){
     if(isSplit){
       // Compare mode: background = act1 status color, thick border = act2 status color
       var d1=dm[vNum]||null, d2=dm2[vNum]||null;
-      var st1=d1?getWirStatus(d1.status):'NS';
-      var st2=d2?getWirStatus(d2.status):'NS';
+      var st1=d1?statusOf(currentMode==='clr'?'clr':'wir',d1.status):'NS';
+      var st2=d2?statusOf(act2Kind,d2.status):'NS';
       var bg1=ST_BG_COLORS[st1]||'#334155';
       var bg2=ST_BG_COLORS2[st2]||'#475569';
       var hidden=(inArr(hiddenStatus,st1)&&inArr(hiddenStatus,st2));
@@ -644,7 +652,7 @@ function toggleSubLabels(){
   showSubLabels=!showSubLabels;
   document.getElementById('btn-sub-labels').classList.toggle('active',showSubLabels);
   var dm=buildDataMap(currentActivity);
-  var dm2=compareMode?buildDataMap(currentActivity2):null;
+  var dm2=compareMode?buildDataMapKind(currentActivity2,act2Kind):null;
   renderVillas(dm,dm2);
 }
 
@@ -723,7 +731,7 @@ function onActivityChange(sel){
   currentActivity=sel.value;hiddenSubs=[];
   // Show/hide compare button in WIR mode when an activity is selected
   var btnCmp=document.getElementById('btn-compare');
-  if(btnCmp) btnCmp.style.display=(currentMode==='wir'&&currentActivity)?'':'none';
+  if(btnCmp) btnCmp.style.display=currentActivity?'':'none';
   if(!currentActivity){
     compareMode=false;currentActivity2='';
     if(btnCmp)btnCmp.classList.remove('active');
@@ -734,17 +742,19 @@ function onActivityChange(sel){
   recomputeOpenFront();
   if(!compareMode){buildSubLegend(wirCsvData.filter(function(r){return r.actKey===currentActivity;}));}
   var dm=buildDataMap(currentActivity);
-  var dm2=compareMode?buildDataMap(currentActivity2):null;
+  var dm2=compareMode?buildDataMapKind(currentActivity2,act2Kind):null;
   renderVillas(dm,dm2);
   if(!compareMode){updateStats(dm);}
   else{updateSplitStats(dm,dm2);}
 }
 function onAct2Change(sel){
-  currentActivity2=sel.value;
-  var shortAct2 = currentActivity2 ? currentActivity2.split(' — ')[0] : '— pick 2nd —';
+  var v=sel.value;
+  act2Kind=v.indexOf('c|')===0?'clr':'wir';
+  currentActivity2=v?v.slice(2):'';
+  var shortAct2 = currentActivity2 ? (act2Kind==='clr'?'CLR ':'')+currentActivity2.split(' — ')[0] : '— pick 2nd —';
   if(document.getElementById('cmp-lbl-right')) document.getElementById('cmp-lbl-right').textContent=shortAct2;
   var dm=buildDataMap(currentActivity);
-  var dm2=buildDataMap(currentActivity2);
+  var dm2=buildDataMapKind(currentActivity2,act2Kind);
   renderVillas(dm,dm2);
   updateSplitStats(dm,dm2);
 }
@@ -763,14 +773,21 @@ function toggleCompare(){
     var dm=buildDataMap(currentActivity);
     renderVillas(dm);updateStats(dm);
   } else {
-    // Populate act2 with same WIR activity list
+    // Populate act2 with BOTH datasets (values prefixed w| / c| to mark the kind)
     act2.innerHTML='<option value="">— 2nd Activity —</option>';
-    var sel=document.getElementById('f-act');
-    Array.from(sel.options).forEach(function(o){
+    var ogW=document.createElement('optgroup');ogW.label='WIR Activities';
+    Array.from(document.getElementById('f-act').options).forEach(function(o){
       if(!o.value)return;
-      var opt=document.createElement('option');opt.value=o.value;opt.textContent=o.textContent;
-      act2.appendChild(opt);
+      var opt=document.createElement('option');opt.value='w|'+o.value;opt.textContent=o.textContent;
+      ogW.appendChild(opt);
     });
+    var ogC=document.createElement('optgroup');ogC.label='Clearances';
+    Array.from(document.getElementById('f-clr-act').options).forEach(function(o){
+      if(!o.value)return;
+      var opt=document.createElement('option');opt.value='c|'+o.value;opt.textContent=o.textContent;
+      ogC.appendChild(opt);
+    });
+    act2.appendChild(ogW);act2.appendChild(ogC);
     // Show legend with act1 label
     var shortAct1 = currentActivity.split(' — ')[0];
     if(document.getElementById('cmp-lbl-left')) document.getElementById('cmp-lbl-left').textContent=shortAct1;
@@ -781,15 +798,30 @@ function toggleCompare(){
   }
 }
 function updateSplitStats(dm,dm2){
-  var labels=['AP','UR','RJ','NS'];
-  var c1={},c2={};labels.forEach(function(k){c1[k]=0;c2[k]=0;});
-  for(var v=1;v<=320;v++){
-    var vs=String(v);
-    var d1=dm?dm[vs]:null; var st1=d1?getWirStatus(d1.status):'NS';
-    var d2=dm2?dm2[vs]:null; var st2=d2?getWirStatus(d2.status):'NS';
-    if(c1[st1]!==undefined)c1[st1]++;else c1.NS++;
-    if(c2[st2]!==undefined)c2[st2]++;else c2.NS++;
+  // Each side may be WIR or Clearance: counts bucketed as good/mid/bad/ns
+  // (AP|FA / UR|PN / RJ|NA / NS) and legend labels follow each side's kind.
+  var kind1=currentMode==='clr'?'clr':'wir';
+  function cnt(dmx,kind){
+    var c={AP:0,UR:0,RJ:0,NS:0};
+    for(var v=1;v<=320;v++){
+      var vs=String(v);
+      var d=dmx?dmx[vs]:null; var st=d?statusOf(kind,d.status):'NS';
+      if(st==='AP'||st==='FA')c.AP++;
+      else if(st==='UR'||st==='PN')c.UR++;
+      else if(st==='RJ'||st==='NA')c.RJ++;
+      else c.NS++;
+    }
+    return c;
   }
+  function lbls(kind){return kind==='clr'?['Fully Approved','Pending','Not Approved']:['Approved','Under Review','Rejected'];}
+  var c1=cnt(dm,kind1),c2=cnt(dm2,act2Kind);
+  var L1=lbls(kind1),L2=lbls(act2Kind);
+  (function(){var e=document.getElementById('leg-label-ap');if(e)e.textContent=L1[0];
+    e=document.getElementById('leg-label-ur');if(e)e.textContent=L1[1];
+    e=document.getElementById('leg-label-rj');if(e)e.textContent=L1[2];
+    e=document.getElementById('leg2-label-ap');if(e)e.textContent=L2[0];
+    e=document.getElementById('leg2-label-ur');if(e)e.textContent=L2[1];
+    e=document.getElementById('leg2-label-rj');if(e)e.textContent=L2[2];})();
   function sv(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
   // Act1 sidebar legend counts + stats bar (left half)
   sv('s-ap',c1.AP); sv('s-ur',c1.UR); sv('s-rj',c1.RJ); sv('s-ns',c1.NS);
@@ -949,11 +981,11 @@ function doPrint(){
     : '');
 
   var _prevSubLabels=showSubLabels;
-  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMap(currentActivity2):null);}
+  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
   var srcLayer = document.getElementById('villa-layer');
   var villaHtml = srcLayer ? srcLayer.innerHTML : '';
   showSubLabels=_prevSubLabels;
-  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMap(currentActivity2):null);}
+  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
 
   var imgSrc = ''; // BG intentionally excluded from print
 

@@ -204,7 +204,7 @@ body.space-down #map-viewport{cursor:grab}
   <span class="tl">Activity</span>
   <select id="f-act" onchange="onActivityChange(this)"><option value="">&#8212; Select Activity &#8212;</option></select>
   <select id="f-clr-act" style="display:none" onchange="onActivityChange(this)"><option value="">&#8212; Select Clearance &#8212;</option></select>
-  <button class="tbtn active" id="btn-compare" onclick="toggleCompare()" style="display:none" title="Compare two WIR activities side-by-side">&#8861; Compare</button>
+  <button class="tbtn" id="btn-compare" onclick="toggleCompare()" title="Compare two activities — WIR or Clearance — side-by-side">&#8861; Compare</button>
   <select id="f-act2" style="display:none" onchange="onAct2Change(this)"><option value="">&#8212; 2nd Activity &#8212;</option></select>
   <div id="cmp-legend" style="display:none;align-items:center;gap:6px;font-size:11px;font-family:'Inter',sans-serif">
     <div style="display:flex;align-items:center;gap:3px">
@@ -382,6 +382,14 @@ async function fetchAll(path){
 }
 function getWirStatus(s){s=(s||'').toLowerCase().trim();if(s==='approved'||s==='a'||s==='b')return 'AP';if(s==='rejected'||s==='c'||s==='d')return 'RJ';if(s==='under_review'||s==='ur')return 'UR';return 'NS';}
 function getClrStatus(s){s=(s||'').toLowerCase().trim();if(s==='fully_approved')return 'FA';if(s==='not_approved')return 'NA';if(s==='pending')return 'PN';return 'NS';}
+var act2Kind='wir'; // dataset of the 2nd compare activity: 'wir' | 'clr'
+function statusOf(kind,raw){return kind==='clr'?getClrStatus(raw):getWirStatus(raw);}
+function buildDataMapKind(act,kind){
+  if(!act)return null;
+  var data=kind==='clr'?clrCsvData:wirCsvData;
+  var dm={};data.forEach(function(r){if(r.actKey===act)dm[r.villa]=r;});
+  return dm;
+}
 var WIR_LABELS={AP:'Approved',RJ:'Rejected',UR:'Under Review',NS:'Not Submitted'};
 var CLR_LABELS={FA:'Fully Approved',NA:'Not Approved',PN:'Pending',NS:'Not Submitted'};
 var ST_COLORS={AP:'#22c55e',RJ:'#ef4444',UR:'#818cf8',PN:'#f59e0b',FA:'#22c55e',NA:'#ef4444',NS:'#cbd5e1'};
@@ -409,8 +417,8 @@ function renderVillas(dm, dm2){
     var baseStyle='left:'+pos.x+'px;top:'+pos.y+'px;transform:translate(-23px,-16px) rotate('+angle+'deg);';
     if(isSplit){
       var d1=dm[vNum]||null, d2=dm2[vNum]||null;
-      var st1=d1?getWirStatus(d1.status):'NS';
-      var st2=d2?getWirStatus(d2.status):'NS';
+      var st1=d1?statusOf(currentMode==='clr'?'clr':'wir',d1.status):'NS';
+      var st2=d2?statusOf(act2Kind,d2.status):'NS';
       var bg1=ST_BG_COLORS[st1]||'#334155';
       var bg2=ST_BG_COLORS2[st2]||'#475569';
       var hidden=(inArr(hiddenStatus,st1)&&inArr(hiddenStatus,st2));
@@ -559,7 +567,7 @@ function toggleStatus(st){
   var statEl=document.getElementById('stat-'+st);
   if(statEl)statEl.classList.toggle('hidden-filter',hiddenStatus.indexOf(st)>=0);
   var dm=buildDataMap(currentActivity);
-  var dm2=compareMode?buildDataMap(currentActivity2):null;
+  var dm2=compareMode?buildDataMapKind(currentActivity2,act2Kind):null;
   renderVillas(dm,dm2);
 }
 function toggleSubLabels(){
@@ -601,9 +609,15 @@ function onModeChange(){
   var isClr=currentMode==='clr';
   document.getElementById('f-act').style.display=isClr?'none':'';
   document.getElementById('f-clr-act').style.display=isClr?'':'none';
-  document.getElementById('btn-compare').style.display=isClr?'none':'';
-  if(isClr){compareMode=false;document.getElementById('f-act2').style.display='none';document.getElementById('cmp-legend').style.display='none';currentActivity=document.getElementById('f-clr-act').value;}
-  else{currentActivity=document.getElementById('f-act').value;}
+  // Compare works in both modes (2nd activity can be WIR or Clearance).
+  // Reset any active comparison on mode switch to avoid a stale split view.
+  compareMode=false;currentActivity2='';
+  document.getElementById('btn-compare').classList.remove('active');
+  document.getElementById('f-act2').style.display='none';
+  document.getElementById('f-act2').value='';
+  document.getElementById('cmp-legend').style.display='none';
+  var cl2=document.getElementById('cmp-leg2');if(cl2)cl2.style.display='none';
+  currentActivity=isClr?document.getElementById('f-clr-act').value:document.getElementById('f-act').value;
   hiddenStatus=[];hiddenSubs=[];subColorMap={};
   document.querySelectorAll('.leg-item').forEach(function(el){el.classList.remove('hidden-filter');});
   document.querySelectorAll('.stat').forEach(function(el){el.classList.remove('hidden-filter');});
@@ -620,7 +634,7 @@ function onActivityChange(sel){
     else{subColorMap={};document.getElementById('sub-section').style.display='none';}
   }
   var dm=buildDataMap(currentActivity);
-  var dm2=compareMode?buildDataMap(currentActivity2):null;
+  var dm2=compareMode?buildDataMapKind(currentActivity2,act2Kind):null;
   renderVillas(dm,dm2);updateStats(dm);
   if(compareMode){
     var lbl=currentActivity?currentActivity.split(' — ')[0]:'';
@@ -629,12 +643,14 @@ function onActivityChange(sel){
   }
 }
 function onAct2Change(sel){
-  currentActivity2=sel.value;
+  var v=sel.value;
+  act2Kind=v.indexOf('c|')===0?'clr':'wir';
+  currentActivity2=v?v.slice(2):'';
   var dm=buildDataMap(currentActivity);
-  var dm2=buildDataMap(currentActivity2);
+  var dm2=buildDataMapKind(currentActivity2,act2Kind);
   renderVillas(dm,dm2);
   if(currentActivity2){
-    document.getElementById('cmp-lbl-right').textContent=currentActivity2.split(' — ')[0];
+    document.getElementById('cmp-lbl-right').textContent=(act2Kind==='clr'?'CLR ':'')+currentActivity2.split(' — ')[0];
     updateSplitStats(dm,dm2);
   }
 }
@@ -646,8 +662,10 @@ function toggleCompare(){
   var cmpLeg=document.getElementById('cmp-legend');
   if(compareMode){
     cmpLeg.style.display='flex';
+    var lbl1=currentActivity?currentActivity.split(' — ')[0]:'';
+    document.getElementById('cmp-lbl-left').textContent=lbl1;
     var dm=buildDataMap(currentActivity);
-    var dm2=buildDataMap(currentActivity2);
+    var dm2=buildDataMapKind(currentActivity2,act2Kind);
     renderVillas(dm,dm2);updateSplitStats(dm,dm2);
   } else {
     cmpLeg.style.display='none';
@@ -659,25 +677,35 @@ function toggleCompare(){
   }
 }
 function updateSplitStats(dm,dm2){
-  var labels=['AP','UR','RJ','NS'];
-  var c1={},c2={};labels.forEach(function(k){c1[k]=0;c2[k]=0;});
-  Object.keys(VILLAS).forEach(function(vs){
-    var d1=dm?dm[vs]:null; var st1=d1?getWirStatus(d1.status):'NS';
-    var d2=dm2?dm2[vs]:null; var st2=d2?getWirStatus(d2.status):'NS';
-    if(c1[st1]!==undefined)c1[st1]++;else c1.NS++;
-    if(c2[st2]!==undefined)c2[st2]++;else c2.NS++;
-  });
+  // Each side may be WIR or Clearance: counts bucketed as good/mid/bad/ns
+  // (AP|FA / UR|PN / RJ|NA / NS) and legend labels follow each side's kind.
+  var kind1=currentMode==='clr'?'clr':'wir';
+  function cnt(dmx,kind){
+    var c={good:0,mid:0,bad:0,ns:0};
+    Object.keys(VILLAS).forEach(function(vs){
+      var d=dmx?dmx[vs]:null; var st=d?statusOf(kind,d.status):'NS';
+      if(st==='AP'||st==='FA')c.good++;
+      else if(st==='UR'||st==='PN')c.mid++;
+      else if(st==='RJ'||st==='NA')c.bad++;
+      else c.ns++;
+    });
+    return c;
+  }
+  function lbls(kind){return kind==='clr'?['Fully Approved','Pending','Not Approved']:['Approved','Under Review','Rejected'];}
+  var c1=cnt(dm,kind1),c2=cnt(dm2,act2Kind);
   function sv(id,v){var el=document.getElementById(id);if(el)el.textContent=v;}
-  sv('s-ap',c1.AP);sv('s-ur',c1.UR);sv('s-rj',c1.RJ);sv('s-ns',c1.NS);
-  sv('sv-ap',c1.AP);sv('sv-ur',c1.UR);sv('sv-rj',c1.RJ);
-  sv('sv-pct',dm?Math.round(c1.AP/TOTAL_VILLAS*100)+'%':'—');
+  sv('s-ap',c1.good);sv('s-ur',c1.mid);sv('s-rj',c1.bad);sv('s-ns',c1.ns);
+  sv('sv-ap',c1.good);sv('sv-ur',c1.mid);sv('sv-rj',c1.bad);
+  sv('sv-pct',dm?Math.round(c1.good/TOTAL_VILLAS*100)+'%':'—');
+  var L1=lbls(kind1);sv('leg-label-ap',L1[0]);sv('leg-label-ur',L1[1]);sv('leg-label-rj',L1[2]);
   var act1short=currentActivity?currentActivity.split(' — ')[0]:'';
   var t1=document.getElementById('cmp-leg1-title');if(t1){t1.textContent=act1short;t1.style.display=dm2?'block':'none';}
   if(dm2){
-    sv('s2-ap',c2.AP);sv('s2-ur',c2.UR);sv('s2-rj',c2.RJ);sv('s2-ns',c2.NS);
-    sv('s2v-ap',c2.AP);sv('s2v-ur',c2.UR);sv('s2v-rj',c2.RJ);
-    sv('s2v-pct',Math.round(c2.AP/TOTAL_VILLAS*100)+'%');
-    var act2short=currentActivity2?currentActivity2.split(' — ')[0]:'2nd Activity';
+    sv('s2-ap',c2.good);sv('s2-ur',c2.mid);sv('s2-rj',c2.bad);sv('s2-ns',c2.ns);
+    sv('s2v-ap',c2.good);sv('s2v-ur',c2.mid);sv('s2v-rj',c2.bad);
+    sv('s2v-pct',Math.round(c2.good/TOTAL_VILLAS*100)+'%');
+    var L2=lbls(act2Kind);sv('leg2-label-ap',L2[0]);sv('leg2-label-ur',L2[1]);sv('leg2-label-rj',L2[2]);
+    var act2short=currentActivity2?(act2Kind==='clr'?'CLR ':'')+currentActivity2.split(' — ')[0]:'2nd Activity';
     var t=document.getElementById('cmp-leg2-title');if(t)t.textContent=act2short;
     var l=document.getElementById('cmp-leg2');if(l)l.style.display='block';
   } else {
@@ -867,10 +895,10 @@ function doPrint(){
     '<div class="pp-card"><div class="pv pv-of">'+ofV+'</div><div class="pl">Open Front</div></div>'+
     '<div class="pp-card"><div class="pv pv-pct">'+pct+'</div><div class="pl">Progress</div></div>';
   var _prevSubLabels=showSubLabels;
-  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMap(currentActivity2):null);}
+  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
   var villaHtml=document.getElementById('villa-layer')?document.getElementById('villa-layer').innerHTML:'';
   showSubLabels=_prevSubLabels;
-  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMap(currentActivity2):null);}
+  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
   var legendHtml=
     '<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>'+(currentMode==='clr'?'Fully Approved':'Approved')+'</span></div>'+
     '<div class="pl-item"><div class="pl-dot" style="background:'+(currentMode==='clr'?'#f59e0b':'#818cf8')+'"></div><span>'+(currentMode==='clr'?'Pending':'Under Review')+'</span></div>'+
@@ -1007,6 +1035,14 @@ async function loadData(){
   var clrSel=document.getElementById('f-clr-act');
   clrSel.innerHTML='<option value="">— Select Clearance —</option>';
   clrActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;clrSel.appendChild(o);});
+  // Compare dropdown: BOTH datasets, values prefixed w| / c| to mark the kind
+  var sel2=document.getElementById('f-act2');
+  sel2.innerHTML='<option value="">— 2nd Activity —</option>';
+  var ogW=document.createElement('optgroup');ogW.label='WIR Activities';
+  wirActKeys.forEach(function(k){var o=document.createElement('option');o.value='w|'+k;o.textContent=k;ogW.appendChild(o);});
+  var ogC=document.createElement('optgroup');ogC.label='Clearances';
+  clrActKeys.forEach(function(k){var o=document.createElement('option');o.value='c|'+k;o.textContent=k;ogC.appendChild(o);});
+  sel2.appendChild(ogW);sel2.appendChild(ogC);
   recomputeOpenFront();
   console.log('[keyplan C6] WIR:',wirCsvData.length,'rows,',wirActKeys.length,'acts | CLR:',clrCsvData.length,'rows',clrActKeys.length,'acts');
   // Load open NCR / SOR for this cluster
