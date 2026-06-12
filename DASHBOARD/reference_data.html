@@ -1533,11 +1533,17 @@ function isAdmin(){return hasPerm('manage_users')&&hasPerm('manage_system');}
 
 function checkAccess(){
   if(isAdmin()||hasPerm('manage_activities')) return; // allowed
-  // No permission — show overlay and block the page
-  document.getElementById('access-denied').style.display='flex';
-  document.getElementById('access-denied').style.pointerEvents='all';
-  // Hide page content
-  document.querySelector('.page-wrap').style.visibility='hidden';
+  // No permission — show overlay and block the page.
+  // The overlay div sits near the end of the body, so wait for the DOM
+  // when this runs early (it crashed on null before the DOM was parsed).
+  function block(){
+    var ov=document.getElementById('access-denied');
+    var pw=document.querySelector('.page-wrap');
+    if(ov){ov.style.display='flex';ov.style.pointerEvents='all';}
+    if(pw){pw.style.visibility='hidden';}
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',block);
+  else block();
 }
 
 // ── INIT ──
