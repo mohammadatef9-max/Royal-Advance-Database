@@ -1266,6 +1266,12 @@ if(window.self!==window.top){
     <div class="ep-row" style="margin-top:6px;gap:10px"><label><input type="checkbox" id="ep-snap" checked onchange="editToggleSnap()"> Snap</label><label><input type="checkbox" id="ep-grid-show" checked onchange="editToggleGrid()"> Show grid</label></div>
   </div>
   <div class="ep-section">
+    <div class="ep-label">Map size · <span id="ep-mapscale-val" style="color:#facc15">1.00×</span></div>
+    <input type="range" id="ep-mapscale" min="0.5" max="4" step="0.05" value="1" oninput="editSetMapScale(this.value)">
+    <div class="ep-actions" style="margin-top:6px"><button class="ep-btn" onclick="bumpMapScale(-0.1)">− Smaller</button><button class="ep-btn" onclick="bumpMapScale(0.1)">+ Bigger</button><button class="ep-btn" onclick="editSetMapScale(1)">Reset 1×</button></div>
+    <div class="ep-hint" style="margin-top:6px">Scales the background plan so its drawn villas match the box size. Boxes stay fixed; placed villas scale with the plan.</div>
+  </div>
+  <div class="ep-section">
     <div class="ep-label">History · <span class="ep-val" id="ep-change-count">0</span> changes</div>
     <div class="ep-actions"><button class="ep-btn" onclick="editUndo()">↶ Undo</button><button class="ep-btn" onclick="editRedo()">↷ Redo</button><button class="ep-btn" onclick="editResetAll()" style="color:#f87171">⟲ Reset</button></div>
   </div>
@@ -1278,6 +1284,36 @@ if(window.self!==window.top){
 <script>
 /* ========= EDIT MODE (temporary) ========= */
 var EDIT={on:false,selected:new Set(),gridSize:10,snap:true,showGrid:true,history:[],redoStack:[],dragging:null,marquee:null,pendingChanges:0};
+/* Working map-scale aid: enlarges the background plan (and any placed villas)
+   so its drawn villas can be sized to match the fixed 46x32 boxes. The villa
+   boxes themselves stay fixed, so raising the scale makes a box relatively
+   smaller vs the plan. Positions + image_size export together, so the final
+   JSON is self-describing. */
+var BASE_W=1900, BASE_H=1343, BASE_LAYER_H=1850;
+var MAP_SCALE=1;
+function editSetMapScale(s){
+  s=Math.max(0.5,Math.min(4,Math.round((parseFloat(s)||1)*100)/100));
+  var ratio=s/MAP_SCALE;
+  if(Math.abs(ratio-1)<1e-9){ return; }
+  // No pushHistory here: slider fires per-tick; scaling is reversible by moving
+  // the slider back, and we don't want to flood undo / inflate the change count.
+  Object.keys(VILLAS).forEach(function(k){
+    VILLAS[k].x=Math.round(VILLAS[k].x*ratio*10)/10;
+    VILLAS[k].y=Math.round(VILLAS[k].y*ratio*10)/10;
+  });
+  MAP_SCALE=s;
+  IMG_W=Math.round(BASE_W*s); IMG_H=Math.round(BASE_H*s);
+  var cw=IMG_W+'px';
+  var cont=document.getElementById('map-container'); if(cont)cont.style.width=cw;
+  var img=document.getElementById('map-img'); if(img)img.style.width=cw;
+  var layer=document.getElementById('villa-layer'); if(layer){layer.style.width=cw;layer.style.height=Math.round(BASE_LAYER_H*s)+'px';}
+  var rng=document.getElementById('ep-mapscale'); if(rng&&Math.abs(parseFloat(rng.value)-s)>1e-9)rng.value=s;
+  var lbl=document.getElementById('ep-mapscale-val'); if(lbl)lbl.textContent=s.toFixed(2)+'×';
+  if(EDIT.showGrid)drawGrid();
+  renderVillas(buildDataMap()); reapplySelection();
+  zoomFit();
+}
+function bumpMapScale(d){ editSetMapScale(MAP_SCALE+d); }
 function toggleEditMode(){
   EDIT.on=!EDIT.on;
   document.body.classList.toggle('edit-mode',EDIT.on);
@@ -1299,7 +1335,7 @@ function snapVal(v){ return EDIT.snap?Math.round(v/EDIT.gridSize)*EDIT.gridSize:
 function pushHistory(){ EDIT.history.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); if(EDIT.history.length>100)EDIT.history.shift(); EDIT.redoStack=[]; EDIT.pendingChanges++; document.getElementById('ep-change-count').textContent=EDIT.pendingChanges; }
 function editUndo(){ if(!EDIT.history.length)return; EDIT.redoStack.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); var prev=EDIT.history.pop(); VILLAS=JSON.parse(JSON.stringify(prev.pos)); VILLA_ANGLES=Object.assign({},prev.ang); renderVillas(buildDataMap()); reapplySelection(); }
 function editRedo(){ if(!EDIT.redoStack.length)return; EDIT.history.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); var s=EDIT.redoStack.pop(); VILLAS=JSON.parse(JSON.stringify(s.pos)); VILLA_ANGLES=Object.assign({},s.ang); renderVillas(buildDataMap()); reapplySelection(); }
-function editResetAll(){ if(!confirm('Reset ALL villas to initial positions and angles?'))return; pushHistory(); VILLAS=JSON.parse(JSON.stringify(VILLAS_DEFAULT)); if(typeof ANGLES_DEFAULT!=='undefined')VILLA_ANGLES=Object.assign({},ANGLES_DEFAULT); EDIT.pendingChanges=0; document.getElementById('ep-change-count').textContent='0'; renderVillas(buildDataMap()); reapplySelection(); }
+function editResetAll(){ if(!confirm('Reset ALL villas to initial positions and angles?'))return; pushHistory(); VILLAS=JSON.parse(JSON.stringify(VILLAS_DEFAULT)); if(MAP_SCALE!==1){Object.keys(VILLAS).forEach(function(k){VILLAS[k].x=Math.round(VILLAS[k].x*MAP_SCALE*10)/10;VILLAS[k].y=Math.round(VILLAS[k].y*MAP_SCALE*10)/10;});} if(typeof ANGLES_DEFAULT!=='undefined')VILLA_ANGLES=Object.assign({},ANGLES_DEFAULT); EDIT.pendingChanges=0; document.getElementById('ep-change-count').textContent='0'; renderVillas(buildDataMap()); reapplySelection(); }
 function reapplySelection(){ document.querySelectorAll('.villa').forEach(function(el){ el.classList.toggle('is-selected',EDIT.selected.has(el.getAttribute('data-v'))); }); updateSelInfo(); }
 function updateSelInfo(){
   document.getElementById('ep-selcount').textContent=EDIT.selected.size;
