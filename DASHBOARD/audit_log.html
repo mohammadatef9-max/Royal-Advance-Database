@@ -285,6 +285,15 @@ function applyTheme(t){ document.documentElement.setAttribute('data-theme', t||'
 try{ const t=localStorage.getItem('mep_theme'); if(t) applyTheme(t); }catch(e){}
 
 // ── Session from main_app ──
+let _inited = false;
+function _tryStart(){
+  if(_inited) return;
+  // In-shell: wait for the session before querying — otherwise we fall back to
+  // the anon key, which has no grant on villas (42501) and bypasses the perm gate.
+  if(window.self !== window.top && !__user) return;
+  _inited = true;
+  checkAndInit();
+}
 window.addEventListener('message', function(e){
   if(!e.data) return;
   if(e.data.type==='theme') applyTheme(e.data.theme);
@@ -293,17 +302,23 @@ window.addEventListener('message', function(e){
     __user  = e.data.user;
     __perms = e.data.user?.permissions||[];
     document.body.classList.add('in-shell');
-    checkAndInit();
+    _tryStart();
   }
 });
 
-// Auto-start if standalone
-setTimeout(function(){
-  if(!__user){
-    // Try anon key for read — permissions won't be enforced fully in standalone
-    checkAndInit();
-  }
-}, 600);
+if(window.self !== window.top){
+  document.body.classList.add('in-shell');
+  try{ window.parent.postMessage({type:'child_ready'},'*'); }catch(e){}
+  // Re-request the session (shell re-sends on child_ready); hard fallback ~12s.
+  let _t = 0;
+  const _poll = setInterval(function(){
+    if(_inited || __user){ clearInterval(_poll); return; }
+    if(++_t >= 24){ clearInterval(_poll); _inited = true; checkAndInit(); return; }
+    try{ window.parent.postMessage({type:'child_ready'},'*'); }catch(e){}
+  }, 500);
+} else {
+  _tryStart(); // standalone
+}
 
 function getH(extra){
   const tok = __token || KEY;

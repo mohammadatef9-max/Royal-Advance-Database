@@ -931,7 +931,13 @@ async function init(){
 // ── SESSION BRIDGE ──
 function applyTheme(t){document.documentElement.setAttribute('data-theme',t||'dark');try{localStorage.setItem('mep_theme',t);}catch(e){}}
 var _initCalled=false;
-function _tryInit(){if(_initCalled)return;_initCalled=true;init();}
+function _tryInit(){
+  if(_initCalled)return;
+  // In-shell: wait for the session (user+token) before init, so a slow session
+  // postMessage never makes us fall back to anon and error/deny.
+  if(window.self!==window.top && !window.__MEP_USER__)return;
+  _initCalled=true;init();
+}
 window.addEventListener('message',function(e){
   if(!e.data||typeof e.data!=='object')return;
   if(e.data.type==='theme')applyTheme(e.data.theme);
@@ -940,7 +946,12 @@ window.addEventListener('message',function(e){
 if(window.self!==window.top){
   document.body.classList.add('in-shell');
   try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
-  setTimeout(_tryInit,1000);
+  var _st=0;
+  var _poll=setInterval(function(){
+    if(_initCalled||window.__MEP_USER__){clearInterval(_poll);return;}
+    if(++_st>=24){clearInterval(_poll);_initCalled=true;init();return;}
+    try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+  },500);
 }else{_tryInit();}
 </script>
 

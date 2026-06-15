@@ -2279,9 +2279,10 @@ async function confirmDeleteScope() {
     if (pcs.length) {
       const pcIds = pcs.map(p => p.id).join(',');
       await fdel(`qs_pc_signatories?pc_id=in.(${pcIds})`);
+      // qs_pc_overrides links via pc_id (no scope_id column) — delete before the PCs
+      await fdel(`qs_pc_overrides?pc_id=in.(${pcIds})`);
     }
     await fdel(`qs_billed_records?scope_id=eq.${sid}`);
-    await fdel(`qs_pc_overrides?scope_id=eq.${sid}`);
     await fdel(`qs_payment_certificates?scope_id=eq.${sid}`);
     // Get group ids
     const grps = await fa(`qs_scope_activity_groups?scope_id=eq.${sid}&select=id`);
@@ -3478,7 +3479,15 @@ document.addEventListener('keydown', function(e) {
 // SESSION BRIDGE
 // ══════════════════════════════════════════════
 var _initCalled = false;
-function _tryInit() { if (_initCalled) return; _initCalled = true; init(); }
+function _tryInit() {
+  if (_initCalled) return;
+  // In the shell, do NOT initialise until the session (user + permissions) has
+  // actually arrived — otherwise a slow session postMessage causes a false
+  // "Access Denied" that sticks even after the real session shows up.
+  if (window.self !== window.top && !window.__MEP_USER__) return;
+  _initCalled = true;
+  init();
+}
 window.addEventListener('message', function(e) {
   if (!e.data || typeof e.data !== 'object') return;
   if (e.data.type === 'theme') applyTheme(e.data.theme);
@@ -3487,7 +3496,15 @@ window.addEventListener('message', function(e) {
 if (window.self !== window.top) {
   document.body.classList.add('in-shell');
   try { window.parent.postMessage({ type:'child_ready' }, '*'); } catch(e) {}
-  setTimeout(_tryInit, 1200);
+  // Re-request the session periodically in case the first push was missed
+  // (the shell re-sends it on child_ready). Hard fallback after ~12s so the
+  // page never hangs if a session genuinely never comes.
+  var _sessTries = 0;
+  var _sessPoll = setInterval(function() {
+    if (_initCalled || window.__MEP_USER__) { clearInterval(_sessPoll); return; }
+    if (++_sessTries >= 24) { clearInterval(_sessPoll); _initCalled = true; init(); return; }
+    try { window.parent.postMessage({ type:'child_ready' }, '*'); } catch(e) {}
+  }, 500);
 } else { _tryInit(); }
 
 // ══════════════════════════════════════════════
