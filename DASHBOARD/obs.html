@@ -4,740 +4,335 @@
 <script src="shared.js?v=1" data-no-esc></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OBS Labour Tracker</title>
+<title>OBS Productivity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root {
+:root{
   --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-hover:#1a2030;
-  --border:#1e2531;--border-strong:#2a3340;--border-subtle:#131821;
+  --border:#1e2531;--border-strong:#2a3340;
   --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#3e4452;
   --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.13);--accent-text:#93b6ff;
-  --approved:#22c55e;--rejected:#f87171;--pending:#f59e0b;
+  --good:#22c55e;--bad:#f87171;--warn:#f59e0b;
   --font:"Inter",-apple-system,sans-serif;--mono:"JetBrains Mono",monospace;
 }
 [data-theme="light"]{
   --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-hover:#f0f3f7;
-  --border:#e5e8ed;--border-strong:#d1d6de;--border-subtle:#eef0f4;
+  --border:#e5e8ed;--border-strong:#d1d6de;
   --text:#1a1f29;--text-muted:#5b6373;--text-dim:#8a93a3;--text-faint:#b4bac5;
   --accent:#2563eb;--accent-soft:rgba(37,99,235,0.08);--accent-text:#1d4ed8;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--font);font-size:13px;background:var(--bg);color:var(--text);
-  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
-button{font:inherit;color:inherit;cursor:pointer}
-
-/* Topbar — hidden when loaded inside shell */
-.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0}
+body{font-family:var(--font);font-size:13px;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
+button,input,select{font:inherit;color:inherit}
+.topbar{height:52px;background:var(--bg-elev);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:10px;flex-shrink:0}
 body.in-shell .topbar{display:none!important}
-.tb-logo{width:26px;height:26px;border-radius:7px;flex-shrink:0;
-  background:linear-gradient(135deg,var(--accent) 0%,#7aa9ff 100%);
-  display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px}
-.tb-title{font-size:14px;font-weight:600;color:var(--text)}
-.tb-sub{font-size:10px;color:var(--text-dim)}
-
-/* Page wrap — flex column, fills all remaining height */
+.tb-logo{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,var(--accent),#7aa9ff);display:grid;place-items:center;color:#fff;font-weight:700}
 .page-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
-
-/* Toolbar */
-.toolbar{display:flex;align-items:center;gap:12px;padding:8px 16px;
-  background:var(--bg-elev);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
-.tb-label{font-size:11px;color:var(--text-muted);font-weight:500}
-.sel{padding:5px 9px;border:1px solid var(--border-strong);border-radius:6px;
-  background:var(--bg-panel);color:var(--text);font-size:12px;font-family:var(--font);
-  outline:none;cursor:pointer;transition:border-color .15s}
-.sel:focus{border-color:var(--accent)}
+.toolbar{display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(--bg-elev);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.tb-label{font-size:11px;color:var(--text-muted);font-weight:600}
+.sel,.inp{padding:6px 9px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px;outline:none}
+.sel:focus,.inp:focus{border-color:var(--accent)}
+.inp{width:90px;font-family:var(--mono)}
+.btn{padding:6px 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);font-size:12px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--bg-hover)}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{filter:brightness(1.08)}
 .tb-spacer{flex:1}
-.tb-updated{font-size:10px;color:var(--text-faint);font-family:var(--mono)}
-
-/* KPI Strip */
-.kpi-strip{display:flex;gap:10px;padding:12px 16px;flex-shrink:0;overflow-x:auto;
-  background:var(--bg);scrollbar-width:thin}
-.kpi-strip::-webkit-scrollbar{height:3px}
-.kpi-strip::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:2px}
-.kpi-card{flex:1;min-width:130px;background:var(--bg-panel);border:1px solid var(--border);
-  border-radius:10px;padding:12px 14px;transition:border-color .2s}
-.kpi-card:hover{border-color:var(--border-strong)}
-.kpi-label{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;
-  color:var(--text-dim);margin-bottom:5px}
-.kpi-value{font-size:21px;font-weight:700;color:var(--text);font-family:var(--mono);
-  letter-spacing:-.03em;line-height:1.1}
-.kpi-sub{font-size:10px;color:var(--text-muted);margin-top:4px}
-.kpi-ok  .kpi-value{color:#22c55e}
-.kpi-warn.kpi-value{color:#f59e0b}
-.kpi-bad .kpi-value{color:#f87171}
-.kpi-aed .kpi-value{font-size:15px}
-
-/* Charts row */
-.charts-row{display:flex;gap:10px;padding:0 16px 12px;flex-shrink:0}
-.chart-card{flex:1;background:var(--bg-panel);border:1px solid var(--border);border-radius:10px;
-  padding:12px 14px;display:flex;flex-direction:column;min-height:0}
-.chart-title{font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:10px;letter-spacing:.02em}
-.chart-wrap{position:relative;height:200px}
-
-/* Scroll area */
-.scroll-area{flex:1;overflow-y:auto;padding:0 16px 16px;min-height:0;display:flex;flex-direction:column;gap:12px}
-.scroll-area::-webkit-scrollbar{width:4px}
-.scroll-area::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:3px}
-
-/* Section headers */
-.sec-hdr{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--text-dim);padding:10px 0 6px;border-bottom:1px solid var(--border);margin-bottom:4px}
-.sec-hdr-date{font-weight:400;letter-spacing:0;text-transform:none;font-size:10px;color:var(--text-faint);margin-left:6px}
-
-/* Discipline table */
-.disc-table{width:100%;border-collapse:collapse;font-size:12px}
-.disc-table th{padding:7px 10px;text-align:left;font-size:10px;font-weight:600;letter-spacing:.05em;
-  text-transform:uppercase;color:var(--text-faint);border-bottom:1px solid var(--border);
-  white-space:nowrap;background:var(--bg-elev)}
-.disc-table th.num,.disc-table td.num{text-align:right}
-.disc-row{cursor:pointer;transition:background .1s}
-.disc-row:hover{background:var(--bg-hover)}
-.disc-row td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text-muted);
-  white-space:nowrap;vertical-align:middle}
-.disc-row td.dname{color:var(--text);font-weight:500}
-.disc-row td.num{text-align:right;font-family:var(--mono);font-size:11px}
-.val-pos{color:#22c55e}
-.val-neg{color:#f87171}
-/* expand arrow */
-.xarrow{display:inline-block;width:14px;font-size:9px;color:var(--text-faint);
-  transition:transform .15s;user-select:none;vertical-align:middle}
-.xarrow.open{transform:rotate(90deg)}
-/* progress mini bar */
-.pbar{display:inline-flex;align-items:center;gap:6px}
-.pbar-track{width:64px;height:4px;background:var(--border-strong);border-radius:2px;display:inline-block;vertical-align:middle}
-.pbar-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .3s}
-/* Activity sub-rows */
-.sub-group{display:none}
-.sub-group.open{display:table-row-group}
-.sub-row td{padding:5px 10px 5px 28px;border-bottom:1px solid var(--border-subtle);
-  font-size:11px;color:var(--text-dim);background:var(--bg);vertical-align:middle}
-.sub-row td.num{text-align:right;font-family:var(--mono);font-size:10.5px}
-
-/* Headcount badges */
-.hc-strip{display:flex;flex-wrap:wrap;gap:8px;padding:6px 0 0}
-.hc-badge{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:80px;
-  background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:8px 12px}
-.hc-trade{font-size:10px;color:var(--text-dim);font-weight:500;text-align:center}
-.hc-count{font-size:20px;font-weight:700;color:var(--text);font-family:var(--mono);line-height:1.2}
-.hc-total{border-color:var(--accent)}
-.hc-total .hc-trade{color:var(--accent-text)}
-.hc-total .hc-count{color:var(--accent-text)}
-
-/* Loading / empty states */
-.loading-msg{display:flex;align-items:center;gap:8px;padding:30px 0;color:var(--text-dim);font-size:12px;justify-content:center}
-.spin{width:14px;height:14px;border:2px solid var(--border-strong);border-top-color:var(--accent);
-  border-radius:50%;animation:spin .7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.empty-msg{padding:24px;text-align:center;color:var(--text-faint);font-size:12px}
+.scroll{flex:1;overflow-y:auto;padding:14px 16px}
+/* KPI cards */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.kpi .v{font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
+.kpi .l{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-top:3px;font-weight:600}
+.kpi .s{font-size:10px;color:var(--text-faint);margin-top:2px}
+.kpi.ok .v{color:var(--good)} .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)} .kpi.accent .v{color:var(--accent-text)}
+/* panel */
+.panel{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden}
+.panel-h{padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
+.panel-h .sub{font-weight:400;color:var(--text-muted);font-size:11px}
+.panel-b{padding:12px 14px}
+.pool-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-size:10.5px;color:var(--text-muted);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:right;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700;border-bottom:1px solid var(--border);background:var(--bg-panel);position:sticky;top:0}
+th.l,td.l{text-align:left}
+td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-family:var(--mono)}
+tr:hover td{background:var(--bg-hover)}
+.code{color:var(--accent-text);font-weight:700}
+.muted{color:var(--text-faint)}
+.bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;min-width:60px}
+.bar>i{display:block;height:100%;background:var(--accent)}
+.assign-inp{width:70px;padding:3px 6px;border:1px solid var(--border-strong);border-radius:5px;background:var(--bg-panel);color:var(--text);font-family:var(--mono);font-size:11px;text-align:right}
+#msg{font-size:11px;margin-left:6px}
+#access-denied{display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;height:100vh;background:var(--bg);color:var(--text)}
+#access-denied.show{display:flex}
+.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(11,14,20,.7);z-index:50}
+.spin{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
+<div class="topbar"><div class="tb-logo">M</div><div><div style="font-weight:600">OBS Productivity</div><div style="font-size:10px;color:var(--text-dim)">Labour vs output by activity group</div></div></div>
 
-<!-- Topbar (shown only when page is standalone, hidden in shell) -->
-<div class="topbar">
-  <div class="tb-logo">O</div>
-  <div>
-    <div class="tb-title">OBS Labour Tracker</div>
-    <div class="tb-sub">Ba Al Ghaiylam — Royal Advance Engineering</div>
+<div id="access-denied"><div style="font-size:46px">🔒</div><div style="font-size:20px;font-weight:700;color:var(--bad)">Access Denied</div><div style="color:var(--text-muted)">OBS data requires the <b>view_obs</b> permission.</div></div>
+
+<div class="page-wrap" id="page">
+  <div class="toolbar">
+    <span class="tb-label">Month</span>
+    <input type="month" id="f-month" class="sel" onchange="reload()">
+    <span class="tb-label">Activity Group</span>
+    <select id="f-group" class="sel" onchange="reload()"><option value="HLD">H/L Drainage (HLD1–9)</option></select>
+    <span class="tb-label">Trade</span>
+    <select id="f-trade" class="sel" onchange="reload()"><option value="Plumber">Plumber</option></select>
+    <button class="btn" onclick="reload()">↻ Refresh</button>
+    <div class="tb-spacer"></div>
+    <span class="tb-label" id="tb-info" style="color:var(--text-faint)"></span>
+  </div>
+
+  <div class="scroll" style="position:relative">
+    <div class="loading" id="loading"><div class="spin"></div></div>
+
+    <!-- Labour pool input -->
+    <div class="panel" id="pool-panel" style="display:none">
+      <div class="panel-h">Monthly Labour Pool <span class="sub">— one number for the trade this month; everything else is derived</span></div>
+      <div class="panel-b">
+        <div class="pool-row">
+          <div class="fld"><label>Labour count (<span id="pl-trade">Plumber</span>)</label><input class="inp" id="pl-count" type="number" min="0" placeholder="185"></div>
+          <div class="fld"><label>Working days</label><input class="inp" id="pl-days" type="number" min="0" value="26"></div>
+          <div class="fld"><label>Shift (hrs/man-day)</label><input class="inp" id="pl-shift" type="number" min="0" value="10"></div>
+          <div class="fld"><label>Overtime %</label><input class="inp" id="pl-ot" type="number" min="0" value="25"></div>
+          <button class="btn btn-primary" onclick="savePool()">Save pool</button>
+          <span id="msg"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis" id="kpis"></div>
+
+    <!-- HLD breakdown -->
+    <div class="panel">
+      <div class="panel-h">Sub-Activity Breakdown <span class="sub" id="grp-name">— H/L Drainage</span></div>
+      <div style="overflow-x:auto"><table id="hld-table"></table></div>
+    </div>
+
+    <!-- Excess assignment -->
+    <div class="panel" id="excess-panel" style="display:none">
+      <div class="panel-h">Excess Labour — Manual Assignment <span class="sub">— surplus base man-hours to assign to chosen sub-activities</span></div>
+      <div class="panel-b" id="excess-body"></div>
+    </div>
+
+    <!-- Completed villas -->
+    <div class="panel">
+      <div class="panel-h">Completed Villas (RA scope) <span class="sub" id="comp-sub"></span></div>
+      <div style="overflow-x:auto;max-height:340px"><table id="villa-table"></table></div>
+    </div>
   </div>
 </div>
 
-<div class="page-wrap">
-
-  <!-- Toolbar -->
-  <div class="toolbar">
-    <span class="tb-label">Cluster</span>
-    <select class="sel" id="sel-cluster" onchange="applyFilter()">
-      <option value="ALL">All Clusters</option>
-      <option value="C1">Cluster 1</option>
-      <option value="C2">Cluster 2</option>
-      <option value="C3">Cluster 3</option>
-      <option value="C4">Cluster 4</option>
-      <option value="C5">Cluster 5</option>
-      <option value="C6">Cluster 6</option>
-      <option value="C7">Cluster 7</option>
-    </select>
-    <span class="tb-label">Period</span>
-    <select class="sel" id="sel-period" onchange="applyFilter()">
-      <option value="all">All Time</option>
-      <option value="month">This Month</option>
-      <option value="week">This Week</option>
-    </select>
-    <div class="tb-spacer"></div>
-    <span class="tb-updated" id="tb-updated">—</span>
-  </div>
-
-  <!-- KPI strip: 6 cards -->
-  <div class="kpi-strip">
-    <div class="kpi-card" id="kc-budget">
-      <div class="kpi-label">Budget Hours</div>
-      <div class="kpi-value" id="kv-budget">—</div>
-      <div class="kpi-sub" id="ks-budget">Project total</div>
-    </div>
-    <div class="kpi-card" id="kc-actual">
-      <div class="kpi-label">Actual Hours</div>
-      <div class="kpi-value" id="kv-actual">—</div>
-      <div class="kpi-sub" id="ks-actual">Duty + overtime</div>
-    </div>
-    <div class="kpi-card" id="kc-allow">
-      <div class="kpi-label">Allowable Hours</div>
-      <div class="kpi-value" id="kv-allow">—</div>
-      <div class="kpi-sub" id="ks-allow">Earned (qty × rate)</div>
-    </div>
-    <div class="kpi-card" id="kc-var">
-      <div class="kpi-label">Variance</div>
-      <div class="kpi-value" id="kv-var">—</div>
-      <div class="kpi-sub" id="ks-var">Allowable − Actual</div>
-    </div>
-    <div class="kpi-card" id="kc-eac">
-      <div class="kpi-label">EAC Hours</div>
-      <div class="kpi-value" id="kv-eac">—</div>
-      <div class="kpi-sub" id="ks-eac">Estimate at completion</div>
-    </div>
-    <div class="kpi-card kpi-aed" id="kc-aed">
-      <div class="kpi-label">AED Variance</div>
-      <div class="kpi-value" id="kv-aed">—</div>
-      <div class="kpi-sub" id="ks-aed">@ AED 10.5/hr</div>
-    </div>
-  </div>
-
-  <!-- Charts row -->
-  <div class="charts-row">
-    <div class="chart-card" style="flex:1.5">
-      <div class="chart-title">Actual vs Allowable Hours — by Discipline</div>
-      <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
-    </div>
-    <div class="chart-card" style="flex:1">
-      <div class="chart-title">Cumulative Actual Hours — Trend</div>
-      <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-    </div>
-  </div>
-
-  <!-- Scrollable content area -->
-  <div class="scroll-area">
-
-    <!-- Discipline breakdown table -->
-    <div>
-      <div class="sec-hdr">Discipline Breakdown</div>
-      <div id="disc-wrap">
-        <div class="loading-msg"><div class="spin"></div>Loading…</div>
-      </div>
-    </div>
-
-    <!-- Headcount -->
-    <div>
-      <div class="sec-hdr">Latest Headcount<span class="sec-hdr-date" id="hc-date-lbl"></span></div>
-      <div class="hc-strip" id="hc-strip">
-        <div class="loading-msg"><div class="spin"></div>Loading…</div>
-      </div>
-    </div>
-
-  </div><!-- .scroll-area -->
-
-</div><!-- .page-wrap -->
-
 <script>
 'use strict';
-// SB and KEY are provided by shared.js
+// ─── Constants (from the OBS spec) ───
+const AED_RATE = 10.5;            // AED per man-hour
+// Completion is per sub-activity via its own WIR (obs_activities.completion_wir_code):
+// HLD1-4=3060, HLD5=3070, HLD6=3170, HLD7-8=3270 (HLD9 default 3060).
+const RA_PREFIX = 'RA';           // RA-scope = subcontractor starts with "RA"
+const GROUP_MATCH = 'drain';      // activity_group filter for the HLD test
 
-const AED_RATE   = 10.5;
-const TOTAL_BUDGET_FALLBACK = 13183842; // from OBS Summary Excel (to Nov-2025)
+let perms = [], canEnter = false;
+let hld = [];            // [{ccs_code,description,unit,G,W,AC,weight}]
+let budgetPerVilla = 0;  // Σ AC
+let villaWir = {};       // villaKey -> {villa_no,cluster,sub,date,wirs:Set(approved WIR codes)}
+let pool = null;         // obs_labour_pool row for the month
 
-// Villa type counts: from the villas table (fetched at init).
-// Seeded with known values for SD3 and TH3; others populated from DB.
-const VILLA_COUNTS = { c6b:0, c5b:0, c4b:0, b6b:0, b5b:0, b4b:0,
-                       a5b:0, a4b:0, a3b:0, a3b2b:0, sd4:0, sd3:212, th3:26 };
+function applyTheme(t){ document.documentElement.setAttribute('data-theme', t||'dark'); }
+function fmt(n,d){ n=Number(n)||0; return n.toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
+function fmtK(n){ n=Math.round(Number(n)||0); if(Math.abs(n)>=1e6)return (n/1e6).toFixed(2)+'M'; if(Math.abs(n)>=1000)return (n/1000).toFixed(1)+'K'; return n.toLocaleString(); }
+function monthStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
 
-// DB villa_type → obs_activities qty column key
-const TYPE_KEY_MAP = {
-  'C-6B':'c6b','C6B':'c6b','C-5B':'c5b','C5B':'c5b','C-4B':'c4b','C4B':'c4b',
-  'B-6B':'b6b','B6B':'b6b','B-5B':'b5b','B5B':'b5b','B-4B':'b4b','B4B':'b4b',
-  'A-5B':'a5b','A5B':'a5b','A-4B':'a4b','A4B':'a4b','A-3B':'a3b','A3B':'a3b',
-  'A-3B/2B':'a3b2b','A3B/2B':'a3b2b','A3B2B':'a3b2b',
-  'SD4':'sd4','SD-4':'sd4','SD3':'sd3','SD-3':'sd3','TH3':'th3','TH-3':'th3'
-};
-
-const DISC_ORDER = [
-  'DRAINAGE ACTIVITIES','WATER SUPPLY ACTIVITIES','HVAC ACTIVITIES',
-  'ELECTRICAL ACTIVITIES','PRECAST','Snagging and de-snagging',
-  'Functional Test','Internal Rectification','General Indirect',
-  'logistic','Subcontractor Works Done by RA Labor'
-];
-const DISC_SHORT = {
-  'DRAINAGE ACTIVITIES':'Drainage',
-  'WATER SUPPLY ACTIVITIES':'Water Supply',
-  'HVAC ACTIVITIES':'HVAC',
-  'ELECTRICAL ACTIVITIES':'Electrical',
-  'PRECAST':'Precast',
-  'Snagging and de-snagging':'Snagging / DS',
-  'Functional Test':'Functional Test',
-  'Internal Rectification':'Int. Rectification',
-  'General Indirect':'General Indirect',
-  'logistic':'Logistics',
-  'Subcontractor Works Done by RA Labor':'Subcontractor'
-};
-
-// State
-let _initCalled = false;
-let activities   = [];
-let dailyLogs    = [];
-let headcountRows= [];
-let expandState  = {};
-let barChart     = null;
-let trendChart   = null;
-
-// ── Session timing pattern (architecture rule) ──
-function _tryInit(){ if(_initCalled) return; _initCalled=true; init(); }
-
-window.addEventListener('message', function(e){
-  if(!e.data || typeof e.data !== 'object') return;
-  if(e.data.type === 'theme') applyTheme(e.data.theme);
-  if(e.data.type === 'session'){
-    window.__MEP_TOKEN__ = e.data.token;
-    window.__MEP_USER__  = e.data.user;
-    _tryInit();
-  }
-});
-if(window.self !== window.top){
-  document.body.classList.add('in-shell');
-  try{ window.parent.postMessage({type:'child_ready'},'*'); }catch(ex){}
-  setTimeout(_tryInit, 1000);
-} else {
-  _tryInit();
-}
-
-// ── Theme ──
-function applyTheme(t){
-  document.documentElement.setAttribute('data-theme', t||'dark');
-  if(barChart)   refreshChartTheme(barChart);
-  if(trendChart) refreshChartTheme(trendChart);
-}
-window.addEventListener('storage', function(e){
-  if(e.key==='mep_theme') applyTheme(e.newValue);
-});
-
-// ── Auth header ──
+async function fa(path){ const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()}); if(!r.ok){throw new Error('['+r.status+'] '+await r.text());} return r.json(); }
+async function fwrite(method,path,body){ const r=await fetch(SB+'/rest/v1/'+path,{method,headers:getH({'Prefer':'return=representation,resolution=merge-duplicates'}),body:JSON.stringify(body)}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
 function getH(extra){
-  let tok = window.__MEP_TOKEN__;
-  if(!tok){
-    try{
-      const s=localStorage.getItem('mep_session');
-      if(s){ const j=JSON.parse(s);
-        if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000) tok=j.access_token; }
-    }catch(ex){}
-  }
-  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(tok||KEY),'Content-Type':'application/json'}, extra||{});
-}
-async function fb(path){
-  const r = await fetch(SB+'/rest/v1/'+path, {headers:getH()});
-  if(!r.ok){ const t=await r.text(); throw new Error(t); }
-  return r.json();
+  let t=window.__MEP_TOKEN__;
+  if(!t){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}
+  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(t||KEY),'Content-Type':'application/json'},extra||{});
 }
 
-// ── Init ──
 async function init(){
+  perms = (window.__MEP_USER__ && window.__MEP_USER__.permissions) || [];
+  const sa = perms.includes('manage_users') && perms.includes('manage_system');
+  const canView = sa || perms.includes('view_obs') || perms.includes('obs_entry') || perms.includes('edit_obs');
+  canEnter = sa || perms.includes('obs_entry') || perms.includes('edit_obs');
+  if(!canView){ document.getElementById('page').style.display='none'; document.getElementById('access-denied').classList.add('show'); return; }
+  if(canEnter) document.getElementById('pool-panel').style.display='';
+  // default month = current
+  document.getElementById('f-month').value = monthStr(new Date());
+  await loadStandards();
+  await reload();
+}
+
+// Build HLD standards from reference data: AC (budget hrs/villa) = W × G.
+async function loadStandards(){
+  const rows = await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code&ccs_code=ilike.HLD*&is_active=eq.true&order=ccs_code.asc');
+  hld = rows.map(a=>{
+    const G = Number(a.std_prod_rate)||0;     // std hr/unit
+    const W = Number(a.qty_per_villa)||0;      // avg qty/villa (master column W)
+    const AC = W*G;                            // budget hrs/villa
+    return { ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC, wir:a.completion_wir_code||'' };
+  });
+  budgetPerVilla = hld.reduce((s,h)=>s+h.AC,0);
+  hld.forEach(h=> h.weight = budgetPerVilla ? h.AC/budgetPerVilla : 0);
+}
+
+async function reload(){
+  const loading=document.getElementById('loading'); loading.style.display='flex';
   try{
-    // 1. Fetch villa type counts from villas table
-    const vRows = await fb('villas?select=villa_type');
-    vRows.forEach(function(v){
-      const raw = (v.villa_type||'').trim();
-      const key = TYPE_KEY_MAP[raw] || TYPE_KEY_MAP[raw.toUpperCase()];
-      if(key) VILLA_COUNTS[key] = (VILLA_COUNTS[key]||0) + 1;
-    });
-  }catch(ex){
-    console.warn('Villa count fetch failed:', ex.message);
-  }
-
-  // 2. Fetch activities + daily logs + headcount in parallel
-  const [rActs, rLogs, rHC] = await Promise.allSettled([
-    fb('obs_activities?is_active=eq.true&order=discipline_sort.asc,ccs_code.asc'),
-    fb('obs_daily_log?select=log_date,ccs_code,cluster,duty_hrs,ot_hrs,allowable_hrs&order=log_date.asc'),
-    fb('obs_headcount?select=log_date,cluster,trade,headcount&order=log_date.desc&limit=200')
-  ]);
-
-  activities    = rActs.status==='fulfilled' ? rActs.value : [];
-  dailyLogs     = rLogs.status==='fulfilled' ? rLogs.value : [];
-  headcountRows = rHC.status ==='fulfilled' ? rHC.value  : [];
-
-  // Update last-updated badge
-  document.getElementById('tb-updated').textContent =
-    'Updated: '+new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',
-    hour:'2-digit',minute:'2-digit'});
-
-  renderAll();
-  renderHeadcount();
+    const m = document.getElementById('f-month').value || monthStr(new Date());
+    const trade = document.getElementById('f-trade').value;
+    document.getElementById('pl-trade').textContent = trade;
+    document.getElementById('grp-name').textContent = '— '+document.getElementById('f-group').selectedOptions[0].textContent;
+    await Promise.all([ loadCompletion(m), loadPool(m, trade) ]);
+    render(m, trade);
+  }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
+  finally{ loading.style.display='none'; }
 }
 
-// ── Filter helpers ──
-function getFilteredLogs(){
-  const cls = document.getElementById('sel-cluster').value;
-  const per = document.getElementById('sel-period').value;
-  let rows = dailyLogs;
-  if(cls !== 'ALL') rows = rows.filter(function(r){ return r.cluster===cls || r.cluster==='ALL'; });
-  if(per === 'week'){
-    const d=new Date(); d.setDate(d.getDate()-((d.getDay()+6)%7));
-    const wk=d.toISOString().slice(0,10);
-    rows = rows.filter(function(r){ return r.log_date>=wk; });
-  } else if(per === 'month'){
-    const d=new Date(); d.setDate(1);
-    const ms=d.toISOString().slice(0,10);
-    rows = rows.filter(function(r){ return r.log_date>=ms; });
-  }
-  return rows;
-}
-
-function applyFilter(){
-  renderAll();
-}
-
-// ── Build byDisc structure ──
-function buildByDisc(logs){
-  const qkeys = ['c6b','c5b','c4b','b6b','b5b','b4b','a5b','a4b','a3b','a3b2b','sd4','sd3','th3'];
-  const byDisc = {};
-  // Index activities
-  activities.forEach(function(a){
-    if(!byDisc[a.discipline]) byDisc[a.discipline]={budget:0,actual:0,allowable:0,acts:[]};
-    byDisc[a.discipline].acts.push(a);
-    // Compute budget: Σ qty_type × target_rate × villa_count_type
-    let bgt=0;
-    if(a.target_rate){
-      qkeys.forEach(function(k){ bgt+=(a['qty_'+k]||0)*a.target_rate*(VILLA_COUNTS[k]||0); });
-    }
-    byDisc[a.discipline].budget += bgt;
+// RA-scope WIRs approved in the month for every sub-activity's completion code.
+// Completion is per sub-activity: a villa earns a sub-activity's AC only when
+// that sub-activity's WIR is approved for it.
+async function loadCompletion(m){
+  const [y,mo] = m.split('-').map(Number);
+  const start = m+'-01';
+  const end = (mo===12 ? (y+1)+'-01-01' : y+'-'+String(mo+1).padStart(2,'0')+'-01');
+  const codes = [...new Set(hld.map(h=>h.wir).filter(Boolean))];
+  villaWir = {};
+  if(!codes.length) return;
+  const rows = await fa('dc_import_log?select=raw_villa_no,raw_cluster,response_date,raw_subcontractor,raw_activity_code'
+    +'&raw_activity_code=in.('+codes.join(',')+')&normalised_status=eq.approved&raw_subcontractor=ilike.'+RA_PREFIX+'*'
+    +'&response_date=gte.'+start+'&response_date=lt.'+end+'&order=response_date.asc');
+  rows.forEach(r=>{
+    const key=(r.raw_cluster||'')+'_'+r.raw_villa_no;
+    if(!villaWir[key]) villaWir[key]={ villa_no:r.raw_villa_no, cluster:r.raw_cluster, sub:r.raw_subcontractor, date:r.response_date, wirs:new Set() };
+    villaWir[key].wirs.add(String(r.raw_activity_code));
+    if(r.response_date && r.response_date > villaWir[key].date) villaWir[key].date = r.response_date;
   });
-  // Build CCS → discipline lookup
-  const ccsDisc={};
-  activities.forEach(function(a){ ccsDisc[a.ccs_code]=a.discipline; });
-  // Aggregate log hours into disciplines
-  logs.forEach(function(row){
-    const disc=ccsDisc[row.ccs_code];
-    if(!disc||!byDisc[disc]) return;
-    byDisc[disc].actual    += (parseFloat(row.duty_hrs)||0)+(parseFloat(row.ot_hrs)||0);
-    byDisc[disc].allowable += parseFloat(row.allowable_hrs)||0;
-  });
-  return byDisc;
 }
 
-// ── Render all ──
-function renderAll(){
-  const logs = getFilteredLogs();
-  const byDisc = buildByDisc(logs);
-
-  // Totals
-  let totBudget=0, totActual=0, totAllow=0;
-  Object.values(byDisc).forEach(function(d){ totBudget+=d.budget; totActual+=d.actual; totAllow+=d.allowable; });
-  // Use fallback budget if villa counts not available
-  const budget = totBudget < 1000 ? TOTAL_BUDGET_FALLBACK : totBudget;
-
-  const variance    = totAllow - totActual;
-  const eac         = totActual + (budget - totAllow);
-  const aedVariance = variance * AED_RATE;
-  const spentPct    = budget>0 ? ((totAllow/budget)*100).toFixed(1) : 0;
-
-  // KPI cards
-  setKpi('budget', fmtHrs(budget), '', spentPct+'% earned');
-  setKpi('actual', fmtHrs(totActual), '', 'Duty + OT hours');
-  setKpi('allow',  fmtHrs(totAllow), '', 'Against '+fmtHrs(budget)+' budget');
-  setKpi('var',    (variance>=0?'+':'')+fmtHrs(variance), variance>=0?'ok':'bad',
-         'CPI: '+(totActual>0?(totAllow/totActual).toFixed(2):'—'));
-  setKpi('eac',    fmtHrs(eac), eac<=budget?'ok':'warn',
-         eac<=budget?'Under budget':'Over budget');
-  setKpi('aed',    fmtAed(aedVariance), aedVariance>=0?'ok':'bad', '@ AED 10.5/hr');
-
-  renderBarChart(byDisc);
-  renderTrendChart(logs);
-  renderDiscTable(byDisc, budget, logs);
+async function loadPool(m, trade){
+  const rows = await fa('obs_labour_pool?select=*&period_month=eq.'+m+'-01&trade=eq.'+encodeURIComponent(trade));
+  pool = rows[0] || null;
+  document.getElementById('pl-count').value = pool ? pool.labour_count : '';
+  document.getElementById('pl-days').value  = pool ? pool.working_days : 26;
+  document.getElementById('pl-shift').value = pool ? pool.shift_hours : 10;
+  document.getElementById('pl-ot').value    = pool ? Math.round(pool.ot_pct*100) : 25;
 }
 
-function setKpi(id, val, cls, sub){
-  const card = document.getElementById('kc-'+id);
-  const v    = document.getElementById('kv-'+id);
-  v.textContent = val;
-  // Reset classes
-  card.className = 'kpi-card' + (id==='aed'?' kpi-aed':'');
-  if(cls==='ok')   card.classList.add('kpi-ok');
-  if(cls==='warn') card.classList.add('kpi-warn');
-  if(cls==='bad')  card.classList.add('kpi-bad');
-  if(sub) document.getElementById('ks-'+id) && (document.getElementById('ks-'+id).textContent = sub);
-}
-
-// ── Formatters ──
-function fmtHrs(n){
-  n = Math.round(n||0);
-  if(Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M';
-  if(Math.abs(n)>=1000) return (n/1000).toFixed(1)+'K';
-  return n.toLocaleString();
-}
-function fmtN(n){ return (Math.round(n||0)).toLocaleString(); }
-function fmtAed(n){
-  const s=n>=0?'+':'-'; const a=Math.abs(n);
-  if(a>=1e6) return s+'AED '+(a/1e6).toFixed(2)+'M';
-  if(a>=1000) return s+'AED '+(a/1000).toFixed(0)+'K';
-  return s+'AED '+Math.round(a).toLocaleString();
-}
-
-// ── Chart colours (theme-aware) ──
-function cc(){
-  const dark = document.documentElement.getAttribute('data-theme')!=='light';
-  return {
-    grid   : dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)',
-    labels : dark ? '#8a93a3' : '#5b6373',
-    actual : '#4f8cff',
-    allow  : '#22c55e',
-    trend  : '#4f8cff'
+async function savePool(){
+  const m = document.getElementById('f-month').value;
+  const trade = document.getElementById('f-trade').value;
+  if(!m){ return; }
+  const msg=document.getElementById('msg'); msg.textContent='Saving…'; msg.style.color='var(--text-muted)';
+  const body = {
+    period_month: m+'-01', trade,
+    labour_count: parseInt(document.getElementById('pl-count').value)||0,
+    working_days: parseInt(document.getElementById('pl-days').value)||0,
+    shift_hours:  parseFloat(document.getElementById('pl-shift').value)||0,
+    ot_pct:       (parseFloat(document.getElementById('pl-ot').value)||0)/100,
+    created_by:   (window.__MEP_USER__&&(window.__MEP_USER__.full_name||window.__MEP_USER__.display_name))||null,
+    updated_at:   new Date().toISOString()
   };
-}
-
-// ── Bar chart ──
-function renderBarChart(byDisc){
-  const c  = cc();
-  const discs  = DISC_ORDER.filter(function(d){ return byDisc[d] && (byDisc[d].actual+byDisc[d].allowable+byDisc[d].budget)>0; });
-  const labels = discs.map(function(d){ return DISC_SHORT[d]||d; });
-  const actD   = discs.map(function(d){ return Math.round(byDisc[d].actual); });
-  const allowD = discs.map(function(d){ return Math.round(byDisc[d].allowable); });
-  const ctx    = document.getElementById('chart-bar').getContext('2d');
-  if(barChart) barChart.destroy();
-  barChart = new Chart(ctx,{
-    type:'bar',
-    data:{
-      labels,
-      datasets:[
-        {label:'Actual', data:actD,  backgroundColor:c.actual+'aa', borderColor:c.actual, borderWidth:1, borderRadius:3},
-        {label:'Allowable', data:allowD, backgroundColor:c.allow+'aa', borderColor:c.allow, borderWidth:1, borderRadius:3}
-      ]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{labels:{color:c.labels,font:{family:'Inter',size:11}}},
-        tooltip:{mode:'index',intersect:false,callbacks:{label:function(ctx){ return ctx.dataset.label+': '+ctx.parsed.y.toLocaleString(); }}}
-      },
-      scales:{
-        x:{ticks:{color:c.labels,font:{size:10}},grid:{color:c.grid}},
-        y:{ticks:{color:c.labels,font:{size:10},callback:function(v){ return v>=1000?(v/1000).toFixed(0)+'K':v; }},grid:{color:c.grid}}
-      }
-    }
-  });
-}
-
-// ── Trend chart ──
-function renderTrendChart(logs){
-  const c = cc();
-  // Group by date → cumulative actual
-  const byDate={};
-  logs.forEach(function(r){
-    if(!byDate[r.log_date]) byDate[r.log_date]=0;
-    byDate[r.log_date]+=(parseFloat(r.duty_hrs)||0)+(parseFloat(r.ot_hrs)||0);
-  });
-  const dates = Object.keys(byDate).sort();
-  let cum=0;
-  const cumData = dates.map(function(d){ cum+=byDate[d]; return Math.round(cum); });
-  const hasData = dates.length>0;
-  const ctx = document.getElementById('chart-trend').getContext('2d');
-  if(trendChart) trendChart.destroy();
-  trendChart = new Chart(ctx,{
-    type:'line',
-    data:{
-      labels: hasData ? dates : ['No data yet'],
-      datasets:[{
-        label:'Cumulative Actual Hrs',
-        data: hasData ? cumData : [0],
-        borderColor:c.trend, backgroundColor:c.trend+'22',
-        borderWidth:2, pointRadius:dates.length>30?0:2, tension:0.3, fill:true
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{labels:{color:c.labels,font:{family:'Inter',size:11}}},
-        tooltip:{callbacks:{label:function(ctx){ return ctx.parsed.y.toLocaleString()+' hrs'; }}}
-      },
-      scales:{
-        x:{ticks:{color:c.labels,font:{size:9},maxTicksLimit:8},grid:{color:c.grid}},
-        y:{ticks:{color:c.labels,font:{size:10},callback:function(v){ return v>=1000?(v/1000).toFixed(0)+'K':v; }},grid:{color:c.grid}}
-      }
-    }
-  });
-}
-
-function refreshChartTheme(chart){
-  if(!chart) return;
-  const c=cc();
   try{
-    ['x','y'].forEach(function(ax){
-      chart.options.scales[ax].ticks.color=c.labels;
-      chart.options.scales[ax].grid.color=c.grid;
-    });
-    if(chart.options.plugins.legend) chart.options.plugins.legend.labels.color=c.labels;
-    chart.update('none');
-  }catch(ex){}
+    await fwrite('POST','obs_labour_pool?on_conflict=period_month,trade', body);
+    msg.textContent='✓ Saved'; msg.style.color='var(--good)';
+    await reload();
+  }catch(e){ msg.textContent='✗ '+e.message; msg.style.color='var(--bad)'; }
 }
 
-// ── Discipline table ──
-function renderDiscTable(byDisc, totBudget, logs){
-  const wrap = document.getElementById('disc-wrap');
-  const discs = DISC_ORDER.filter(function(d){ return byDisc[d]; })
-    .concat(Object.keys(byDisc).filter(function(d){ return DISC_ORDER.indexOf(d)<0; }));
+function render(m, trade){
+  const villas = Object.values(villaWir);
+  const nVillas = villas.length;
+  // Per sub-activity: how many villas had its WIR approved -> earned hrs = count × AC
+  hld.forEach(x=>{ x.villasDone = villas.filter(v=>x.wir && v.wirs.has(x.wir)).length; x.earned = x.villasDone * x.AC; });
+  const earned   = hld.reduce((s,x)=>s+x.earned,0);               // OUTPUT: value of completed work
+  const fullBudget = nVillas * budgetPerVilla;                    // if every touched villa were 100% done
+  const baseHrs  = pool ? pool.labour_count*pool.working_days*pool.shift_hours : 0;  // INPUT
+  const ot       = pool ? pool.ot_pct : 0.25;
+  const excess   = baseHrs - earned;                              // surplus labour beyond delivered output
+  const cost     = baseHrs * AED_RATE;
+  const avgPct   = fullBudget ? earned/fullBudget*100 : 0;
+  document.getElementById('tb-info').textContent = nVillas+' villa(s) touched · '+fmt(earned,0)+' earned hrs';
 
-  if(!discs.length){
-    wrap.innerHTML='<div class="empty-msg">No data yet. Data will appear here once foremen begin entering daily logs.</div>';
-    return;
-  }
+  const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
+  document.getElementById('kpis').innerHTML =
+    kpi(fmt(nVillas), 'Villas Touched', 'RA · any H/L Drain WIR', 'accent')
+   +kpi(fmtK(earned), 'Earned Hrs (output)', avgPct.toFixed(0)+'% of full budget')
+   +kpi(fmtK(baseHrs), 'Labour Supplied (input)', (pool?pool.labour_count+' × '+pool.working_days+'d × '+pool.shift_hours+'h':'no pool set'))
+   +kpi((excess>=0?'+':'')+fmtK(excess), excess>=0?'Excess Hrs':'Shortfall Hrs', excess>=0?'supplied − earned':'under-resourced', excess>=0?'ok':'bad')
+   +kpi('AED '+fmtK(cost), 'Labour Cost', '@ '+AED_RATE+' AED/hr')
+   +kpi((earned&&baseHrs?(earned/baseHrs).toFixed(2):'—'), 'CPI', 'earned ÷ supplied', (earned/baseHrs>=1?'ok':'warn'));
 
-  // Build CCS → obs object for sub-rows
-  const ccsObj={};
-  activities.forEach(function(a){ ccsObj[a.ccs_code]=a; });
-
-  // Build CCS → actual/allowable from current logs
-  const ccsAct={}, ccsAlw={};
-  logs.forEach(function(r){
-    ccsAct[r.ccs_code]=(ccsAct[r.ccs_code]||0)+(parseFloat(r.duty_hrs)||0)+(parseFloat(r.ot_hrs)||0);
-    ccsAlw[r.ccs_code]=(ccsAlw[r.ccs_code]||0)+(parseFloat(r.allowable_hrs)||0);
+  // Sub-activity breakdown: completion via its own WIR
+  let h='<thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>WIR</th><th>Std Hr/Unit</th><th>Qty/Villa</th><th>Budget Hr/Villa</th><th>Weight</th><th>Villas Done</th><th>Earned Hrs</th></tr></thead><tbody>';
+  hld.forEach(x=>{
+    h+=`<tr><td class="l code">${x.ccs_code}</td><td class="l" style="font-family:var(--font)">${x.description||''}</td>`
+      +`<td><span class="code">${x.wir||'—'}</span></td><td>${fmt(x.G,2)}</td><td>${fmt(x.W,2)}</td><td>${fmt(x.AC,2)}</td>`
+      +`<td>${(x.weight*100).toFixed(1)}%</td><td>${x.villasDone}</td><td>${fmt(x.earned,0)}</td></tr>`;
   });
+  h+=`<tr style="font-weight:800;background:var(--bg-panel)"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>100%</td><td>—</td><td>${fmt(earned,0)}</td></tr>`;
+  h+='</tbody>';
+  document.getElementById('hld-table').innerHTML=h;
 
-  let html='<table class="disc-table"><thead><tr>'
-    +'<th style="min-width:170px">Discipline</th>'
-    +'<th class="num">Budget Hrs</th>'
-    +'<th class="num">Actual Hrs</th>'
-    +'<th class="num">Allowable Hrs</th>'
-    +'<th class="num">Variance</th>'
-    +'<th class="num">CPI</th>'
-    +'<th class="num" style="min-width:110px">% Earned</th>'
-    +'</tr></thead><tbody>';
+  // Excess assignment (surplus = supplied − earned), split by weight
+  const ep=document.getElementById('excess-panel');
+  if(excess>0 && pool){
+    ep.style.display='';
+    let eb=`<div style="margin-bottom:10px;color:var(--text-muted)">Surplus of <b style="color:var(--good)">${fmt(excess,0)}</b> base man-hours (supplied ${fmt(baseHrs,0)} − earned ${fmt(earned,0)}). Assign to sub-activities (display only for now):</div>`;
+    eb+='<table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>Suggested (by weight)</th><th>Assign hrs</th></tr></thead><tbody>';
+    hld.forEach(x=>{ eb+=`<tr><td class="l code">${x.ccs_code}</td><td class="l" style="font-family:var(--font)">${x.description||''}</td><td>${fmt(excess*x.weight,0)}</td><td><input class="assign-inp" type="number" min="0" placeholder="0"></td></tr>`; });
+    eb+='</tbody></table>';
+    document.getElementById('excess-body').innerHTML=eb;
+  } else ep.style.display='none';
 
-  discs.forEach(function(disc){
-    const d    = byDisc[disc];
-    const lbl  = DISC_SHORT[disc]||disc;
-    const bgt  = Math.round(d.budget);
-    const act  = Math.round(d.actual);
-    const alw  = Math.round(d.allowable);
-    const vr   = alw - act;
-    const cpi  = act>0 ? (alw/act).toFixed(2) : '—';
-    const pct  = bgt>0 ? Math.min(100,(alw/bgt)*100) : 0;
-    const pctD = pct.toFixed(1);
-    const vrCls= vr>=0?'val-pos':'val-neg';
-    const exp  = expandState[disc]||false;
-    const uid  = disc.replace(/[^a-zA-Z0-9]/g,'_');
-    const cpiC = (cpi==='—') ? 'var(--text-dim)' : parseFloat(cpi)>=1?'#22c55e':'#f87171';
-
-    html+=`<tr class="disc-row" onclick="toggleDisc('${disc.replace(/'/g,"\\'")}')">
-      <td class="dname"><span class="xarrow ${exp?'open':''}" id="xa-${uid}">&#9658;</span> ${lbl}</td>
-      <td class="num">${fmtN(bgt)}</td>
-      <td class="num">${fmtN(act)}</td>
-      <td class="num">${fmtN(alw)}</td>
-      <td class="num ${vrCls}">${vr>=0?'+':''}${fmtN(vr)}</td>
-      <td class="num" style="color:${cpiC}">${cpi}</td>
-      <td class="num">
-        <span class="pbar">
-          <span class="pbar-track"><span class="pbar-fill" style="width:${pct}%"></span></span>
-          ${pctD}%
-        </span>
-      </td>
-    </tr>`;
-
-    // Sub-rows for activities in this discipline
-    html+=`<tr><td colspan="7" style="padding:0">
-      <table style="width:100%;border-collapse:collapse" class="sub-group ${exp?'open':''}" id="sg-${uid}">
-      <tr style="background:var(--bg-elev)">
-        <td style="padding:5px 10px 5px 28px;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-faint);min-width:200px">Activity</td>
-        <td style="padding:5px 8px;font-size:10px;font-weight:600;text-align:right;color:var(--text-faint)">Code</td>
-        <td style="padding:5px 8px;font-size:10px;font-weight:600;text-align:right;color:var(--text-faint)">Unit</td>
-        <td style="padding:5px 8px;font-size:10px;font-weight:600;text-align:right;color:var(--text-faint)">Rate</td>
-        <td style="padding:5px 8px;font-size:10px;font-weight:600;text-align:right;color:var(--text-faint)">Actual Hrs</td>
-        <td style="padding:5px 8px;font-size:10px;font-weight:600;text-align:right;color:var(--text-faint)">Allow Hrs</td>
-      </tr>`;
-    d.acts.forEach(function(a){
-      const aAct = ccsAct[a.ccs_code]||0;
-      const aAlw = ccsAlw[a.ccs_code]||0;
-      const desc = a.description.length>65 ? a.description.slice(0,63)+'…' : a.description;
-      html+=`<tr class="sub-row">
-        <td>${desc}</td>
-        <td class="num" style="font-family:var(--mono);font-size:10.5px">${a.ccs_code}</td>
-        <td class="num" style="font-size:10.5px">${a.unit||'—'}</td>
-        <td class="num" style="font-family:var(--mono);font-size:10.5px">${a.target_rate!=null?a.target_rate:'—'}</td>
-        <td class="num">${fmtN(aAct)}</td>
-        <td class="num">${fmtN(aAlw)}</td>
-      </tr>`;
-    });
-    html+='</table></td></tr>';
+  // Per-villa: which sub-activities are done, earned hrs, % complete
+  document.getElementById('comp-sub').textContent = '— '+nVillas+' villa(s) in '+m+' · full budget '+fmt(budgetPerVilla,1)+' hrs each';
+  let vt='<thead><tr><th class="l">Villa</th><th class="l">Cluster</th><th class="l">Subcontractor</th><th class="l">Sub-Activities Done</th><th>Earned Hrs</th><th>% Complete</th></tr></thead><tbody>';
+  if(!nVillas){ vt+='<tr><td class="l muted" colspan="6" style="padding:18px;text-align:center">No RA villas with an H/L Drainage WIR approved in this month.</td></tr>'; }
+  villas.sort((a,b)=>(a.cluster||'').localeCompare(b.cluster||'')||a.villa_no-b.villa_no).forEach(v=>{
+    let ve=0; const done=[];
+    hld.forEach(x=>{ if(x.wir && v.wirs.has(x.wir)){ ve+=x.AC; if(!done.includes(x.ccs_code))done.push(x.ccs_code); } });
+    const pct = budgetPerVilla ? ve/budgetPerVilla*100 : 0;
+    const col = pct>=99?'var(--good)':pct>=50?'var(--warn)':'var(--text-muted)';
+    vt+=`<tr><td class="l" style="font-weight:700">${v.villa_no}</td><td class="l">${v.cluster||'—'}</td><td class="l" style="font-family:var(--font)">${v.sub||'—'}</td>`
+      +`<td class="l" style="font-family:var(--mono);font-size:11px;color:var(--accent-text)">${done.join(', ')||'—'}</td>`
+      +`<td>${fmt(ve,1)}</td><td><span style="color:${col};font-weight:700">${pct.toFixed(0)}%</span></td></tr>`;
   });
-  html+='</tbody></table>';
-  wrap.innerHTML=html;
+  vt+='</tbody>';
+  document.getElementById('villa-table').innerHTML=vt;
 }
 
-function toggleDisc(disc){
-  expandState[disc] = !expandState[disc];
-  const logs   = getFilteredLogs();
-  const byDisc = buildByDisc(logs);
-  let totBudget=0;
-  Object.values(byDisc).forEach(function(d){ totBudget+=d.budget; });
-  if(totBudget<1000) totBudget=TOTAL_BUDGET_FALLBACK;
-  renderDiscTable(byDisc, totBudget, logs);
-  // Update charts too (same data, just re-render for consistency)
-  renderBarChart(byDisc);
-  renderTrendChart(logs);
-}
-
-// ── Headcount ──
-function renderHeadcount(){
-  const strip = document.getElementById('hc-strip');
-  if(!headcountRows.length){
-    strip.innerHTML='<div class="empty-msg" style="padding:12px 0">No headcount data yet. Headcount will appear here after foremen begin daily logging.</div>';
-    return;
-  }
-  // Find the latest date across all entries
-  const latestDate = headcountRows[0].log_date;
-  document.getElementById('hc-date-lbl').textContent = '— '+latestDate;
-  // Group by trade, take the most recent entry per trade
-  const byTrade={};
-  headcountRows.forEach(function(r){
-    if(!byTrade[r.trade]) byTrade[r.trade]={ count:0, date:'' };
-    if(r.log_date > byTrade[r.trade].date){
-      byTrade[r.trade].count = r.headcount;
-      byTrade[r.trade].date  = r.log_date;
-    }
-  });
-  const TRADE_ORDER = ['Drainage','Water Supply','HVAC','Electrical','Precast','Snagging','Indirect','Helper','Surveyor'];
-  const trades = TRADE_ORDER.filter(function(t){ return byTrade[t]; })
-    .concat(Object.keys(byTrade).filter(function(t){ return TRADE_ORDER.indexOf(t)<0; }));
-  let total=0; trades.forEach(function(t){ total+=byTrade[t].count; });
-  let html='';
-  trades.forEach(function(t){
-    html+=`<div class="hc-badge"><div class="hc-trade">${t}</div><div class="hc-count">${byTrade[t].count}</div></div>`;
-  });
-  html+=`<div class="hc-badge hc-total"><div class="hc-trade">Total</div><div class="hc-count">${total}</div></div>`;
-  strip.innerHTML=html;
-}
-</script>
-
-<!-- ===== Global ESC-to-close for modals & popups — v6.4 ===== -->
-<script>
-(function(){
-  document.addEventListener('keydown',function(e){
-    if(e.key!=='Escape'&&e.keyCode!==27&&e.which!==27) return;
-    var sel='.modal-overlay,.modal-bg,.modal,.popup,.overlay,[class*="modal"],[id*="modal"],[id*="popup"],[id*="overlay"]';
-    var all=Array.from(document.querySelectorAll(sel)).filter(function(el){
-      var cs=getComputedStyle(el);
-      return cs.display!=='none'&&cs.visibility!=='hidden'&&cs.visibility!=='collapse'&&cs.opacity!=='0'&&el.getClientRects().length>0;
-    });
-    if(!all.length) return;
-    var top=all.filter(function(el){return !all.some(function(other){return other!==el&&other.contains(el);});}).pop();
-    if(!top) return;
-    e.preventDefault(); e.stopPropagation();
-    var btn=top.querySelector('[class*="close"],[data-close]');
-    if(!btn) btn=Array.from(top.querySelectorAll('button')).find(function(b){return /cancel|close|✕|×|✖/i.test(b.textContent);});
-    if(!btn) btn=Array.from(top.querySelectorAll('button')).find(function(b){return /close|cancel|dismiss|hide/i.test((b.getAttribute('onclick')||''));});
-    if(btn){btn.click();return;}
-    if(top.onclick){top.click();return;}
-    ['open','on','active','show','visible','shown','show-modal','is-open'].forEach(function(c){top.classList.remove(c);});
-    if(getComputedStyle(top).display!=='none') top.style.display='none';
-  },true);
-})();
+// ─── Session bridge (robust: wait for the session in-shell) ───
+var _initCalled=false;
+function _tryInit(){ if(_initCalled)return; if(window.self!==window.top && !window.__MEP_USER__)return; _initCalled=true; init(); }
+window.addEventListener('message',function(e){
+  if(!e.data||typeof e.data!=='object')return;
+  if(e.data.type==='theme')applyTheme(e.data.theme);
+  if(e.data.type==='session'){ window.__MEP_TOKEN__=e.data.token; window.__MEP_USER__=e.data.user; _tryInit(); }
+});
+window.addEventListener('storage',function(e){ if(e.key==='mep_theme')applyTheme(e.newValue); });
+try{ const t=localStorage.getItem('mep_theme'); if(t)applyTheme(t); }catch(e){}
+if(window.self!==window.top){
+  document.body.classList.add('in-shell');
+  try{ window.parent.postMessage({type:'child_ready'},'*'); }catch(e){}
+  var _st=0;
+  var _poll=setInterval(function(){
+    if(_initCalled||window.__MEP_USER__){clearInterval(_poll);return;}
+    if(++_st>=24){clearInterval(_poll);_initCalled=true;init();return;}
+    try{ window.parent.postMessage({type:'child_ready'},'*'); }catch(e){}
+  },500);
+}else{ _tryInit(); }
 </script>
 </body>
 </html>

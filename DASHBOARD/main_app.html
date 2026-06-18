@@ -613,6 +613,10 @@ const SESSION_KEY = 'mep_session';
 
 let currentUser = null;
 let accessToken = null;
+// Target origin for postMessage to iframes. On http(s) we pin to our own origin
+// (hardening); on file:// the origin is opaque ("null") and pinning blocks
+// delivery, so fall back to '*' for local testing.
+const FRAME_TGT = (location.protocol === 'file:' || location.origin === 'null' || !location.origin) ? '*' : location.origin;
 
 // ── Page registry ──
 const PAGES = {
@@ -898,9 +902,9 @@ function preloadAllFrames() {
       frame.src = page.file;
       frame.onload = () => {
         // Push theme + session into silently preloaded iframe
-        try { frame.contentWindow.postMessage({ type: 'theme', theme }, location.origin); } catch(e) {}
+        try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
         if (accessToken && currentUser) {
-          try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, location.origin); } catch(e) {}
+          try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
         }
       };
     }, 800 + (i * 400)); // stagger: 800ms, 1200ms, 1600ms... so dashboard loads first
@@ -994,9 +998,9 @@ function go(pageId) {
     frame.onload = () => {
       hideLoader();
       const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-      try { frame.contentWindow.postMessage({ type: 'theme', theme }, location.origin); } catch(e) {}
+      try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
       if (accessToken && currentUser) {
-        try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, location.origin); } catch(e) {}
+        try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
       }
     };
     frame.onerror = () => {
@@ -1037,7 +1041,7 @@ function toggleTheme() {
 // ── BROADCAST to all loaded iframes ──
 function broadcastToFrames(msg) {
   document.querySelectorAll('.content iframe').forEach(f => {
-    try { if (f.src) f.contentWindow.postMessage(msg, location.origin); } catch(e) {}
+    try { if (f.src) f.contentWindow.postMessage(msg, FRAME_TGT); } catch(e) {}
   });
 }
 
@@ -1114,9 +1118,9 @@ function refreshCurrentPage() {
   // Re-send session + theme after the reload completes
   frame.onload = () => {
     const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-    try { frame.contentWindow.postMessage({ type: 'theme', theme }, location.origin); } catch(e) {}
+    try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
     if (accessToken && currentUser) {
-      try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, location.origin); } catch(e) {}
+      try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
     }
   };
 
@@ -1209,9 +1213,9 @@ window.addEventListener('message', function(e) {
     try {
       if (frame.contentWindow === e.source) {
         var theme = document.documentElement.getAttribute('data-theme') || 'dark';
-        frame.contentWindow.postMessage({ type: 'theme', theme: theme }, location.origin);
+        frame.contentWindow.postMessage({ type: 'theme', theme: theme }, FRAME_TGT);
         if (accessToken && currentUser) {
-          frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, location.origin);
+          frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT);
         }
       }
     } catch(ex) {}
