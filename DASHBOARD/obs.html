@@ -34,39 +34,47 @@ body.in-shell .topbar{display:none!important}
 .tb-label{font-size:11px;color:var(--text-muted);font-weight:600}
 .sel,.inp{padding:6px 9px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px;outline:none}
 .sel:focus,.inp:focus{border-color:var(--accent)}
-.inp{width:90px;font-family:var(--mono)}
+.inp{width:84px;font-family:var(--mono)}
 .btn{padding:6px 12px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);font-size:12px;font-weight:600;cursor:pointer}
 .btn:hover{background:var(--bg-hover)}
 .btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn-primary:hover{filter:brightness(1.08)}
 .tb-spacer{flex:1}
 .scroll{flex:1;overflow-y:auto;padding:14px 16px}
-/* KPI cards */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
 .kpi{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
 .kpi .v{font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
 .kpi .l{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-top:3px;font-weight:600}
 .kpi .s{font-size:10px;color:var(--text-faint);margin-top:2px}
 .kpi.ok .v{color:var(--good)} .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)} .kpi.accent .v{color:var(--accent-text)}
-/* panel */
-.panel{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden}
-.panel-h{padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700;font-size:13px;display:flex;align-items:center;gap:8px}
-.panel-h .sub{font-weight:400;color:var(--text-muted);font-size:11px}
-.panel-b{padding:12px 14px}
-.pool-row{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.disc-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin:18px 2px 8px;border-bottom:1px solid var(--border);padding-bottom:6px}
+.panel{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.panel-h{padding:10px 14px;font-weight:700;font-size:13px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.panel.collapsed .panel-h{border-bottom:0}
+.panel:not(.collapsed) .panel-h{border-bottom:1px solid var(--border)}
+.caret{display:inline-block;transition:transform .15s;color:var(--text-faint);font-size:10px}
+.panel.collapsed .caret{transform:rotate(-90deg)}
+.panel.collapsed .panel-b{display:none}
+.gname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 7px;border-radius:20px}
+.tag.ok{background:rgba(34,197,94,.14);color:var(--good)}
+.tag.off{background:rgba(245,158,11,.14);color:var(--warn)}
+.mini{font-family:var(--mono);font-size:11.5px;color:var(--text-muted);white-space:nowrap}
+.mini b{color:var(--text)}
+.mini.cpi b.ok{color:var(--good)} .mini.cpi b.bad{color:var(--bad)}
+.panel-b{padding:10px 14px}
+.pool-row{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--border)}
 .fld{display:flex;flex-direction:column;gap:4px}
-.fld label{font-size:10.5px;color:var(--text-muted);font-weight:600}
+.fld label{font-size:10px;color:var(--text-muted);font-weight:600}
+.msg{font-size:11px;margin-left:4px}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{text-align:right;padding:7px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700;border-bottom:1px solid var(--border);background:var(--bg-panel);position:sticky;top:0}
+th{text-align:right;padding:6px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700;border-bottom:1px solid var(--border)}
 th.l,td.l{text-align:left}
-td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);font-family:var(--mono)}
-tr:hover td{background:var(--bg-hover)}
+td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);font-family:var(--mono)}
+tbody tr:last-child td{border-bottom:0}
 .code{color:var(--accent-text);font-weight:700}
 .muted{color:var(--text-faint)}
-.bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;min-width:60px}
-.bar>i{display:block;height:100%;background:var(--accent)}
-.assign-inp{width:70px;padding:3px 6px;border:1px solid var(--border-strong);border-radius:5px;background:var(--bg-panel);color:var(--text);font-family:var(--mono);font-size:11px;text-align:right}
-#msg{font-size:11px;margin-left:6px}
+.totrow td{font-weight:800;background:var(--bg-panel)}
 #access-denied{display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;height:100vh;background:var(--bg);color:var(--text)}
 #access-denied.show{display:flex}
 .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(11,14,20,.7);z-index:50}
@@ -75,245 +83,308 @@ tr:hover td{background:var(--bg-hover)}
 </style>
 </head>
 <body>
-<div class="topbar"><div class="tb-logo">M</div><div><div style="font-weight:600">OBS Productivity</div><div style="font-size:10px;color:var(--text-dim)">Labour vs output by activity group</div></div></div>
+<div class="topbar"><div class="tb-logo">M</div><div><div style="font-weight:600">OBS Productivity</div><div style="font-size:10px;color:var(--text-dim)">RA labour earned-value — all activity groups</div></div></div>
 
 <div id="access-denied"><div style="font-size:46px">🔒</div><div style="font-size:20px;font-weight:700;color:var(--bad)">Access Denied</div><div style="color:var(--text-muted)">OBS data requires the <b>view_obs</b> permission.</div></div>
 
 <div class="page-wrap" id="page">
   <div class="toolbar">
+    <button class="btn" id="view-groups" onclick="setView('groups')">By Group</button>
+    <button class="btn" id="view-summary" onclick="setView('summary')">Summary</button>
+    <span style="width:1px;height:22px;background:var(--border);margin:0 4px"></span>
     <span class="tb-label">Month</span>
     <input type="month" id="f-month" class="sel" onchange="reload()">
-    <span class="tb-label">Activity Group</span>
-    <select id="f-group" class="sel" onchange="reload()"><option value="HLD">H/L Drainage (HLD1–9)</option></select>
-    <span class="tb-label">Trade</span>
-    <select id="f-trade" class="sel" onchange="reload()"><option value="Plumber">Plumber</option></select>
     <button class="btn" onclick="reload()">↻ Refresh</button>
+    <button class="btn" id="btn-expand" onclick="toggleAll(true)">Expand all</button>
+    <button class="btn" id="btn-collapse" onclick="toggleAll(false)">Collapse all</button>
+    <button class="btn" id="btn-print" onclick="printSummary()" style="display:none">🖨 Print</button>
     <div class="tb-spacer"></div>
     <span class="tb-label" id="tb-info" style="color:var(--text-faint)"></span>
   </div>
 
   <div class="scroll" style="position:relative">
     <div class="loading" id="loading"><div class="spin"></div></div>
-
-    <!-- Labour pool input -->
-    <div class="panel" id="pool-panel" style="display:none">
-      <div class="panel-h">Monthly Labour Pool <span class="sub">— one number for the trade this month; everything else is derived</span></div>
-      <div class="panel-b">
-        <div class="pool-row">
-          <div class="fld"><label>Labour count (<span id="pl-trade">Plumber</span>)</label><input class="inp" id="pl-count" type="number" min="0" placeholder="185"></div>
-          <div class="fld"><label>Working days</label><input class="inp" id="pl-days" type="number" min="0" value="26"></div>
-          <div class="fld"><label>Shift (hrs/man-day)</label><input class="inp" id="pl-shift" type="number" min="0" value="10"></div>
-          <div class="fld"><label>Overtime %</label><input class="inp" id="pl-ot" type="number" min="0" value="25"></div>
-          <button class="btn btn-primary" onclick="savePool()">Save pool</button>
-          <span id="msg"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- KPIs -->
     <div class="kpis" id="kpis"></div>
-
-    <!-- HLD breakdown -->
-    <div class="panel">
-      <div class="panel-h">Sub-Activity Breakdown <span class="sub" id="grp-name">— H/L Drainage</span></div>
-      <div style="overflow-x:auto"><table id="hld-table"></table></div>
-    </div>
-
-    <!-- Excess assignment -->
-    <div class="panel" id="excess-panel" style="display:none">
-      <div class="panel-h">Excess Labour — Manual Assignment <span class="sub">— surplus base man-hours to assign to chosen sub-activities</span></div>
-      <div class="panel-b" id="excess-body"></div>
-    </div>
-
-    <!-- Completed villas -->
-    <div class="panel">
-      <div class="panel-h">Completed Villas (RA scope) <span class="sub" id="comp-sub"></span></div>
-      <div style="overflow-x:auto;max-height:340px"><table id="villa-table"></table></div>
-    </div>
+    <div id="groups"></div>
+    <div id="summary" style="display:none"></div>
   </div>
 </div>
 
 <script>
 'use strict';
-// ─── Constants (from the OBS spec) ───
-const AED_RATE = 10.5;            // AED per man-hour
-// Completion is per sub-activity via its own WIR (obs_activities.completion_wir_code):
-// HLD1-4=3060, HLD5=3070, HLD6=3170, HLD7-8=3270 (HLD9 default 3060).
-const RA_PREFIX = 'RA';           // RA-scope = subcontractor starts with "RA"
-const GROUP_MATCH = 'drain';      // activity_group filter for the HLD test
+const AED_RATE = 10.5;
+const RA_PREFIX = 'RA';
+const IN_PROGRESS_CREDIT = 0.5;
 
-let perms = [], canEnter = false;
-let hld = [];            // [{ccs_code,description,unit,G,W,AC,weight}]
-let budgetPerVilla = 0;  // Σ AC
-let villaWir = {};       // villaKey -> {villa_no,cluster,sub,date,wirs:Set(approved WIR codes)}
-let pool = null;         // obs_labour_pool row for the month
+let perms=[], canEnter=false;
+let view='groups';       // 'groups' (monthly per-group) | 'summary' (cumulative EVM by discipline)
+let groups=[];           // [{discipline,disc_sort,group,subs:[...],status,configured,EV,AC,BAC}]
+let codeToActId={}, actIdToCode={};
+let indirectHrs=0;       // cumulative/monthly indirect-trade man-hours (overhead)
+// Excel OBS Summary category labels per discipline
+const DISC_LABEL={'DRAINAGE ACTIVITIES':'All Drainage Works','WATER SUPPLY ACTIVITIES':'All Water Supply Works','HVAC ACTIVITIES':'All HVAC Works','ELECTRICAL ACTIVITIES':'All Electrical Works','Functional Test':'Functional Test','Snagging and de-snagging':'Snag / De-snag','Internal Rectification':'Rectifications (Direct Works)','PRECAST':'Pre-cast','Subcontractor Works Done by RA Labor':'Sub Contractor Work by RA'};
+let compByCode={};       // wirCode -> {applicable:Set, done:Set, inprog:Set} for the month
 
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t||'dark'); }
 function fmt(n,d){ n=Number(n)||0; return n.toLocaleString('en-US',{minimumFractionDigits:d||0,maximumFractionDigits:d||0}); }
 function fmtK(n){ n=Math.round(Number(n)||0); if(Math.abs(n)>=1e6)return (n/1e6).toFixed(2)+'M'; if(Math.abs(n)>=1000)return (n/1000).toFixed(1)+'K'; return n.toLocaleString(); }
+function esc(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function monthStr(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function monthEnd(m){ const [y,mo]=m.split('-').map(Number); return (mo===12?(y+1)+'-01-01':y+'-'+String(mo+1).padStart(2,'0')+'-01'); }
 
-async function fa(path){ const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()}); if(!r.ok){throw new Error('['+r.status+'] '+await r.text());} return r.json(); }
-async function fwrite(method,path,body){ const r=await fetch(SB+'/rest/v1/'+path,{method,headers:getH({'Prefer':'return=representation,resolution=merge-duplicates'}),body:JSON.stringify(body)}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
 function getH(extra){
   let t=window.__MEP_TOKEN__;
   if(!t){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}
   return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(t||KEY),'Content-Type':'application/json'},extra||{});
 }
+async function fa(path){ const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
+async function fwrite(method,path,body){ const r=await fetch(SB+'/rest/v1/'+path,{method,headers:getH({'Prefer':'return=representation,resolution=merge-duplicates'}),body:JSON.stringify(body)}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
 
 async function init(){
-  perms = (window.__MEP_USER__ && window.__MEP_USER__.permissions) || [];
-  const sa = perms.includes('manage_users') && perms.includes('manage_system');
-  const canView = sa || perms.includes('view_obs') || perms.includes('obs_entry') || perms.includes('edit_obs');
-  canEnter = sa || perms.includes('obs_entry') || perms.includes('edit_obs');
+  perms=(window.__MEP_USER__&&window.__MEP_USER__.permissions)||[];
+  const sa=perms.includes('manage_users')&&perms.includes('manage_system');
+  const canView=sa||perms.includes('view_obs')||perms.includes('obs_entry')||perms.includes('edit_obs');
+  canEnter=sa||perms.includes('obs_entry')||perms.includes('edit_obs');
   if(!canView){ document.getElementById('page').style.display='none'; document.getElementById('access-denied').classList.add('show'); return; }
-  if(canEnter) document.getElementById('pool-panel').style.display='';
-  // default month = current
-  document.getElementById('f-month').value = monthStr(new Date());
-  await loadStandards();
-  await reload();
+  document.getElementById('f-month').value=monthStr(new Date());
+  await loadCatalogue();
+  setView('groups');   // sets toggle state + triggers initial load
 }
 
-// Build HLD standards from reference data: AC (budget hrs/villa) = W × G.
-async function loadStandards(){
-  const rows = await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code&ccs_code=ilike.HLD*&is_active=eq.true&order=ccs_code.asc');
-  hld = rows.map(a=>{
-    const G = Number(a.std_prod_rate)||0;     // std hr/unit
-    const W = Number(a.qty_per_villa)||0;      // avg qty/villa (master column W)
-    const AC = W*G;                            // budget hrs/villa
-    return { ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC, wir:a.completion_wir_code||'' };
+// Load every activity grouped by discipline → group (once).
+async function loadCatalogue(){
+  const rows=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code,discipline,discipline_sort,activity_group&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
+  const map={}, order=[];
+  rows.forEach(a=>{
+    const g=a.activity_group||'(none)';
+    if(!map[g]){ map[g]={ discipline:a.discipline||'Other', disc_sort:a.discipline_sort??99, group:g, subs:[] }; order.push(g); }
+    const G=Number(a.std_prod_rate)||0, W=Number(a.qty_per_villa)||0;
+    map[g].subs.push({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC:W*G, wir:String(a.completion_wir_code||'') });
   });
-  budgetPerVilla = hld.reduce((s,h)=>s+h.AC,0);
-  hld.forEach(h=> h.weight = budgetPerVilla ? h.AC/budgetPerVilla : 0);
+  groups=order.map(g=>map[g]);
+  groups.forEach(grp=>{
+    const hasWir=grp.subs.some(s=>s.wir), hasQty=grp.subs.some(s=>s.W>0);
+    grp.status = (hasWir&&hasQty) ? 'ok' : (hasWir ? 'noqty' : 'nowir');   // ok | needs qty | needs wir+qty
+    grp.configured = grp.status==='ok';
+  });
+  // resolve all completion codes -> activities.id (once)
+  const allCodes=[...new Set(groups.flatMap(g=>g.subs.map(s=>s.wir)).filter(Boolean))];
+  codeToActId={}; actIdToCode={};
+  if(allCodes.length){
+    const a=await fa('activities?select=id,activity_code&activity_code=in.('+allCodes.join(',')+')');
+    a.forEach(r=>{ codeToActId[r.activity_code]=r.id; actIdToCode[r.id]=r.activity_code; });
+  }
 }
 
 async function reload(){
   const loading=document.getElementById('loading'); loading.style.display='flex';
   try{
-    const m = document.getElementById('f-month').value || monthStr(new Date());
-    const trade = document.getElementById('f-trade').value;
-    document.getElementById('pl-trade').textContent = trade;
-    document.getElementById('grp-name').textContent = '— '+document.getElementById('f-group').selectedOptions[0].textContent;
-    await Promise.all([ loadCompletion(m), loadPool(m, trade) ]);
-    render(m, trade);
+    const m=document.getElementById('f-month').value||monthStr(new Date());
+    const cum = view==='summary';            // summary is cumulative-to-date; groups is per-month
+    await Promise.all([ loadCompletion(m,cum), loadLabour(m,cum) ]);
+    if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
   finally{ loading.style.display='none'; }
 }
 
-// RA-scope WIRs approved in the month for every sub-activity's completion code.
-// Completion is per sub-activity: a villa earns a sub-activity's AC only when
-// that sub-activity's WIR is approved for it.
-async function loadCompletion(m){
-  const [y,mo] = m.split('-').map(Number);
-  const start = m+'-01';
-  const end = (mo===12 ? (y+1)+'-01-01' : y+'-'+String(mo+1).padStart(2,'0')+'-01');
-  const codes = [...new Set(hld.map(h=>h.wir).filter(Boolean))];
-  villaWir = {};
-  if(!codes.length) return;
-  const rows = await fa('dc_import_log?select=raw_villa_no,raw_cluster,response_date,raw_subcontractor,raw_activity_code'
-    +'&raw_activity_code=in.('+codes.join(',')+')&normalised_status=eq.approved&raw_subcontractor=ilike.'+RA_PREFIX+'*'
-    +'&response_date=gte.'+start+'&response_date=lt.'+end+'&order=response_date.asc');
-  rows.forEach(r=>{
-    const key=(r.raw_cluster||'')+'_'+r.raw_villa_no;
-    if(!villaWir[key]) villaWir[key]={ villa_no:r.raw_villa_no, cluster:r.raw_cluster, sub:r.raw_subcontractor, date:r.response_date, wirs:new Set() };
-    villaWir[key].wirs.add(String(r.raw_activity_code));
-    if(r.response_date && r.response_date > villaWir[key].date) villaWir[key].date = r.response_date;
+// Physical completion for ALL configured codes, RA-scope, within the month. (Same model as before.)
+async function loadCompletion(m,cum){
+  const end=monthEnd(m), start=m+'-01', isCur=(m===monthStr(new Date()));
+  // monthly: date inside the month · cumulative: any date up to month end
+  const inM=d=> cum ? (!!d && d<end) : (!!d && d>=start && d<end);
+  const allCodes=Object.keys(codeToActId);
+  const ids=allCodes.map(c=>codeToActId[c]).filter(Boolean);
+  compByCode={}; allCodes.forEach(c=>compByCode[c]={applicable:new Set(),done:new Set(),inprog:new Set()});
+  if(!ids.length) return;
+
+  const wirRA=await fa('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date,raw_subcontractor'
+    +'&activity_id=in.('+ids.join(',')+')&raw_subcontractor=ilike.'+RA_PREFIX+'*');
+  const raWir={};
+  wirRA.forEach(w=>{ const k=w.villa_id+'_'+w.activity_id; const e=raWir[k]||(raWir[k]={appr:null,ur:null});
+    if(w.normalised_status==='approved'){ const d=w.response_date||w.submitted_date; if(d&&(!e.appr||d>e.appr))e.appr=d; }
+    else if(w.normalised_status==='under_review'){ const d=w.submitted_date||w.response_date; if(d&&(!e.ur||d>e.ur))e.ur=d; } });
+
+  const rows=await fa('progress_updates?select=villa_id,activity_id,status,finish_date,subcontractor'
+    +'&activity_id=in.('+ids.join(',')+')&is_current=eq.true&is_deleted=eq.false&subcontractor=ilike.'+RA_PREFIX+'*');
+
+  const scopeVids=[...new Set([ ...rows.map(r=>r.villa_id), ...Object.keys(raWir).map(k=>+k.slice(0,k.lastIndexOf('_'))) ])];
+  const dateMap={};
+  if(scopeVids.length){
+    const wir2=await fa('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date'
+      +'&activity_id=in.('+ids.join(',')+')&villa_id=in.('+scopeVids.join(',')+')');
+    wir2.forEach(w=>{ const k=w.villa_id+'_'+w.activity_id; const e=dateMap[k]||(dateMap[k]={appr:null,ur:null});
+      if(w.normalised_status==='approved'){ const d=w.response_date||w.submitted_date; if(d&&(!e.appr||d>e.appr))e.appr=d; }
+      else if(w.normalised_status==='under_review'){ const d=w.submitted_date||w.response_date; if(d&&(!e.ur||d>e.ur))e.ur=d; } });
+  }
+
+  rows.forEach(r=>{ const code=actIdToCode[r.activity_id]; if(!code)return; const vid=r.villa_id;
+    compByCode[code].applicable.add(vid);
+    const wd=dateMap[vid+'_'+r.activity_id]||{}; const effDate=r.finish_date||wd.appr||wd.ur||null;
+    if(r.status==='completed'){ if(inM(effDate)||(!effDate&&isCur)) compByCode[code].done.add(vid); }
+    else if(r.status==='in_progress'){ if(inM(effDate)||(!effDate&&isCur)) compByCode[code].inprog.add(vid); } });
+
+  Object.keys(raWir).forEach(k=>{ const us=k.lastIndexOf('_'); const vid=+k.slice(0,us); const aid=+k.slice(us+1);
+    const code=actIdToCode[aid]; if(!code)return; const f=raWir[k];
+    compByCode[code].applicable.add(vid);
+    if(compByCode[code].done.has(vid)||compByCode[code].inprog.has(vid))return;
+    if(inM(f.appr)) compByCode[code].done.add(vid); else if(inM(f.ur)) compByCode[code].inprog.add(vid); });
+}
+
+// SPENT comes from OBS Config: trade man-hours (obs_manpower) split across groups (obs_trade_distribution).
+let tradeHrs={};      // trade -> man-hours for the selected month
+let distByGroup={};   // activity_group -> [{trade,pct}]
+async function loadLabour(m,cum){
+  const end=monthEnd(m);
+  const mpf = cum ? ('period_month=lt.'+end) : ('period_month=eq.'+m+'-01');
+  const [mp,dist]=await Promise.all([
+    fa('obs_manpower?select=trade,man_days,shift_hours,is_indirect&'+mpf),
+    fa('obs_trade_distribution?select=trade,activity_group,pct')
+  ]);
+  tradeHrs={}; indirectHrs=0;
+  mp.forEach(r=>{ const h=(Number(r.man_days)||0)*(Number(r.shift_hours)||0); tradeHrs[r.trade]=(tradeHrs[r.trade]||0)+h; if(r.is_indirect) indirectHrs+=h; });
+  distByGroup={}; dist.forEach(d=>{ (distByGroup[d.activity_group]=distByGroup[d.activity_group]||[]).push({trade:d.trade,pct:Number(d.pct)||0}); });
+}
+function groupSpent(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeHrs[d.trade]||0)*d.pct/100,0); }
+
+function render(m){
+  let totEV=0, totAC=0, totVillas=new Set();
+  groups.forEach(grp=>{
+    let EV=0, BAC=0;
+    grp.subs.forEach(s=>{ const c=compByCode[s.wir]||{applicable:new Set(),done:new Set(),inprog:new Set()};
+      s.done=c.done.size; s.inprog=c.inprog.size; s.Z=c.applicable.size;
+      s.EV=(s.done+s.inprog*IN_PROGRESS_CREDIT)*s.AC; EV+=s.EV; BAC+=s.Z*s.AC;
+      c.done.forEach(v=>totVillas.add(v)); c.inprog.forEach(v=>totVillas.add(v)); });
+    grp.EV=EV; grp.BAC=BAC; grp.AC=groupSpent(grp);
+    totEV+=EV; totAC+=grp.AC;
   });
-}
-
-async function loadPool(m, trade){
-  const rows = await fa('obs_labour_pool?select=*&period_month=eq.'+m+'-01&trade=eq.'+encodeURIComponent(trade));
-  pool = rows[0] || null;
-  document.getElementById('pl-count').value = pool ? pool.labour_count : '';
-  document.getElementById('pl-days').value  = pool ? pool.working_days : 26;
-  document.getElementById('pl-shift').value = pool ? pool.shift_hours : 10;
-  document.getElementById('pl-ot').value    = pool ? Math.round(pool.ot_pct*100) : 25;
-}
-
-async function savePool(){
-  const m = document.getElementById('f-month').value;
-  const trade = document.getElementById('f-trade').value;
-  if(!m){ return; }
-  const msg=document.getElementById('msg'); msg.textContent='Saving…'; msg.style.color='var(--text-muted)';
-  const body = {
-    period_month: m+'-01', trade,
-    labour_count: parseInt(document.getElementById('pl-count').value)||0,
-    working_days: parseInt(document.getElementById('pl-days').value)||0,
-    shift_hours:  parseFloat(document.getElementById('pl-shift').value)||0,
-    ot_pct:       (parseFloat(document.getElementById('pl-ot').value)||0)/100,
-    created_by:   (window.__MEP_USER__&&(window.__MEP_USER__.full_name||window.__MEP_USER__.display_name))||null,
-    updated_at:   new Date().toISOString()
-  };
-  try{
-    await fwrite('POST','obs_labour_pool?on_conflict=period_month,trade', body);
-    msg.textContent='✓ Saved'; msg.style.color='var(--good)';
-    await reload();
-  }catch(e){ msg.textContent='✗ '+e.message; msg.style.color='var(--bad)'; }
-}
-
-function render(m, trade){
-  const villas = Object.values(villaWir);
-  const nVillas = villas.length;
-  // Per sub-activity: how many villas had its WIR approved -> earned hrs = count × AC
-  hld.forEach(x=>{ x.villasDone = villas.filter(v=>x.wir && v.wirs.has(x.wir)).length; x.earned = x.villasDone * x.AC; });
-  const earned   = hld.reduce((s,x)=>s+x.earned,0);               // OUTPUT: value of completed work
-  const fullBudget = nVillas * budgetPerVilla;                    // if every touched villa were 100% done
-  const baseHrs  = pool ? pool.labour_count*pool.working_days*pool.shift_hours : 0;  // INPUT
-  const ot       = pool ? pool.ot_pct : 0.25;
-  const excess   = baseHrs - earned;                              // surplus labour beyond delivered output
-  const cost     = baseHrs * AED_RATE;
-  const avgPct   = fullBudget ? earned/fullBudget*100 : 0;
-  document.getElementById('tb-info').textContent = nVillas+' villa(s) touched · '+fmt(earned,0)+' earned hrs';
+  const cpi=totAC?totEV/totAC:0; const variance=totEV-totAC;
+  document.getElementById('tb-info').textContent=groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
-  document.getElementById('kpis').innerHTML =
-    kpi(fmt(nVillas), 'Villas Touched', 'RA · any H/L Drain WIR', 'accent')
-   +kpi(fmtK(earned), 'Earned Hrs (output)', avgPct.toFixed(0)+'% of full budget')
-   +kpi(fmtK(baseHrs), 'Labour Supplied (input)', (pool?pool.labour_count+' × '+pool.working_days+'d × '+pool.shift_hours+'h':'no pool set'))
-   +kpi((excess>=0?'+':'')+fmtK(excess), excess>=0?'Excess Hrs':'Shortfall Hrs', excess>=0?'supplied − earned':'under-resourced', excess>=0?'ok':'bad')
-   +kpi('AED '+fmtK(cost), 'Labour Cost', '@ '+AED_RATE+' AED/hr')
-   +kpi((earned&&baseHrs?(earned/baseHrs).toFixed(2):'—'), 'CPI', 'earned ÷ supplied', (earned/baseHrs>=1?'ok':'warn'));
+  document.getElementById('kpis').innerHTML=
+    kpi(fmt(totVillas.size),'Villas Active','across all groups this month','accent')
+   +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered in '+m)
+   +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour in '+m)
+   +kpi((variance>=0?'+':'')+fmtK(variance),variance>=0?'Hrs Saved':'Hrs Over','earned − spent',variance>=0?'ok':'bad')
+   +kpi((cpi?cpi.toFixed(2):'—'),'CPI','earned ÷ spent',(cpi>=1?'ok':cpi>0?'warn':''))
+   +kpi('AED '+fmtK(variance*AED_RATE),'Cost Variance','@ '+AED_RATE+' AED/hr',variance>=0?'ok':'bad');
 
-  // Sub-activity breakdown: completion via its own WIR
-  let h='<thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>WIR</th><th>Std Hr/Unit</th><th>Qty/Villa</th><th>Budget Hr/Villa</th><th>Weight</th><th>Villas Done</th><th>Earned Hrs</th></tr></thead><tbody>';
-  hld.forEach(x=>{
-    h+=`<tr><td class="l code">${x.ccs_code}</td><td class="l" style="font-family:var(--font)">${x.description||''}</td>`
-      +`<td><span class="code">${x.wir||'—'}</span></td><td>${fmt(x.G,2)}</td><td>${fmt(x.W,2)}</td><td>${fmt(x.AC,2)}</td>`
-      +`<td>${(x.weight*100).toFixed(1)}%</td><td>${x.villasDone}</td><td>${fmt(x.earned,0)}</td></tr>`;
+  let html=''; let lastDisc=null;
+  groups.forEach((grp,gi)=>{
+    if(grp.discipline!==lastDisc){ lastDisc=grp.discipline; html+=`<div class="disc-h">${esc(grp.discipline)}</div>`; }
+    const cpiG=grp.AC?grp.EV/grp.AC:0;
+    const collapsed = grp.status==='ok' ? '' : 'collapsed';
+    const tag = grp.status==='ok' ? '<span class="tag ok">configured</span>'
+      : grp.status==='noqty' ? '<span class="tag off">needs qty/villa</span>'
+      : '<span class="tag off">needs completion WIR</span>';
+    const hint = grp.status==='ok' ? ''
+      : grp.status==='noqty' ? '<div class="muted" style="font-size:11px;margin-bottom:8px">WIR is set — add <b>Qty/villa</b> for each sub-activity in <b>OBS Config → Activities &amp; WIR</b> to compute budget &amp; earned.</div>'
+      : '<div class="muted" style="font-size:11px;margin-bottom:8px">Set the <b>completion WIR</b> for these sub-activities in <b>OBS Config → Activities &amp; WIR</b> to enable earned-value tracking.</div>';
+    const spentNote = grp.AC ? '' : ' (no manpower/distribution for this group)';
+    html+=`<div class="panel ${collapsed}" id="gp-${gi}">`
+      +`<div class="panel-h" onclick="toggle(${gi})">`
+        +`<span class="caret">▾</span>`
+        +`<span class="gname" title="${esc(grp.group)}">${esc(grp.group)}</span>`
+        +tag
+        +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
+        +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
+        +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
+      +`</div>`
+      +`<div class="panel-b">${hint}${subTable(grp)}</div></div>`;
   });
-  h+=`<tr style="font-weight:800;background:var(--bg-panel)"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>100%</td><td>—</td><td>${fmt(earned,0)}</td></tr>`;
-  h+='</tbody>';
-  document.getElementById('hld-table').innerHTML=h;
-
-  // Excess assignment (surplus = supplied − earned), split by weight
-  const ep=document.getElementById('excess-panel');
-  if(excess>0 && pool){
-    ep.style.display='';
-    let eb=`<div style="margin-bottom:10px;color:var(--text-muted)">Surplus of <b style="color:var(--good)">${fmt(excess,0)}</b> base man-hours (supplied ${fmt(baseHrs,0)} − earned ${fmt(earned,0)}). Assign to sub-activities (display only for now):</div>`;
-    eb+='<table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>Suggested (by weight)</th><th>Assign hrs</th></tr></thead><tbody>';
-    hld.forEach(x=>{ eb+=`<tr><td class="l code">${x.ccs_code}</td><td class="l" style="font-family:var(--font)">${x.description||''}</td><td>${fmt(excess*x.weight,0)}</td><td><input class="assign-inp" type="number" min="0" placeholder="0"></td></tr>`; });
-    eb+='</tbody></table>';
-    document.getElementById('excess-body').innerHTML=eb;
-  } else ep.style.display='none';
-
-  // Per-villa: which sub-activities are done, earned hrs, % complete
-  document.getElementById('comp-sub').textContent = '— '+nVillas+' villa(s) in '+m+' · full budget '+fmt(budgetPerVilla,1)+' hrs each';
-  let vt='<thead><tr><th class="l">Villa</th><th class="l">Cluster</th><th class="l">Subcontractor</th><th class="l">Sub-Activities Done</th><th>Earned Hrs</th><th>% Complete</th></tr></thead><tbody>';
-  if(!nVillas){ vt+='<tr><td class="l muted" colspan="6" style="padding:18px;text-align:center">No RA villas with an H/L Drainage WIR approved in this month.</td></tr>'; }
-  villas.sort((a,b)=>(a.cluster||'').localeCompare(b.cluster||'')||a.villa_no-b.villa_no).forEach(v=>{
-    let ve=0; const done=[];
-    hld.forEach(x=>{ if(x.wir && v.wirs.has(x.wir)){ ve+=x.AC; if(!done.includes(x.ccs_code))done.push(x.ccs_code); } });
-    const pct = budgetPerVilla ? ve/budgetPerVilla*100 : 0;
-    const col = pct>=99?'var(--good)':pct>=50?'var(--warn)':'var(--text-muted)';
-    vt+=`<tr><td class="l" style="font-weight:700">${v.villa_no}</td><td class="l">${v.cluster||'—'}</td><td class="l" style="font-family:var(--font)">${v.sub||'—'}</td>`
-      +`<td class="l" style="font-family:var(--mono);font-size:11px;color:var(--accent-text)">${done.join(', ')||'—'}</td>`
-      +`<td>${fmt(ve,1)}</td><td><span style="color:${col};font-weight:700">${pct.toFixed(0)}%</span></td></tr>`;
-  });
-  vt+='</tbody>';
-  document.getElementById('villa-table').innerHTML=vt;
+  document.getElementById('groups').innerHTML=html;
 }
 
-// ─── Session bridge (robust: wait for the session in-shell) ───
+function subTable(grp){
+  let h='<table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>WIR</th><th>Std Hr/Unit</th><th>Qty/Villa</th><th>Budget Hr/Villa</th><th>Villas Done</th><th>Earned (EV)</th></tr></thead><tbody>';
+  let budgetPerVilla=0;
+  grp.subs.forEach(s=>{ budgetPerVilla+=s.AC;
+    h+=`<tr><td class="l code">${esc(s.ccs_code)}</td><td class="l" style="font-family:var(--font)">${esc(s.description)}</td>`
+      +`<td><span class="code">${s.wir||'—'}</span></td><td>${fmt(s.G,2)}</td><td>${fmt(s.W,2)}</td><td>${fmt(s.AC,2)}</td>`
+      +`<td>${s.done||0}${s.inprog?'<span class="muted"> +'+s.inprog+'ip</span>':''}</td><td>${fmt(s.EV||0,0)}</td></tr>`; });
+  h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
+  return h+'</tbody></table>';
+}
+
+function toggle(gi){ document.getElementById('gp-'+gi)?.classList.toggle('collapsed'); }
+function toggleAll(open){ groups.forEach((g,gi)=>{ const el=document.getElementById('gp-'+gi); if(el) el.classList.toggle('collapsed', !open); }); }
+
+function setView(v){
+  view=v; const grp=v==='groups';
+  document.getElementById('view-groups').classList.toggle('btn-primary',grp);
+  document.getElementById('view-summary').classList.toggle('btn-primary',!grp);
+  document.getElementById('kpis').style.display=grp?'':'none';
+  document.getElementById('groups').style.display=grp?'':'none';
+  document.getElementById('summary').style.display=grp?'none':'';
+  ['btn-expand','btn-collapse'].forEach(id=>document.getElementById(id).style.display=grp?'':'none');
+  document.getElementById('btn-print').style.display=grp?'none':'';
+  reload();
+}
+
+// ── Cumulative OBS Summary (EVM roll-up by discipline) ──
+function evm(x){ const cpi=x.AC?x.EV/x.AC:0; const eac=cpi?x.BAC/cpi:x.BAC; const etc=Math.max(0,eac-x.AC);
+  return { AC:x.AC, EV:x.EV, BAC:x.BAC, cv:x.EV-x.AC, cpi, eac, etc, bv:x.BAC-eac, aed:(x.BAC-eac)*AED_RATE }; }
+function vCell(n){ const v=Math.round(n); const neg=v<0; return `<td style="font-family:var(--mono);text-align:right;color:${neg?'var(--bad)':'var(--good)'}">${neg?'('+fmt(Math.abs(v))+')':fmt(v)}</td>`; }
+function nCell(n){ return `<td style="font-family:var(--mono);text-align:right">${fmt(Math.round(n))}</td>`; }
+
+function summaryModel(){
+  const byDisc={};
+  groups.forEach(grp=>{
+    let EV=0,BAC=0;
+    grp.subs.forEach(s=>{ const c=compByCode[s.wir]||{applicable:new Set(),done:new Set(),inprog:new Set()};
+      EV+=(c.done.size+c.inprog.size*IN_PROGRESS_CREDIT)*s.AC; BAC+=c.applicable.size*s.AC; });
+    const d=grp.discipline||'Other';
+    if(!byDisc[d]) byDisc[d]={AC:0,EV:0,BAC:0};
+    byDisc[d].AC+=groupSpent(grp); byDisc[d].EV+=EV; byDisc[d].BAC+=BAC;
+  });
+  const order=['DRAINAGE ACTIVITIES','WATER SUPPLY ACTIVITIES','HVAC ACTIVITIES','ELECTRICAL ACTIVITIES','Functional Test','Snagging and de-snagging','Internal Rectification','PRECAST','Subcontractor Works Done by RA Labor'];
+  Object.keys(byDisc).forEach(d=>{ if(!order.includes(d)) order.push(d); });
+  const rows=order.filter(d=>byDisc[d]).map(d=>({label:DISC_LABEL[d]||d, ...evm(byDisc[d])}));
+  const direct=rows.reduce((a,r)=>({AC:a.AC+r.AC,EV:a.EV+r.EV,BAC:a.BAC+r.BAC}),{AC:0,EV:0,BAC:0});
+  const proj=evm({AC:direct.AC+indirectHrs, EV:direct.EV, BAC:direct.BAC});
+  return { rows, proj, indirect:indirectHrs };
+}
+
+function renderSummary(m){
+  const M=summaryModel();
+  document.getElementById('tb-info').textContent='Cumulative as of '+m+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
+  const head='<thead>'
+    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">Actual Accumulative Status</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
+    +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED @10.5</th></tr></thead>';
+  const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
+  let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
+  M.rows.forEach(r=> b+=row(r));
+  // indirect overhead (manpower only, no earned-value)
+  b+=`<tr><td class="l">Total Indirect Works</td>${nCell(M.indirect)}<td colspan="6" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
+  b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
+  document.getElementById('summary').innerHTML=
+    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— cumulative to ${m} · AED @ ${AED_RATE}/hr</span></div>`
+    +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
+}
+
+function printSummary(){
+  const M=summaryModel(); const m=document.getElementById('f-month').value||'';
+  const fmtN=n=>{const v=Math.round(n);return v<0?'('+Math.abs(v).toLocaleString()+')':v.toLocaleString();};
+  const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
+  let body=`<tr class="tot"><td class="l">PROJECT TOTAL</td><td>${fmtN(M.proj.AC)}</td><td>${fmtN(M.proj.EV)}</td><td class="${M.proj.cv<0?'neg':'pos'}">${fmtN(M.proj.cv)}</td><td>${fmtN(M.proj.etc)}</td><td>${fmtN(M.proj.eac)}</td><td class="${M.proj.bv<0?'neg':'pos'}">${fmtN(M.proj.bv)}</td><td class="${M.proj.bv<0?'neg':'pos'}">${fmtN(M.proj.aed)}</td></tr>`;
+  M.rows.forEach(x=> body+=r(x));
+  body+=`<tr><td class="l">Total Indirect Works</td><td>${fmtN(M.indirect)}</td><td colspan="6"></td></tr>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>OBS Summary ${m}</title><style>
+    body{font-family:Arial,sans-serif;margin:24px;color:#111}
+    h2{margin:0 0 2px} .sub{color:#666;font-size:12px;margin-bottom:14px}
+    table{border-collapse:collapse;width:100%;font-size:12px}
+    th,td{border:1px solid #999;padding:6px 8px;text-align:right}
+    th{background:#f3dede} td.l,th.l{text-align:left}
+    tr.tot td{background:#eef3e0;font-weight:bold} .neg{color:#c0392b} .pos{color:#1e8449}
+  </style></head><body>
+    <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · Cumulative to ${m} · AED @ ${AED_RATE}/hr</div>
+    <table><thead><tr><th class="l">Direct Work</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
+  </body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
+}
+
+// ── Session bridge ──
 var _initCalled=false;
 function _tryInit(){ if(_initCalled)return; if(window.self!==window.top && !window.__MEP_USER__)return; _initCalled=true; init(); }
 window.addEventListener('message',function(e){

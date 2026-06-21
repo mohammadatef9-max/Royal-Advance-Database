@@ -2086,8 +2086,13 @@ async function saveProgress(){
   if(!canEditProgress()){showToast('You do not have permission to edit progress','err');return;}
   const{vid,actCode}=mCtx;
   const status=document.getElementById('m-s').value;
-  const start=document.getElementById('m-sd').value||null;
-  const finish=document.getElementById('m-fd').value||null;
+  let start=document.getElementById('m-sd').value||null;
+  let finish=document.getElementById('m-fd').value||null;
+  // Auto-stamp dates with today (local) when the user didn't enter one:
+  //  in_progress → start date · completed → finish date
+  const today=(d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'))(new Date());
+  if(status==='in_progress' && !start) start=today;
+  if(status==='completed' && !finish) finish=today;
   const subcontractor=document.getElementById('m-r').value||null;
   const actId=actCI[actCode];
   if(!actId){document.getElementById('m-al').innerHTML='<div class="mal mal-e">Activity not in database.</div>';return;}

@@ -451,9 +451,9 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="nl">OBS Tracker</span>
       </div>
-      <div class="nav perm-gate" id="nav-obs_entry" data-label="OBS Daily Entry" data-perm="obs_entry|edit_obs|manage_system" onclick="go('obs_entry')">
-        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>
-        <span class="nl">OBS Daily Entry</span>
+      <div class="nav perm-gate" id="nav-obs_config" data-label="OBS Config" data-perm="obs_entry|edit_obs|manage_system" onclick="go('obs_config')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        <span class="nl">OBS Config</span>
       </div>
 
       <div class="sb-sep"></div>
@@ -595,7 +595,7 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-ncr_sor"            title="NCR / SOR Tracker"></iframe>
       <iframe id="frame-qs"                 title="QS Payment Certificates"></iframe>
       <iframe id="frame-obs"               title="OBS Labour Tracker"></iframe>
-      <iframe id="frame-obs_entry"          title="OBS Daily Entry"></iframe>
+      <iframe id="frame-obs_config"         title="OBS Config"></iframe>
       <iframe id="frame-keyplan_c1"         title="Cluster 1 Keyplan"></iframe>
       <iframe id="frame-keyplan_c2"         title="Cluster 2 Keyplan"></iframe>
       <iframe id="frame-keyplan_c3"         title="Cluster 3 Keyplan"></iframe>
@@ -634,7 +634,7 @@ const PAGES = {
   ncr_sor:           { title:'NCR / SOR Tracker',   desc:'Non-conformance & site observation reports', file:'ncr_sor.html',            built:true },
   qs:                { title:'QS Certificates',     desc:'Subcontractor interim payment certificates',  file:'qs.html',                 built:true },
   obs:               { title:'OBS Labour Tracker',  desc:'Output-based system — MEP labour productivity', file:'obs.html',              built:true },
-  obs_entry:         { title:'OBS Daily Entry',     desc:'Enter daily activity output, hours & headcount', file:'obs_entry.html',        built:true },
+  obs_config:        { title:'OBS Config',          desc:'Activities, WIR mapping, trade distribution & manpower', file:'obs_config.html',  built:true },
   keyplan_c1:        { title:'Cluster 1 Keyplan',    desc:'Interactive villa keyplan — C1',         file:'keyplan_c1.html',         built:true },
   keyplan_c2:        { title:'Cluster 2 Keyplan',    desc:'Interactive villa keyplan — C2',         file:'keyplan_c2.html',         built:true },
   keyplan_c3:        { title:'Cluster 3 Keyplan',    desc:'Interactive villa keyplan — C3',         file:'keyplan_c3.html',         built:true },

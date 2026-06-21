@@ -237,9 +237,7 @@ textarea.form-input{resize:vertical;min-height:90px}
     <svg style="display:inline;vertical-align:-3px;margin-right:6px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
     NCR / SOR Tracker
   </div>
-  <div class="hdr-right">
-    <button class="tb-theme" onclick="toggleTheme()">☀ / ☾</button>
-  </div>
+  <div class="hdr-right"></div>
 </header>
 
 <div class="tabs">
@@ -476,16 +474,32 @@ async function fa(path){
   const d=await r.json();
   return Array.isArray(d)?d:[];
 }
+// True only when we hold a real user JWT (not the anon publishable key).
+function hasAuthToken(){
+  if(window.__MEP_TOKEN__) return true;
+  try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)return true;}}catch(e){}
+  return false;
+}
 async function fp(path,body){
+  if(!hasAuthToken()) throw new Error('Session not ready — refresh the page and sign in again.');
   const r=await fetch(`${SB}/rest/v1/${path}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});
-  return await r.json();
+  const d=await r.json().catch(()=>null);
+  if(!r.ok) throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText));
+  if(Array.isArray(d)&&!d.length) throw new Error('Not saved — your session may have expired. Refresh and try again.');
+  return d;
 }
 async function fpatch(path,body){
+  if(!hasAuthToken()) throw new Error('Session not ready — refresh the page and sign in again.');
   const r=await fetch(`${SB}/rest/v1/${path}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)});
-  return await r.json();
+  const d=await r.json().catch(()=>null);
+  if(!r.ok) throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText));
+  if(Array.isArray(d)&&!d.length) throw new Error('No rows updated — your session may have expired, or you lack permission. Refresh and try again.');
+  return d;
 }
 async function fdel(path){
-  await fetch(`${SB}/rest/v1/${path}`,{method:'DELETE',headers:getH()});
+  if(!hasAuthToken()) throw new Error('Session not ready — refresh the page and sign in again.');
+  const r=await fetch(`${SB}/rest/v1/${path}`,{method:'DELETE',headers:{...getH(),'Prefer':'return=representation'}});
+  if(!r.ok){ const d=await r.json().catch(()=>null); throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText)); }
 }
 
 // ── STATE ──
@@ -687,7 +701,7 @@ async function quickStatus(s){
     const idx=allRecords.findIndex(r=>r.id===currentRecord.id);
     if(idx>=0)allRecords[idx]={...allRecords[idx],...body};
     renderDetail();renderTable();updateStats();
-  }catch(e){alert('Failed to update status');}
+  }catch(e){alert('Failed to update status: '+(e.message||e));}
 }
 
 function toggleEditMode(){
@@ -736,7 +750,7 @@ async function saveEdit(){
     if(idx>=0)allRecords[idx]={...allRecords[idx],...body};
     editMode=false;
     renderDetail();renderTable();updateStats();
-  }catch(e){alert('Failed to save changes.');}
+  }catch(e){alert('Failed to save changes: '+(e.message||e));}
 }
 
 async function deleteRecord(){
@@ -748,7 +762,7 @@ async function deleteRecord(){
     renderTable();updateStats();
     document.getElementById('modal-bg').classList.remove('open');
     currentRecord=null;
-  }catch(e){alert('Failed to delete record.');}
+  }catch(e){alert('Failed to delete record: '+(e.message||e));}
 }
 
 // ── NEW RECORD FORM ──
