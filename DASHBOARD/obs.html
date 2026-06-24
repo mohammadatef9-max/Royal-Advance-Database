@@ -117,9 +117,10 @@ const RA_PREFIX = 'RA';
 const IN_PROGRESS_CREDIT = 0.5;
 
 let perms=[], canEnter=false;
-let view='groups';       // 'groups' (monthly per-group) | 'summary' (cumulative EVM by discipline)
+let view='groups';       // 'groups' (per-group) | 'summary' (EVM by discipline) — both per-month
 let groups=[];           // [{discipline,disc_sort,group,subs:[...],status,configured,EV,AC,BAC}]
-let codeToActId={}, actIdToCode={};
+let codeToActId={}, actIdToCode={};       // WIR code <-> activities.id
+let clrCodeToId={}, clrIdToCode={};        // clearance code <-> clearance_activities.id
 let indirectHrs=0;       // cumulative/monthly indirect-trade man-hours (overhead)
 // Excel OBS Summary category labels per discipline
 const DISC_LABEL={'DRAINAGE ACTIVITIES':'All Drainage Works','WATER SUPPLY ACTIVITIES':'All Water Supply Works','HVAC ACTIVITIES':'All HVAC Works','ELECTRICAL ACTIVITIES':'All Electrical Works','Functional Test':'Functional Test','Snagging and de-snagging':'Snag / De-snag','Internal Rectification':'Rectifications (Direct Works)','PRECAST':'Pre-cast','Subcontractor Works Done by RA Labor':'Sub Contractor Work by RA'};
@@ -138,6 +139,18 @@ function getH(extra){
   return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(t||KEY),'Content-Type':'application/json'},extra||{});
 }
 async function fa(path){ const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
+// Paginated fetch — pages past PostgREST's 1000-row cap via Range headers.
+async function faAll(path){
+  let out=[], from=0; const page=1000;
+  for(;;){
+    const r=await fetch(SB+'/rest/v1/'+path,{headers:getH({'Range-Unit':'items','Range':from+'-'+(from+page-1)})});
+    if(!r.ok)throw new Error('['+r.status+'] '+await r.text());
+    const d=await r.json(); out=out.concat(d);
+    if(!Array.isArray(d)||d.length<page)break;
+    from+=page;
+  }
+  return out;
+}
 async function fwrite(method,path,body){ const r=await fetch(SB+'/rest/v1/'+path,{method,headers:getH({'Prefer':'return=representation,resolution=merge-duplicates'}),body:JSON.stringify(body)}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
 
 async function init(){
@@ -153,26 +166,31 @@ async function init(){
 
 // Load every activity grouped by discipline → group (once).
 async function loadCatalogue(){
-  const rows=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code,discipline,discipline_sort,activity_group&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
+  const rows=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code,completion_type,discipline,discipline_sort,activity_group&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
   const map={}, order=[];
   rows.forEach(a=>{
     const g=a.activity_group||'(none)';
     if(!map[g]){ map[g]={ discipline:a.discipline||'Other', disc_sort:a.discipline_sort??99, group:g, subs:[] }; order.push(g); }
     const G=Number(a.std_prod_rate)||0, W=Number(a.qty_per_villa)||0;
-    map[g].subs.push({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC:W*G, wir:String(a.completion_wir_code||'') });
+    map[g].subs.push({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC:W*G, wir:String(a.completion_wir_code||''), ctype:a.completion_type||'wir' });
   });
   groups=order.map(g=>map[g]);
   groups.forEach(grp=>{
     const hasWir=grp.subs.some(s=>s.wir), hasQty=grp.subs.some(s=>s.W>0);
-    grp.status = (hasWir&&hasQty) ? 'ok' : (hasWir ? 'noqty' : 'nowir');   // ok | needs qty | needs wir+qty
+    grp.status = (hasWir&&hasQty) ? 'ok' : (hasWir ? 'noqty' : 'nowir');
     grp.configured = grp.status==='ok';
   });
-  // resolve all completion codes -> activities.id (once)
-  const allCodes=[...new Set(groups.flatMap(g=>g.subs.map(s=>s.wir)).filter(Boolean))];
-  codeToActId={}; actIdToCode={};
-  if(allCodes.length){
-    const a=await fa('activities?select=id,activity_code&activity_code=in.('+allCodes.join(',')+')');
+  // resolve completion codes -> ids, split by type (WIR → activities, clearance → clearance_activities)
+  const wirSet=new Set(), clrSet=new Set();
+  groups.forEach(g=>g.subs.forEach(s=>{ if(!s.wir)return; (s.ctype==='clearance'?clrSet:wirSet).add(s.wir); }));
+  codeToActId={}; actIdToCode={}; clrCodeToId={}; clrIdToCode={};
+  if(wirSet.size){
+    const a=await fa('activities?select=id,activity_code&activity_code=in.('+[...wirSet].join(',')+')');
     a.forEach(r=>{ codeToActId[r.activity_code]=r.id; actIdToCode[r.id]=r.activity_code; });
+  }
+  if(clrSet.size){
+    const c=await fa('clearance_activities?select=id,clearance_code&clearance_code=in.('+[...clrSet].map(x=>'"'+String(x).replace(/"/g,'')+'"').join(',')+')');
+    c.forEach(r=>{ clrCodeToId[r.clearance_code]=r.id; clrIdToCode[r.id]=r.clearance_code; });
   }
 }
 
@@ -180,8 +198,7 @@ async function reload(){
   const loading=document.getElementById('loading'); loading.style.display='flex';
   try{
     const m=document.getElementById('f-month').value||monthStr(new Date());
-    const cum = view==='summary';            // summary is cumulative-to-date; groups is per-month
-    await Promise.all([ loadCompletion(m,cum), loadLabour(m,cum) ]);
+    await Promise.all([ loadCompletion(m,false), loadLabour(m,false) ]);   // both views are per-month
     if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
   finally{ loading.style.display='none'; }
@@ -189,50 +206,62 @@ async function reload(){
 
 // Physical completion for ALL configured codes, RA-scope, within the month. (Same model as before.)
 async function loadCompletion(m,cum){
-  const end=monthEnd(m), start=m+'-01', isCur=(m===monthStr(new Date()));
-  // monthly: date inside the month · cumulative: any date up to month end
+  const end=monthEnd(m), start=m+'-01';
+  // Date-required test (used for WIR-derived completions — the approval date places them):
+  //   monthly = date inside the month · cumulative = any date up to month end.
   const inM=d=> cum ? (!!d && d<end) : (!!d && d>=start && d<end);
-  const allCodes=Object.keys(codeToActId);
-  const ids=allCodes.map(c=>codeToActId[c]).filter(Boolean);
-  compByCode={}; allCodes.forEach(c=>compByCode[c]={applicable:new Set(),done:new Set(),inprog:new Set()});
-  if(!ids.length) return;
+  // Site-progress test. A 'completed' row is done even if undated, so in CUMULATIVE
+  // undated counts as done-to-date; in MONTHLY it needs a date in the month (no dumping
+  // every undated completion into the current month).
+  const countIt=d=> cum ? (!d || d<end) : (!!d && d>=start && d<end);
+  const wirCodeArr=Object.keys(codeToActId), clrCodeArr=Object.keys(clrCodeToId);
+  const ids=wirCodeArr.map(c=>codeToActId[c]).filter(Boolean);
+  const clrIds=clrCodeArr.map(c=>clrCodeToId[c]).filter(Boolean);
+  compByCode={}; [...wirCodeArr,...clrCodeArr].forEach(c=>compByCode[c]={applicable:new Set(),done:new Set(),inprog:new Set()});
+  if(!ids.length && !clrIds.length) return;
 
-  const wirRA=await fa('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date,raw_subcontractor'
-    +'&activity_id=in.('+ids.join(',')+')&raw_subcontractor=ilike.'+RA_PREFIX+'*');
+  // ── WIR-based completion (RA-scope via progress_updates + dc_import_log) ──
+  if(ids.length){
+  const wirRA=await faAll('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date,raw_subcontractor'
+    +'&activity_id=in.('+ids.join(',')+')&raw_subcontractor=ilike.'+RA_PREFIX+'*&normalised_status=in.(approved,under_review)');
   const raWir={};
   wirRA.forEach(w=>{ const k=w.villa_id+'_'+w.activity_id; const e=raWir[k]||(raWir[k]={appr:null,ur:null});
     if(w.normalised_status==='approved'){ const d=w.response_date||w.submitted_date; if(d&&(!e.appr||d>e.appr))e.appr=d; }
     else if(w.normalised_status==='under_review'){ const d=w.submitted_date||w.response_date; if(d&&(!e.ur||d>e.ur))e.ur=d; } });
 
-  const rows=await fa('progress_updates?select=villa_id,activity_id,status,finish_date,subcontractor'
+  const rows=await faAll('progress_updates?select=villa_id,activity_id,status,finish_date,subcontractor'
     +'&activity_id=in.('+ids.join(',')+')&is_current=eq.true&is_deleted=eq.false&subcontractor=ilike.'+RA_PREFIX+'*');
 
-  const scopeVids=[...new Set([ ...rows.map(r=>r.villa_id), ...Object.keys(raWir).map(k=>+k.slice(0,k.lastIndexOf('_'))) ])];
-  const dateMap={};
-  if(scopeVids.length){
-    const wir2=await fa('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date'
-      +'&activity_id=in.('+ids.join(',')+')&villa_id=in.('+scopeVids.join(',')+')');
-    wir2.forEach(w=>{ const k=w.villa_id+'_'+w.activity_id; const e=dateMap[k]||(dateMap[k]={appr:null,ur:null});
-      if(w.normalised_status==='approved'){ const d=w.response_date||w.submitted_date; if(d&&(!e.appr||d>e.appr))e.appr=d; }
-      else if(w.normalised_status==='under_review'){ const d=w.submitted_date||w.response_date; if(d&&(!e.ur||d>e.ur))e.ur=d; } });
-  }
-
+  // Completion date = progress finish_date, else the RA WIR's approved/UR date (raWir, already fetched & bounded).
   rows.forEach(r=>{ const code=actIdToCode[r.activity_id]; if(!code)return; const vid=r.villa_id;
     compByCode[code].applicable.add(vid);
-    const wd=dateMap[vid+'_'+r.activity_id]||{}; const effDate=r.finish_date||wd.appr||wd.ur||null;
-    if(r.status==='completed'){ if(inM(effDate)||(!effDate&&isCur)) compByCode[code].done.add(vid); }
-    else if(r.status==='in_progress'){ if(inM(effDate)||(!effDate&&isCur)) compByCode[code].inprog.add(vid); } });
+    const wd=raWir[vid+'_'+r.activity_id]||{}; const effDate=r.finish_date||wd.appr||wd.ur||null;
+    if(r.status==='completed'){ if(countIt(effDate)) compByCode[code].done.add(vid); }
+    else if(r.status==='in_progress'){ if(countIt(effDate)) compByCode[code].inprog.add(vid); } });
 
   Object.keys(raWir).forEach(k=>{ const us=k.lastIndexOf('_'); const vid=+k.slice(0,us); const aid=+k.slice(us+1);
     const code=actIdToCode[aid]; if(!code)return; const f=raWir[k];
     compByCode[code].applicable.add(vid);
     if(compByCode[code].done.has(vid)||compByCode[code].inprog.has(vid))return;
     if(inM(f.appr)) compByCode[code].done.add(vid); else if(inM(f.ur)) compByCode[code].inprog.add(vid); });
+  } // end WIR block
+
+  // ── Clearance-based completion (clearance_import_log has no subcontractor, so it is NOT RA-filtered) ──
+  if(clrIds.length){
+    const cl=await faAll('clearance_import_log?select=villa_id,clearance_activity_id,normalised_status,clearance_received_date,clearance_released_date'
+      +'&clearance_activity_id=in.('+clrIds.join(',')+')');
+    cl.forEach(r=>{ const code=clrIdToCode[r.clearance_activity_id]; if(!code)return; const vid=r.villa_id;
+      compByCode[code].applicable.add(vid);
+      const d=r.clearance_released_date||r.clearance_received_date||null;
+      if(r.normalised_status==='fully_approved'){ if(countIt(d)){ compByCode[code].done.add(vid); compByCode[code].inprog.delete(vid); } }
+      else if(r.normalised_status==='pending'){ if(countIt(d) && !compByCode[code].done.has(vid)) compByCode[code].inprog.add(vid); } });
+  }
 }
 
 // SPENT comes from OBS Config: trade man-hours (obs_manpower) split across groups (obs_trade_distribution).
 let tradeHrs={};      // trade -> man-hours for the selected month
 let distByGroup={};   // activity_group -> [{trade,pct}]
+let tradeDays={};     // trade -> man-days for the period
 async function loadLabour(m,cum){
   const end=monthEnd(m);
   const mpf = cum ? ('period_month=lt.'+end) : ('period_month=eq.'+m+'-01');
@@ -240,11 +269,14 @@ async function loadLabour(m,cum){
     fa('obs_manpower?select=trade,man_days,shift_hours,is_indirect&'+mpf),
     fa('obs_trade_distribution?select=trade,activity_group,pct')
   ]);
-  tradeHrs={}; indirectHrs=0;
-  mp.forEach(r=>{ const h=(Number(r.man_days)||0)*(Number(r.shift_hours)||0); tradeHrs[r.trade]=(tradeHrs[r.trade]||0)+h; if(r.is_indirect) indirectHrs+=h; });
+  tradeHrs={}; tradeDays={}; indirectHrs=0;
+  mp.forEach(r=>{ const days=Number(r.man_days)||0, h=days*(Number(r.shift_hours)||0);
+    tradeHrs[r.trade]=(tradeHrs[r.trade]||0)+h; tradeDays[r.trade]=(tradeDays[r.trade]||0)+days; if(r.is_indirect) indirectHrs+=h; });
   distByGroup={}; dist.forEach(d=>{ (distByGroup[d.activity_group]=distByGroup[d.activity_group]||[]).push({trade:d.trade,pct:Number(d.pct)||0}); });
 }
 function groupSpent(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeHrs[d.trade]||0)*d.pct/100,0); }
+// Man-days of labour distributed to a group this period (how many workers' days are assigned to it).
+function groupDays(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeDays[d.trade]||0)*d.pct/100,0); }
 
 function render(m){
   let totEV=0, totAC=0, totVillas=new Set();
@@ -286,6 +318,7 @@ function render(m){
         +`<span class="caret">▾</span>`
         +`<span class="gname" title="${esc(grp.group)}">${esc(grp.group)}</span>`
         +tag
+        +`<span class="mini" title="man-days of labour assigned to this group this month">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
         +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
@@ -321,7 +354,7 @@ function setView(v){
   reload();
 }
 
-// ── Cumulative OBS Summary (EVM roll-up by discipline) ──
+// ── Per-month OBS Summary (EVM roll-up by discipline) ──
 function evm(x){ const cpi=x.AC?x.EV/x.AC:0; const eac=cpi?x.BAC/cpi:x.BAC; const etc=Math.max(0,eac-x.AC);
   return { AC:x.AC, EV:x.EV, BAC:x.BAC, cv:x.EV-x.AC, cpi, eac, etc, bv:x.BAC-eac, aed:(x.BAC-eac)*AED_RATE }; }
 function vCell(n){ const v=Math.round(n); const neg=v<0; return `<td style="font-family:var(--mono);text-align:right;color:${neg?'var(--bad)':'var(--good)'}">${neg?'('+fmt(Math.abs(v))+')':fmt(v)}</td>`; }
@@ -347,9 +380,9 @@ function summaryModel(){
 
 function renderSummary(m){
   const M=summaryModel();
-  document.getElementById('tb-info').textContent='Cumulative as of '+m+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
+  document.getElementById('tb-info').textContent=m+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
   const head='<thead>'
-    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">Actual Accumulative Status</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
+    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">This Month</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
     +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED @10.5</th></tr></thead>';
   const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
   let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
@@ -358,7 +391,7 @@ function renderSummary(m){
   b+=`<tr><td class="l">Total Indirect Works</td>${nCell(M.indirect)}<td colspan="6" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
   document.getElementById('summary').innerHTML=
-    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— cumulative to ${m} · AED @ ${AED_RATE}/hr</span></div>`
+    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (per month) · AED @ ${AED_RATE}/hr</span></div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
 }
 
@@ -378,7 +411,7 @@ function printSummary(){
     th{background:#f3dede} td.l,th.l{text-align:left}
     tr.tot td{background:#eef3e0;font-weight:bold} .neg{color:#c0392b} .pos{color:#1e8449}
   </style></head><body>
-    <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · Cumulative to ${m} · AED @ ${AED_RATE}/hr</div>
+    <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · Month ${m} · AED @ ${AED_RATE}/hr</div>
     <table><thead><tr><th class="l">Direct Work</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),300);

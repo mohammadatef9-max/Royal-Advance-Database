@@ -40,6 +40,7 @@ let scopeLockedTotals = {}; // scope_id → {gross,retention,advRec,lockedCount}
 let allPCsGlobal = [];      // all PCs across all scopes (for dashboard)
 let allVOsGlobal = [];      // all VOs across all scopes (for dashboard)
 let lastGrossAed = 0;       // totTodAmt captured from last renderPaymentSummary() call
+let lockedBilledMissing = false; // locked PC has no billed records (legacy) → fall back to to-date view so the grid isn't blank
 
 // cfg modal state
 let cfgVillaTypes = [];
@@ -818,6 +819,9 @@ async function loadPCData() {
   // Index billed records + map each PC id to its number (for prev/current/later ordering)
   billedRecords = {};
   billedRows.forEach(b => { billedRecords[b.villa_id + ':' + b.activity_code] = b.locked_pc_id; });
+  // Legacy safety: a locked PC that has NO billed records of its own would render an empty grid.
+  // Fall back to the to-date view in that case (matches what reopen→relock would show).
+  lockedBilledMissing = (selectedPC.status === 'locked') && !billedRows.some(b => b.locked_pc_id === selectedPC.id);
   pcNumById = {};
   (allScopePCs || []).forEach(p => { pcNumById[p.id] = p.pc_number; });
   if (selectedPC) pcNumById[selectedPC.id] = selectedPC.pc_number;
@@ -899,7 +903,8 @@ function getActivityStatus(villa_id, activity_code) {
 function calcVillaWorkdone(villa_id) {
   let prev = 0, current = 0, toDate = 0;
   // A locked PC's "current" = only what was billed IN THIS PC; a draft's "current" = approvable now.
-  const locked = selectedPC && selectedPC.status === 'locked';
+  // (A legacy locked PC with no billed records falls back to the to-date view so it isn't blank.)
+  const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
   scopeActivityGroups.forEach(grp => {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     grpActs.forEach(act => {
@@ -1044,9 +1049,10 @@ function renderProgressSheet() {
 
   // A villa belongs to this PC only if it has work billed in this or an earlier PC
   // (or, for a draft, work that's approvable now). Villas billed only in LATER PCs are hidden.
+  const effLocked = isLocked && !lockedBilledMissing;   // legacy locked w/o billed → behave like to-date
   const villaInThisPc = sv => scopeActivities.some(a => {
     const st = getActivityStatus(sv.villa_id, a.activity_code);
-    return st.wasBilledPrev || st.isBilledNow || (!isLocked && st.isCompleteToDate && !st.billedLater);
+    return st.wasBilledPrev || st.isBilledNow || (!effLocked && st.isCompleteToDate && !st.billedLater);
   });
 
   // Apply cluster filter + PC relevance
@@ -2879,6 +2885,7 @@ function renderCfgTypes() {
   const list = document.getElementById('cfg-types-list');
   const opts = getVillaTypeOptions();
   const header = `
+    <datalist id="cfg-vt-dl">${opts.map(o => `<option value="${escH(o)}">`).join('')}</datalist>
     <div style="display:grid;grid-template-columns:1fr 80px 100px 120px 28px;gap:6px;padding:0 10px 4px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.05em">
       <span>Villa Type</span>
       <span>Unit</span>
@@ -2887,10 +2894,9 @@ function renderCfgTypes() {
       <span></span>
     </div>`;
   const rows = cfgVillaTypes.map((t,i) => {
-    const optHtml = opts.map(o => `<option value="${escH(o)}"${t.villa_type_label===o?' selected':''}>${escH(o)}</option>`).join('');
     return `
     <div style="display:grid;grid-template-columns:1fr 80px 100px 120px 28px;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:8px 10px">
-      <select onchange="cfgVillaTypes[${i}].villa_type_label=this.value" style="width:100%">${optHtml}</select>
+      <input type="text" list="cfg-vt-dl" value="${escH(t.villa_type_label||'')}" placeholder="Type any villa type" title="Type any villa type label (suggestions provided)" onchange="cfgVillaTypes[${i}].villa_type_label=this.value" style="width:100%">
       <input type="text" value="${escH(t.unit||'Villa')}" placeholder="Villa" title="Unit of measure printed on the certificate" onchange="cfgVillaTypes[${i}].unit=this.value">
       <input type="number" value="${t.qty_contracted}" placeholder="0" min="0" title="Total number of villas of this type in the subcontract" onchange="cfgVillaTypes[${i}].qty_contracted=+this.value;updateCfgContractField()">
       <input type="number" value="${t.rate_aed}" placeholder="0.00" min="0" step="0.01" title="Payment rate per villa (AED)" onchange="cfgVillaTypes[${i}].rate_aed=+this.value;updateCfgContractField()">

@@ -84,13 +84,13 @@ tr.grp{user-select:none}
 /* modal */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:40}
 .modal.show{display:flex}
-.modal-card{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:12px;padding:18px;width:460px;max-width:92vw}
+.modal-card{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:12px;padding:20px;width:580px;max-width:94vw}
 .modal-card h3{font-size:15px;margin-bottom:14px}
-.mfld{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.mfld{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;min-width:0}
 .mfld label{font-size:11px;color:var(--text-muted);font-weight:600}
-.mfld input,.mfld select{padding:7px 9px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);color:var(--text)}
+.mfld input,.mfld select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--border-strong);border-radius:6px;background:var(--bg-panel);color:var(--text)}
 .mfld input[readonly]{opacity:.6}
-.mrow{display:flex;gap:10px}.mrow .mfld{flex:1}
+.mrow{display:flex;gap:10px}.mrow .mfld{flex:1 1 0;min-width:0}
 .modal-actions{display:flex;align-items:center;gap:8px;margin-top:6px}
 </style>
 </head>
@@ -200,7 +200,10 @@ tr.grp{user-select:none}
       <div class="mfld"><label>Std rate</label><input id="ed-rate" type="number" step="0.01"></div>
       <div class="mfld"><label>Target</label><input id="ed-trate" type="number" step="0.01"></div>
       <div class="mfld"><label>Qty/villa</label><input id="ed-qty" type="number" step="0.01"></div>
-      <div class="mfld"><label>Completion WIR</label><input id="ed-wir" placeholder="e.g. 3060"></div>
+    </div>
+    <div class="mrow">
+      <div class="mfld" style="flex:0 0 160px"><label>Completion via</label><select id="ed-ctype" onchange="edTypeChange()"><option value="wir">WIR approval</option><option value="clearance">Clearance</option></select></div>
+      <div class="mfld"><label id="ed-codelbl">Completion WIR code</label><input id="ed-wir" list="ed-code-list" placeholder="e.g. 3060"><datalist id="ed-code-list"></datalist></div>
     </div>
     <span class="msg" id="ed-msg"></span>
     <div class="modal-actions">
@@ -219,6 +222,8 @@ let acts=[];            // obs_activities
 let dirty={};           // ccs_code -> true
 let edCode=null;        // modal: null=create, else editing this ccs_code
 let groupsList=[];      // distinct activity_group
+let wirCodes=[];        // valid WIR codes (activities.activity_code)
+let clrCodes=[];        // valid clearance codes (clearance_activities.clearance_code)
 let distRows=[];        // current trade distribution editing [{activity_group,pct}]
 let discGroups={};      // discipline -> [activity_group,...]
 let parsedMonths=[];    // [{month:'YYYY-MM', sheet, rows:[{trade,man_days,is_indirect}]}]
@@ -264,7 +269,14 @@ async function init(){
 async function loadAll(){
   document.getElementById('loading').style.display='flex';
   try{
-    acts=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,target_rate,qty_per_villa,completion_wir_code,discipline,discipline_sort,activity_group,is_active&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
+    acts=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,target_rate,qty_per_villa,completion_wir_code,completion_type,discipline,discipline_sort,activity_group,is_active&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
+    // valid completion codes for the datalists
+    try{ const [w,c]=await Promise.all([
+      fa('activities?select=activity_code&is_active=eq.true&order=activity_code.asc'),
+      fa('clearance_activities?select=clearance_code&is_active=eq.true&order=clearance_code.asc')]);
+      wirCodes=[...new Set(w.map(x=>x.activity_code).filter(Boolean))];
+      clrCodes=[...new Set(c.map(x=>x.clearance_code).filter(Boolean))];
+    }catch(e){}
     groupsList=[...new Set(acts.map(a=>a.activity_group||'').filter(Boolean))];
     const discs=[...new Set(acts.map(a=>a.discipline||'Other'))];
     document.getElementById('a-disc').innerHTML='<option value="">All disciplines</option>'+discs.map(d=>`<option>${esc(d)}</option>`).join('');
@@ -293,7 +305,7 @@ function renderAct(){
   const autoOpen=!!q;   // expand matches while searching
   // count per (discipline,group)
   const cnt={}; rows.forEach(a=>{ const k=(a.discipline||'')+'|'+(a.activity_group||''); cnt[k]=(cnt[k]||0)+1; });
-  let h='<thead><tr><th style="width:64px">Code</th><th class="l">Sub-Activity</th><th>Unit</th><th>Std rate</th><th>Target</th><th>Qty/villa</th><th>WIR</th><th style="width:34px"></th></tr></thead><tbody>';
+  let h='<thead><tr><th style="width:64px">Code</th><th class="l">Sub-Activity</th><th>Unit</th><th>Std rate</th><th>Target</th><th>Qty/villa</th><th>Completion</th><th style="width:34px"></th></tr></thead><tbody>';
   let lastDisc=null,lastG=null,gi=-1;
   rows.forEach(a=>{
     if((a.discipline||'')!==lastDisc){ lastDisc=a.discipline||''; lastG=null; h+=`<tr class="disc"><td colspan="8">${esc(a.discipline||'Other')}</td></tr>`; }
@@ -309,7 +321,7 @@ function renderAct(){
       +`<td><input class="ced num w-num" data-c="${c}" data-f="std_prod_rate" value="${a.std_prod_rate??''}" oninput="markA('${c}')"></td>`
       +`<td><input class="ced num w-num" data-c="${c}" data-f="target_rate" value="${a.target_rate??''}" oninput="markA('${c}')"></td>`
       +`<td><input class="ced num w-num" data-c="${c}" data-f="qty_per_villa" value="${a.qty_per_villa??''}" oninput="markA('${c}')"></td>`
-      +`<td><input class="ced code w-wir" data-c="${c}" data-f="completion_wir_code" value="${esc(a.completion_wir_code)}" oninput="markA('${c}')"></td>`
+      +`<td style="white-space:nowrap"><span class="muted" style="font-size:9px;font-weight:700;margin-right:3px">${(a.completion_type||'wir')==='clearance'?'CLR':'WIR'}</span><input class="ced code w-wir" data-c="${c}" data-f="completion_wir_code" value="${esc(a.completion_wir_code)}" oninput="markA('${c}')"></td>`
       +`<td><span class="edit" title="Edit / move / delete" onclick="openEdit('${c}')">✎</span></td></tr>`;
   });
   if(!rows.length) h+='<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No activities match.</td></tr>';
@@ -336,13 +348,21 @@ function openEdit(code){
   document.getElementById('ed-rate').value=a.std_prod_rate??'';
   document.getElementById('ed-trate').value=a.target_rate??'';
   document.getElementById('ed-qty').value=a.qty_per_villa??'';
+  document.getElementById('ed-ctype').value=a.completion_type||'wir';
   document.getElementById('ed-wir').value=a.completion_wir_code||'';
+  edTypeChange();
   document.getElementById('ed-del').style.display=code?'':'none';
   document.getElementById('ed-msg').textContent='';
   document.getElementById('ed-modal').classList.add('show');
 }
 function edDiscChange(){ const d=document.getElementById('ed-disc').value;
   document.getElementById('ed-grp-list').innerHTML=(discGroups[d]||[]).map(g=>`<option value="${esc(g)}">`).join(''); }
+function edTypeChange(){
+  const wir=document.getElementById('ed-ctype').value==='wir';
+  document.getElementById('ed-codelbl').textContent= wir ? 'Completion WIR code' : 'Completion clearance code';
+  document.getElementById('ed-wir').placeholder= wir ? 'e.g. 3060' : 'e.g. PL-WET';
+  document.getElementById('ed-code-list').innerHTML=(wir?wirCodes:clrCodes).map(c=>`<option value="${esc(c)}">`).join('');
+}
 function closeEd(){ document.getElementById('ed-modal').classList.remove('show'); }
 function numv(id){ const v=document.getElementById(id).value; return v===''?null:Number(v); }
 async function saveActivity(){
@@ -356,6 +376,7 @@ async function saveActivity(){
   const body={ ccs_code:code, description:desc, unit:document.getElementById('ed-unit').value.trim()||null,
     discipline:disc||null, activity_group:document.getElementById('ed-grp').value.trim()||null, discipline_sort:sort,
     std_prod_rate:numv('ed-rate'), target_rate:numv('ed-trate'), qty_per_villa:numv('ed-qty'),
+    completion_type:document.getElementById('ed-ctype').value,
     completion_wir_code:document.getElementById('ed-wir').value.trim()||null };
   m.textContent='Saving…'; m.style.color='var(--text-muted)';
   try{

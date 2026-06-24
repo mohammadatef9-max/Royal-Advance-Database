@@ -224,6 +224,7 @@ body.space-down #map-viewport{cursor:grab}
     <option value="A3">A3 Landscape</option>
   </select>
   <button class="tbtn" onclick="doPrint()">&#128424; Print</button>
+  <button class="tbtn" onclick="openBatchPrint()" title="Print several WIR/Clearance keyplans at once">&#128424; Batch</button>
   <div class="tb-div"></div>
   <button class="tbtn" onclick="zoomBy(1.25)" title="Zoom in (Ctrl+wheel)">&#128269;+</button>
   <button class="tbtn" onclick="zoomBy(0.8)" title="Zoom out">&#128269;&#8722;</button>
@@ -952,6 +953,125 @@ function doPrint(){
     window.print();
     setTimeout(function(){var p=document.getElementById('print-page');if(p)p.parentNode.removeChild(p);},1500);
   });
+}
+
+// ───────── Batch print: many WIR/Clearance keyplans in one print job ─────────
+var KP_PRINT_CSS=""
++"*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}"
++"body{margin:0;background:#fff;font-family:'Inter',sans-serif}"
++".kp-sheet{box-sizing:border-box;padding:4mm;display:flex;flex-direction:column;overflow:hidden;page-break-after:always;background:#fff}"
++".kp-sheet:last-child{page-break-after:auto}"
++".pp-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8pt;border-bottom:2pt solid #000;padding-bottom:4pt;margin-bottom:4pt}"
++".pp-left .pp-proj{font-size:8pt;font-weight:800;color:#000}.pp-left .pp-cluster{font-size:16pt;font-weight:900;color:#000;line-height:1.1;margin-top:1pt}"
++".pp-left .pp-meta{font-size:7pt;color:#333;margin-top:2pt}.pp-left .pp-meta b{color:#000;font-weight:700}"
++".pp-cards{display:flex;gap:3pt;flex-wrap:nowrap;align-items:stretch}"
++".pp-card{border:1pt solid #000;border-radius:3pt;padding:2pt 5pt;min-width:40pt;text-align:center;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}"
++".pp-card .pv{font-size:13pt;font-weight:900;font-family:'JetBrains Mono',monospace;line-height:1.1}.pp-card .pl{font-size:5.5pt;text-transform:uppercase;letter-spacing:0.3px;color:#000;font-weight:700;margin-top:1pt}"
++".pv-ap{color:#15803d}.pv-rj{color:#b91c1c}.pv-ur{color:#4338ca}.pv-pn{color:#b45309}.pv-of{color:#be185d}.pv-tt{color:#000}.pv-pct{color:#1e40af}"
++".pp-map-wrap{position:relative;overflow:hidden;background:#fff}"
++".pp-villa-layer{position:absolute;top:0;left:0;width:1800px;height:1271px;transform-origin:0 0}"
++".villa{position:absolute;width:46px;height:32px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:800;box-sizing:border-box;overflow:hidden;border:2px solid transparent}"
++".villa .vinner{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%}"
++".villa .vnum{font-size:14px;font-weight:900;line-height:1;font-family:'JetBrains Mono',monospace;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000}"
++".villa .vsub-stripe{position:absolute;top:0;left:0;right:0;height:4px;pointer-events:none}"
++".s-AP{background:#22c55e;border-color:#15803d}.s-RJ{background:#f87171;border-color:#b91c1c}.s-UR{background:#818cf8;border-color:#4338ca}.s-PN{background:#f59e0b;border-color:#b45309}.s-FA{background:#22c55e;border-color:#15803d}.s-NA{background:#f87171;border-color:#b91c1c}.s-NS{background:#cbd5e1!important;border-color:#94a3b8!important}.s-NS .vnum{color:#1e293b;text-shadow:none}"
++".villa.is-front{outline:2px solid #ec4899}.villa.filter-hidden{display:none!important}"
++".pp-legend{display:flex;gap:3pt 8pt;padding-top:4pt;border-top:1pt solid #ccc;font-size:7pt;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:auto}"
++".pp-legend .pl-item{display:flex;align-items:center;gap:3pt;color:#000}.pp-legend .pl-dot{width:8pt;height:8pt;border-radius:2pt;border:1pt solid #555;flex-shrink:0}";
+
+function kpClusterLabel(){ var h=document.querySelector('.topbar h1'); var t=h?h.textContent:'Keyplan'; return t.replace(/\s*[—–-]\s*keyplan.*/i,'').toUpperCase().trim(); }
+// Render one activity exactly like the UI would (paints #villa-layer, stats, sub colours)
+function kpRenderActivity(mode, activity){
+  currentMode=mode; currentActivity=activity; hiddenStatus=[]; hiddenSubs=[];
+  recomputeOpenFront();
+  if(mode==='clr') { subColorMap={}; }
+  else { activity ? buildSubLegend(wirCsvData.filter(function(r){return r.actKey===activity;})) : (subColorMap={}); }
+  var dm=buildDataMap(activity); renderVillas(dm,null); updateStats(dm);
+}
+function kpSheetHtml(mode, activity, tf){
+  var modeLabel=mode==='clr'?'CLEARANCE':'WIR';
+  var actLabel=activity||'— (all villas)';
+  var dt=new Date().toISOString().substring(0,10);
+  var g=function(id,d){ var e=document.getElementById(id); return e?e.textContent:(d||'—'); };
+  var apV=g('sv-ap'),urV=g('sv-ur'),rjV=g('sv-rj'),pct=g('sv-pct'),nsV=g('s-ns'),ofV=g('of-count','0');
+  var apLbl=mode==='clr'?'F.Approved':'Approved', urLbl=mode==='clr'?'Pending':'Under Rev.';
+  var cards='<div class="pp-card"><div class="pv pv-tt">'+TOTAL_VILLAS+'</div><div class="pl">Total</div></div>'
+    +'<div class="pp-card"><div class="pv pv-ap">'+apV+'</div><div class="pl">'+apLbl+'</div></div>'
+    +'<div class="pp-card"><div class="pv pv-ur">'+urV+'</div><div class="pl">'+urLbl+'</div></div>'
+    +'<div class="pp-card"><div class="pv pv-rj">'+rjV+'</div><div class="pl">Rejected</div></div>'
+    +'<div class="pp-card"><div class="pv pv-tt">'+nsV+'</div><div class="pl">Not Subm.</div></div>'
+    +'<div class="pp-card"><div class="pv pv-of">'+ofV+'</div><div class="pl">Open Front</div></div>'
+    +'<div class="pp-card"><div class="pv pv-pct">'+pct+'</div><div class="pl">Progress</div></div>';
+  var villaHtml=document.getElementById('villa-layer').innerHTML;
+  var legend='<div class="pl-item"><div class="pl-dot" style="background:#22c55e"></div><span>'+(mode==='clr'?'Fully Approved':'Approved')+'</span></div>'
+    +'<div class="pl-item"><div class="pl-dot" style="background:'+(mode==='clr'?'#f59e0b':'#818cf8')+'"></div><span>'+(mode==='clr'?'Pending':'Under Review')+'</span></div>'
+    +(mode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected</span></div>':'')
+    +'<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>';
+  if(openFrontVillas.size>0) legend+='<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>';
+  var subNames=Object.keys(subColorMap).sort();
+  if(subNames.length>0){ legend+='<span style="margin:0 4pt;color:#999;font-size:6pt">|</span>'; subNames.forEach(function(dn){ legend+='<div class="pl-item"><div class="pl-dot" style="background:'+subColorMap[dn]+';border-color:'+subColorMap[dn]+'"></div><span>['+subAbbr(dn)+'] '+dn+'</span></div>'; }); }
+  return '<div class="kp-sheet">'
+    +'<div class="pp-header"><div class="pp-left"><div class="pp-proj">Ba Al Ghaiylam — Royal Advance Engineering</div><div class="pp-cluster">'+kpClusterLabel()+' · KEYPLAN</div><div class="pp-meta"><b>'+modeLabel+'</b> · Activity: <b>'+actLabel+'</b> · Date: <b>'+dt+'</b></div></div><div class="pp-cards">'+cards+'</div></div>'
+    +'<div class="pp-map-wrap" style="height:'+tf.mapH+'px"><div class="pp-villa-layer" style="transform:translate('+tf.ox.toFixed(1)+'px,'+tf.oy.toFixed(1)+'px) scale('+tf.scale.toFixed(5)+')">'+villaHtml+'</div></div>'
+    +'<div class="pp-legend">'+legend+'</div></div>';
+}
+function kpEnsureModal(){
+  if(document.getElementById('kp-batch-modal')) return;
+  var d=document.createElement('div'); d.id='kp-batch-modal';
+  d.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;align-items:center;justify-content:center';
+  d.innerHTML='<div style="background:#11151c;color:#e6e9ef;border:1px solid #2a3340;border-radius:12px;padding:18px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;font-family:\'Inter\',sans-serif">'
+    +'<div style="font-weight:800;font-size:15px;margin-bottom:2px">Batch Print Keyplans</div>'
+    +'<div style="font-size:11px;color:#8a93a3;margin-bottom:10px">Tick the WIR and/or Clearance activities — one keyplan page is printed for each.</div>'
+    +'<div style="display:flex;gap:16px;overflow:auto;flex:1;min-height:0">'
+      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">WIR</b><a href="#" onclick="kpBatchAll(\'wir\',event)" style="font-size:10px;color:#4f8cff">all / none</a></div><div id="kp-batch-wir" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
+      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">Clearance</b><a href="#" onclick="kpBatchAll(\'clr\',event)" style="font-size:10px;color:#4f8cff">all / none</a></div><div id="kp-batch-clr" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
+    +'</div>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;align-items:center"><span id="kp-batch-count" style="margin-right:auto;font-size:11px;color:#8a93a3">0 selected</span>'
+      +'<button class="tbtn" onclick="closeBatchPrint()">Cancel</button>'
+      +'<button class="tbtn" style="background:#4f8cff;color:#fff;border-color:#4f8cff" onclick="batchPrint()">&#128424; Print selected</button></div>'
+    +'</div>';
+  document.body.appendChild(d);
+}
+function openBatchPrint(){
+  kpEnsureModal();
+  function fill(listId, selId, mode){
+    var opts=[].slice.call(document.getElementById(selId).options).filter(function(o){return o.value;});
+    document.getElementById(listId).innerHTML = opts.length ? opts.map(function(o){
+      return '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-mode="'+mode+'" value="'+o.value.replace(/"/g,'&quot;')+'" onchange="kpBatchCount()"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+o.textContent+'</span></label>';
+    }).join('') : '<span style="color:#5b6373;font-size:11px">none</span>';
+  }
+  fill('kp-batch-wir','f-act','wir'); fill('kp-batch-clr','f-clr-act','clr');
+  kpBatchCount();
+  document.getElementById('kp-batch-modal').style.display='flex';
+}
+function closeBatchPrint(){ var m=document.getElementById('kp-batch-modal'); if(m) m.style.display='none'; }
+function kpBatchCount(){ var n=document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked').length; var el=document.getElementById('kp-batch-count'); if(el) el.textContent=n+' selected'; }
+function kpBatchAll(mode, e){ e.preventDefault(); var boxes=document.querySelectorAll('#kp-batch-'+mode+' input[type=checkbox]'); var anyOff=[].slice.call(boxes).some(function(b){return !b.checked;}); boxes.forEach(function(b){b.checked=anyOff;}); kpBatchCount(); }
+function batchPrint(){
+  var sels=[].slice.call(document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked')).map(function(c){return {mode:c.dataset.mode, value:c.value};});
+  if(!sels.length){ return; }
+  closeBatchPrint();
+  var prev={mode:currentMode,act:currentActivity,cmp:compareMode,a2:currentActivity2,a2k:act2Kind,sub:showSubLabels};
+  compareMode=false; showSubLabels=true;
+  var paper=(document.getElementById('print-paper')||{value:'A4'}).value;
+  var MM=96/25.4, isA3=paper==='A3';
+  var usableW=((isA3?420:297)-24)*MM, usableH=((isA3?297:210)-24)*MM, mapH=usableH-90;
+  var vXs=Object.values(VILLAS).map(function(v){return v.x;}), vYs=Object.values(VILLAS).map(function(v){return v.y;});
+  var pad=30, vMinX=Math.min.apply(null,vXs)-pad, vMaxX=Math.max.apply(null,vXs)+pad, vMinY=Math.min.apply(null,vYs)-pad, vMaxY=Math.max.apply(null,vYs)+pad;
+  var vW=vMaxX-vMinX, vH=vMaxY-vMinY, scale=Math.min(usableW/vW, mapH/vH);
+  var tf={ mapH:mapH, scale:scale, ox:(usableW-vW*scale)/2-vMinX*scale, oy:(mapH-vH*scale)/2-vMinY*scale };
+  var sheets=sels.map(function(s){ kpRenderActivity(s.mode, s.value); return kpSheetHtml(s.mode, s.value, tf); });
+  // restore the on-screen view
+  showSubLabels=prev.sub; compareMode=prev.cmp; act2Kind=prev.a2k; currentActivity2=prev.a2;
+  kpRenderActivity(prev.mode, prev.act);
+  if(prev.cmp){ renderVillas(buildDataMap(prev.act), buildDataMapKind(prev.a2, prev.a2k)); }
+  var w=window.open('','_blank');
+  if(!w){ alert('Please allow pop-ups for this page to use Batch Print.'); return; }
+  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Keyplans</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700;800;900&display=swap" rel="stylesheet">'
+    +'<style>@page{size:'+(isA3?'A3':'A4')+' landscape;margin:8mm}'+KP_PRINT_CSS+'</style></head><body>'+sheets.join('')+'</body></html>');
+  w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
 }
 
 async function loadData(){
