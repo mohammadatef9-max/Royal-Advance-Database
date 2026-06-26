@@ -1082,38 +1082,42 @@ function doPrint(){
   });
 }
 
-// ───────── Batch print: many WIR/Clearance keyplans in one print job ─────────
-var KP_PRINT_CSS=""
-+"*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}"
-+"body{margin:0;background:#fff;font-family:'Inter',sans-serif}"
-+".kp-sheet{box-sizing:border-box;padding:4mm;display:flex;flex-direction:column;overflow:hidden;page-break-after:always;background:#fff}"
-+".kp-sheet:last-child{page-break-after:auto}"
-+".pp-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8pt;border-bottom:2pt solid #000;padding-bottom:4pt;margin-bottom:4pt}"
-+".pp-left .pp-proj{font-size:8pt;font-weight:800;color:#000}.pp-left .pp-cluster{font-size:16pt;font-weight:900;color:#000;line-height:1.1;margin-top:1pt}"
-+".pp-left .pp-meta{font-size:7pt;color:#333;margin-top:2pt}.pp-left .pp-meta b{color:#000;font-weight:700}"
-+".pp-cards{display:flex;gap:3pt;flex-wrap:nowrap;align-items:stretch}"
-+".pp-card{border:1pt solid #000;border-radius:3pt;padding:2pt 5pt;min-width:40pt;text-align:center;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}"
-+".pp-card .pv{font-size:13pt;font-weight:900;font-family:'JetBrains Mono',monospace;line-height:1.1}.pp-card .pl{font-size:5.5pt;text-transform:uppercase;letter-spacing:0.3px;color:#000;font-weight:700;margin-top:1pt}"
-+".pv-ap{color:#15803d}.pv-rj{color:#b91c1c}.pv-ur{color:#4338ca}.pv-pn{color:#b45309}.pv-of{color:#be185d}.pv-tt{color:#000}.pv-pct{color:#1e40af}"
-+".pp-map-wrap{position:relative;overflow:hidden;background:#fff}"
-+".pp-villa-layer{position:absolute;top:0;left:0;width:1800px;height:1271px;transform-origin:0 0}"
-+".villa{position:absolute;width:46px;height:32px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:800;box-sizing:border-box;overflow:hidden;border:2px solid transparent}"
-+".villa .vinner{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%}"
-+".villa .vnum{font-size:14px;font-weight:900;line-height:1;font-family:'JetBrains Mono',monospace;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000}"
-+".villa .vsub-stripe{position:absolute;top:0;left:0;right:0;height:4px;pointer-events:none}"
-+".s-AP{background:#22c55e;border-color:#15803d}.s-RJ{background:#f87171;border-color:#b91c1c}.s-UR{background:#818cf8;border-color:#4338ca}.s-PN{background:#f59e0b;border-color:#b45309}.s-FA{background:#22c55e;border-color:#15803d}.s-NA{background:#f87171;border-color:#b91c1c}.s-NS{background:#cbd5e1!important;border-color:#94a3b8!important}.s-NS .vnum{color:#1e293b;text-shadow:none}"
-+".villa.is-front{outline:2px solid #ec4899}.villa.filter-hidden{display:none!important}"
-+".pp-legend{display:flex;gap:3pt 8pt;padding-top:4pt;border-top:1pt solid #ccc;font-size:7pt;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:auto}"
-+".pp-legend .pl-item{display:flex;align-items:center;gap:3pt;color:#000}.pp-legend .pl-dot{width:8pt;height:8pt;border-radius:2pt;border:1pt solid #555;flex-shrink:0}";
+// ───────── Batch print: many WIR/Clearance keyplans in one print job (same window, no pop-up) ─────────
+function kpPrintStyle(isA3){ var P='#kp-batch-print '; return ''
++'@page{size:'+(isA3?'A3':'A4')+' landscape;margin:8mm}'
++P+'{display:none}'
++'@media print{html,body{margin:0!important;padding:0!important;background:#fff!important}body>*{display:none!important}'+P+'{display:block!important}}'
++P+'*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'
++P+'.kp-sheet{box-sizing:border-box;height:'+(isA3?281:194)+'mm;padding:4mm;display:flex;flex-direction:column;overflow:hidden;page-break-after:always;background:#fff;font-family:Inter,sans-serif;color:#000}'
++P+'.kp-sheet:last-child{page-break-after:auto}'
++P+'.pp-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8pt;border-bottom:2pt solid #000;padding-bottom:4pt;margin-bottom:4pt}'
++P+'.pp-left .pp-proj{font-size:8pt;font-weight:800;color:#000}'+P+'.pp-left .pp-cluster{font-size:16pt;font-weight:900;color:#000;line-height:1.1;margin-top:1pt}'
++P+'.pp-left .pp-meta{font-size:7pt;color:#333;margin-top:2pt}'+P+'.pp-left .pp-meta b{color:#000;font-weight:700}'
++P+'.pp-cards{display:flex;gap:3pt;flex-wrap:nowrap;align-items:stretch}'
++P+'.pp-card{border:1pt solid #000;border-radius:3pt;padding:2pt 5pt;min-width:40pt;text-align:center;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}'
++P+'.pp-card .pv{font-size:13pt;font-weight:900;font-family:monospace;line-height:1.1}'+P+'.pp-card .pl{font-size:5.5pt;text-transform:uppercase;letter-spacing:0.3px;color:#000;font-weight:700;margin-top:1pt}'
++P+'.pv-ap{color:#15803d}'+P+'.pv-rj{color:#b91c1c}'+P+'.pv-ur{color:#4338ca}'+P+'.pv-of{color:#be185d}'+P+'.pv-tt{color:#000}'+P+'.pv-pct{color:#1e40af}'
++P+'.pp-map-wrap{position:relative;overflow:hidden;contain:paint;background:#fff;flex:none;min-height:0}'
++P+'.pp-villa-layer{position:relative;width:1800px;height:1271px;transform-origin:0 0}'
++P+'.villa{position:absolute;width:46px;height:32px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:800;box-sizing:border-box;overflow:hidden;border:2px solid transparent}'
++P+'.villa .vinner{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%}'
++P+'.villa .vnum{font-size:14px;font-weight:900;line-height:1;font-family:monospace;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000}'
++P+'.villa .vsub-stripe{position:absolute;top:0;left:0;right:0;height:4px}'
++P+'.s-AP{background:#22c55e;border-color:#15803d}'+P+'.s-RJ{background:#f87171;border-color:#b91c1c}'+P+'.s-UR{background:#818cf8;border-color:#4338ca}'+P+'.s-PN{background:#f59e0b;border-color:#b45309}'+P+'.s-FA{background:#22c55e;border-color:#15803d}'+P+'.s-NA{background:#f87171;border-color:#b91c1c}'+P+'.s-NS{background:#cbd5e1!important;border-color:#94a3b8!important}'+P+'.s-NS .vnum{color:#1e293b;text-shadow:none}'
++P+'.villa.is-front{outline:2px solid #ec4899}'+P+'.villa.filter-hidden{display:none!important}'
++P+'.pp-legend{display:flex;gap:3pt 8pt;padding-top:4pt;border-top:1pt solid #ccc;font-size:7pt;flex-wrap:wrap;align-items:center;justify-content:center;margin-top:auto}'
++P+'.pp-legend .pl-item{display:flex;align-items:center;gap:3pt;color:#000}'+P+'.pp-legend .pl-dot{width:8pt;height:8pt;border-radius:2pt;border:1pt solid #555;flex-shrink:0}';
+}
 
 function kpClusterLabel(){ var h=document.querySelector('.topbar h1'); var t=h?h.textContent:'Keyplan'; return t.replace(/\s*[—–-]\s*keyplan.*/i,'').toUpperCase().trim(); }
 // Render one activity exactly like the UI would (paints #villa-layer, stats, sub colours)
 function kpRenderActivity(mode, activity){
   currentMode=mode; currentActivity=activity; hiddenStatus=[]; hiddenSubs=[];
-  recomputeOpenFront();
-  if(mode==='clr') { subColorMap={}; }
-  else { activity ? buildSubLegend(wirCsvData.filter(function(r){return r.actKey===activity;})) : (subColorMap={}); }
-  var dm=buildDataMap(activity); renderVillas(dm,null); updateStats(dm);
+  try{ recomputeOpenFront(); }catch(e){}
+  try{ if(mode==='clr') subColorMap={}; else if(activity) buildSubLegend(wirCsvData.filter(function(r){return r.actKey===activity;})); else subColorMap={}; }catch(e){}
+  var dm=buildDataMap(activity);
+  renderVillas(dm,null);              // the keyplan itself — must run
+  try{ updateStats(dm); }catch(e){}    // stat cards are best-effort (some clusters lack a few stat elements)
 }
 function kpSheetHtml(mode, activity, tf){
   var modeLabel=mode==='clr'?'CLEARANCE':'WIR';
@@ -1122,7 +1126,8 @@ function kpSheetHtml(mode, activity, tf){
   var g=function(id,d){ var e=document.getElementById(id); return e?e.textContent:(d||'—'); };
   var apV=g('sv-ap'),urV=g('sv-ur'),rjV=g('sv-rj'),pct=g('sv-pct'),nsV=g('s-ns'),ofV=g('of-count','0');
   var apLbl=mode==='clr'?'F.Approved':'Approved', urLbl=mode==='clr'?'Pending':'Under Rev.';
-  var cards='<div class="pp-card"><div class="pv pv-tt">'+TOTAL_VILLAS+'</div><div class="pl">Total</div></div>'
+  var TOT=(typeof TOTAL_VILLAS!=='undefined')?TOTAL_VILLAS:Object.keys(VILLAS).length;
+  var cards='<div class="pp-card"><div class="pv pv-tt">'+TOT+'</div><div class="pl">Total</div></div>'
     +'<div class="pp-card"><div class="pv pv-ap">'+apV+'</div><div class="pl">'+apLbl+'</div></div>'
     +'<div class="pp-card"><div class="pv pv-ur">'+urV+'</div><div class="pl">'+urLbl+'</div></div>'
     +'<div class="pp-card"><div class="pv pv-rj">'+rjV+'</div><div class="pl">Rejected</div></div>'
@@ -1146,16 +1151,16 @@ function kpEnsureModal(){
   if(document.getElementById('kp-batch-modal')) return;
   var d=document.createElement('div'); d.id='kp-batch-modal';
   d.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:99999;align-items:center;justify-content:center';
-  d.innerHTML='<div style="background:#11151c;color:#e6e9ef;border:1px solid #2a3340;border-radius:12px;padding:18px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;font-family:\'Inter\',sans-serif">'
+  d.innerHTML='<div style="background:var(--bg-elev);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:18px;width:600px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;font-family:\'Inter\',sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.45)">'
     +'<div style="font-weight:800;font-size:15px;margin-bottom:2px">Batch Print Keyplans</div>'
-    +'<div style="font-size:11px;color:#8a93a3;margin-bottom:10px">Tick the WIR and/or Clearance activities — one keyplan page is printed for each.</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Tick the WIR and/or Clearance activities — one keyplan page is printed for each.</div>'
     +'<div style="display:flex;gap:16px;overflow:auto;flex:1;min-height:0">'
-      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">WIR</b><a href="#" onclick="kpBatchAll(\'wir\',event)" style="font-size:10px;color:#4f8cff">all / none</a></div><div id="kp-batch-wir" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
-      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">Clearance</b><a href="#" onclick="kpBatchAll(\'clr\',event)" style="font-size:10px;color:#4f8cff">all / none</a></div><div id="kp-batch-clr" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
+      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">WIR</b><a href="#" onclick="kpBatchAll(\'wir\',event)" style="font-size:10px;color:var(--accent)">all / none</a></div><div id="kp-batch-wir" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
+      +'<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><b style="font-size:12px">Clearance</b><a href="#" onclick="kpBatchAll(\'clr\',event)" style="font-size:10px;color:var(--accent)">all / none</a></div><div id="kp-batch-clr" style="display:flex;flex-direction:column;gap:4px;font-size:12px"></div></div>'
     +'</div>'
-    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;align-items:center"><span id="kp-batch-count" style="margin-right:auto;font-size:11px;color:#8a93a3">0 selected</span>'
+    +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;align-items:center"><span id="kp-batch-count" style="margin-right:auto;font-size:11px;color:var(--muted)">0 selected</span>'
       +'<button class="tbtn" onclick="closeBatchPrint()">Cancel</button>'
-      +'<button class="tbtn" style="background:#4f8cff;color:#fff;border-color:#4f8cff" onclick="batchPrint()">🖨 Print selected</button></div>'
+      +'<button class="tbtn" style="background:var(--accent);color:#fff;border-color:var(--accent)" onclick="batchPrint()">🖨 Print selected</button></div>'
     +'</div>';
   document.body.appendChild(d);
 }
@@ -1175,6 +1180,7 @@ function closeBatchPrint(){ var m=document.getElementById('kp-batch-modal'); if(
 function kpBatchCount(){ var n=document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked').length; var el=document.getElementById('kp-batch-count'); if(el) el.textContent=n+' selected'; }
 function kpBatchAll(mode, e){ e.preventDefault(); var boxes=document.querySelectorAll('#kp-batch-'+mode+' input[type=checkbox]'); var anyOff=[].slice.call(boxes).some(function(b){return !b.checked;}); boxes.forEach(function(b){b.checked=anyOff;}); kpBatchCount(); }
 function batchPrint(){
+ try{
   var sels=[].slice.call(document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked')).map(function(c){return {mode:c.dataset.mode, value:c.value};});
   if(!sels.length){ return; }
   closeBatchPrint();
@@ -1187,18 +1193,22 @@ function batchPrint(){
   var pad=30, vMinX=Math.min.apply(null,vXs)-pad, vMaxX=Math.max.apply(null,vXs)+pad, vMinY=Math.min.apply(null,vYs)-pad, vMaxY=Math.max.apply(null,vYs)+pad;
   var vW=vMaxX-vMinX, vH=vMaxY-vMinY, scale=Math.min(usableW/vW, mapH/vH);
   var tf={ mapH:mapH, scale:scale, ox:(usableW-vW*scale)/2-vMinX*scale, oy:(mapH-vH*scale)/2-vMinY*scale };
-  var sheets=sels.map(function(s){ kpRenderActivity(s.mode, s.value); return kpSheetHtml(s.mode, s.value, tf); });
+  var sheets=[], firstErr=null;
+  sels.forEach(function(s){ try{ kpRenderActivity(s.mode, s.value); sheets.push(kpSheetHtml(s.mode, s.value, tf)); }catch(err){ if(!firstErr)firstErr=err; console.error('keyplan sheet failed', s, err); } });
   // restore the on-screen view
   showSubLabels=prev.sub; compareMode=prev.cmp; act2Kind=prev.a2k; currentActivity2=prev.a2;
-  kpRenderActivity(prev.mode, prev.act);
-  if(prev.cmp){ renderVillas(buildDataMap(prev.act), buildDataMapKind(prev.a2, prev.a2k)); }
-  var w=window.open('','_blank');
-  if(!w){ alert('Please allow pop-ups for this page to use Batch Print.'); return; }
-  w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Keyplans</title>'
-    +'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700;800;900&display=swap" rel="stylesheet">'
-    +'<style>@page{size:'+(isA3?'A3':'A4')+' landscape;margin:8mm}'+KP_PRINT_CSS+'</style></head><body>'+sheets.join('')+'</body></html>');
-  w.document.close();
-  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 600);
+  try{ kpRenderActivity(prev.mode, prev.act); if(prev.cmp){ renderVillas(buildDataMap(prev.act), buildDataMapKind(prev.a2, prev.a2k)); } }catch(e){}
+  if(!sheets.length){ alert('Could not prepare any keyplan.\n\n'+(firstErr&&(firstErr.message||firstErr)||'unknown error')); return; }
+  // Render into THIS window (no pop-up). Scoped #kp-batch-print container shown only in print.
+  var oldP=document.getElementById('kp-batch-print'); if(oldP) oldP.remove();
+  var oldS=document.getElementById('kp-batch-style'); if(oldS) oldS.remove();
+  var st=document.createElement('style'); st.id='kp-batch-style'; st.textContent=kpPrintStyle(isA3); document.head.appendChild(st);
+  var cont=document.createElement('div'); cont.id='kp-batch-print'; cont.innerHTML=sheets.join(''); document.body.appendChild(cont);
+  setTimeout(function(){
+    try{ window.print(); }catch(e){ alert('Print failed: '+(e&&e.message||e)); }
+    setTimeout(function(){ var c=document.getElementById('kp-batch-print'); if(c) c.remove(); var s=document.getElementById('kp-batch-style'); if(s) s.remove(); }, 1500);
+  }, 200);
+ }catch(e){ alert('Batch print failed: '+(e&&e.message||e)); }
 }
 
 async function loadData(){

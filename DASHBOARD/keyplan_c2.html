@@ -1293,14 +1293,11 @@ var BASE_W=1320, BASE_H=1207, BASE_LAYER_H=1207;
 var MAP_SCALE=1;
 function editSetMapScale(s){
   s=Math.max(0.5,Math.min(4,Math.round((parseFloat(s)||1)*100)/100));
-  var ratio=s/MAP_SCALE;
-  if(Math.abs(ratio-1)<1e-9){ return; }
-  // No pushHistory here: slider fires per-tick; scaling is reversible by moving
-  // the slider back, and we don't want to flood undo / inflate the change count.
-  Object.keys(VILLAS).forEach(function(k){
-    VILLAS[k].x=Math.round(VILLAS[k].x*ratio*10)/10;
-    VILLAS[k].y=Math.round(VILLAS[k].y*ratio*10)/10;
-  });
+  if(Math.abs(s-MAP_SCALE)<1e-9){ return; }
+  // Resize the BACKGROUND IMAGE (and the coordinate space) only — villa positions are NOT
+  // scaled and we do NOT re-fit the view, so the plan visibly grows/shrinks while the villa
+  // boxes keep their place & on-screen size. Use it to size the plan so its drawn villas
+  // match the fixed boxes; the chosen size is exported as image_size for baking.
   MAP_SCALE=s;
   IMG_W=Math.round(BASE_W*s); IMG_H=Math.round(BASE_H*s);
   var cw=IMG_W+'px';
@@ -1311,7 +1308,6 @@ function editSetMapScale(s){
   var lbl=document.getElementById('ep-mapscale-val'); if(lbl)lbl.textContent=s.toFixed(2)+'×';
   if(EDIT.showGrid)drawGrid();
   renderVillas(buildDataMap()); reapplySelection();
-  zoomFit();
 }
 function bumpMapScale(d){ editSetMapScale(MAP_SCALE+d); }
 function toggleEditMode(){
