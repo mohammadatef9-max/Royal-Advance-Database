@@ -127,6 +127,8 @@ body.in-shell{height:100vh}
 .ps-table{border-collapse:collapse;width:max-content;min-width:100%}
 .ps-table th,.ps-table td{border:1px solid var(--bdr);padding:0;white-space:nowrap;font-size:13px}
 .ps-table th{background:var(--bg3);color:var(--tx2);font-weight:700;text-align:center;padding:7px 12px;position:sticky;top:0;z-index:10}
+.ps-table tr.ps-total-row td{background:var(--bg3);color:var(--tx);border-top:2px solid var(--accent,#4f8cff)}
+.ps-table tr.ps-total-row td.sticky{background:var(--bg3)}
 .ps-table th.group-hdr{background:var(--bg4);color:var(--tx);font-size:10px;letter-spacing:.05em;text-transform:uppercase}
 .ps-table td{padding:4px 8px;text-align:center;color:var(--tx)}
 .ps-table td.left{text-align:left}
@@ -325,10 +327,10 @@ textarea{resize:vertical;min-height:60px}
   #print-cert-header{display:block!important;margin-bottom:10mm}
   #print-cert-header-2{display:block!important;margin-bottom:8mm}
 
-  /* show both tab panels; first ends on its own page */
+  /* show both tab panels; summary prints first (page 1), progress sheet after */
   .qs-tab-content{display:block!important}
-  #tc-progress{break-after:page}
-  #tc-summary{break-before:page}
+  #tc-summary{break-after:page}
+  #tc-progress{break-before:page}
 
   /* ── PROGRESS SHEET ── */
   .ps-wrap{overflow:visible!important}
@@ -348,6 +350,7 @@ textarea{resize:vertical;min-height:60px}
   .act-cell.override-on{background:#555!important;color:#fff!important}
   .act-cell.override-off{background:#fff!important;color:#bbb!important;border:1px dashed #aaa}
   .act-cell.prev-billed{background:#ddd!important;color:#555!important}
+  .ps-table tr.ps-total-row td{background:#e8e8e8!important;color:#000!important;font-weight:800!important;border-top:2.5px solid #000!important}
   .ps-locked-banner{display:none!important}
 
   /* ── PAYMENT SUMMARY ── */
@@ -385,9 +388,11 @@ textarea{resize:vertical;min-height:60px}
   .sig-company{color:#555!important}
   .sig-block-title span{color:#000!important}
 
-  /* print-ps-only: suppress the summary tab */
+  /* print-ps-only: progress sheet only — hide the summary and the duplicate progress header
+     (the main #print-cert-header already heads the page), and don't force a leading page break */
   body.print-ps-only #tc-summary{display:none!important}
-  body.print-ps-only #tc-progress{break-after:auto}
+  body.print-ps-only #print-cert-header-2{display:none!important}
+  body.print-ps-only #tc-progress{break-before:auto}
 }
 
 /* ── DASHBOARD ── */
@@ -519,8 +524,19 @@ textarea{resize:vertical;min-height:60px}
         <div class="qs-tab" id="tab-summary" onclick="switchTab('summary')">Payment Summary</div>
       </div>
 
-      <!-- PROGRESS SHEET TAB -->
+      <!-- PAYMENT SUMMARY TAB — prints first (page 1). Uses #print-cert-header at top of flow. -->
+      <div class="qs-tab-content" id="tc-summary">
+        <div class="psum-wrap">
+          <div class="psum-inner" id="psum-inner">
+            <div class="loading-row"><span class="spin"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROGRESS SHEET TAB — prints after the summary (own page). -->
       <div class="qs-tab-content active" id="tc-progress">
+        <!-- Print-only certificate header that heads the progress-sheet page -->
+        <div id="print-cert-header-2" style="display:none;font-family:'Inter',Arial,sans-serif;padding:0 0 6px"></div>
         <div class="ps-toolbar">
           <div id="ps-status-strip"></div>
           <div style="display:flex;align-items:center;gap:6px;margin-left:10px">
@@ -535,17 +551,6 @@ textarea{resize:vertical;min-height:60px}
         <div id="ps-section-bar" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--bdr);background:var(--bg2)"></div>
         <div class="ps-wrap" id="ps-wrap">
           <div class="loading-row"><span class="spin"></span></div>
-        </div>
-      </div>
-
-      <!-- PAYMENT SUMMARY TAB -->
-      <div class="qs-tab-content" id="tc-summary">
-        <!-- Print-only header repeated on summary page -->
-        <div id="print-cert-header-2" style="display:none;font-family:'Inter',Arial,sans-serif;padding:0 0 6px"></div>
-        <div class="psum-wrap">
-          <div class="psum-inner" id="psum-inner">
-            <div class="loading-row"><span class="spin"></span></div>
-          </div>
         </div>
       </div>
     </div>
@@ -638,9 +643,16 @@ textarea{resize:vertical;min-height:60px}
         </div>
       </div>
 
-      <!-- Signatories (global defaults) -->
+      <!-- Signatories (templates) -->
       <div id="cfg-panel-sigs" style="display:none">
-        <div class="form-hint" style="margin-bottom:8px">These are the global default signatories. Each PC gets its own copy which can be independently edited.</div>
+        <div class="form-hint" style="margin-bottom:8px">Signatory <b>templates</b> let you keep different signature blocks — e.g. <b>Mechanical</b> vs <b>Electrical</b>. New PCs inherit the <b>Default</b> template; on any PC you can switch via <b>Edit Signatories → Load a template</b>. Click <b>Save Changes</b> to persist all templates.</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+          <label style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Template</label>
+          <select id="cfg-sigs-tpl" onchange="switchSigTpl(this.value)" style="min-width:200px;padding:5px 8px"></select>
+          <button class="btn btn-ghost btn-sm" onclick="newSigTpl()">+ New</button>
+          <button class="btn btn-ghost btn-sm" onclick="renameSigTpl()">✎ Rename</button>
+          <button class="btn btn-ghost btn-sm" onclick="deleteSigTpl()">🗑 Delete</button>
+        </div>
         <div class="sig-edit-list" id="cfg-sigs-list"></div>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addGlobalSig()">+ Add Signatory</button>
         <div class="form-msg" id="cfg-sigs-msg"></div>
@@ -909,7 +921,11 @@ textarea{resize:vertical;min-height:60px}
   <div class="modal modal-lg">
     <div class="modal-title">Edit Signatories — <span id="pcsig-pc-label">—</span><button class="modal-close" onclick="closeModal('modal-pc-sigs')">✕</button></div>
     <div class="modal-body">
-      <div class="form-hint" style="margin-bottom:8px">Edits here only affect this PC's printed signature block.</div>
+      <div class="form-hint" style="margin-bottom:8px">Edits here only affect this PC's printed signature block. Use <b>Load a template</b> to pull in a saved set (e.g. Mechanical / Electrical).</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <label style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Load a template</label>
+        <select id="pcsig-tpl" onchange="applyPcSigTpl(this.value)" style="min-width:220px;padding:5px 8px"></select>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 80px 28px;gap:6px;padding:0 0 4px;font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase">
         <span>Position / Role</span><span>Full Name</span><span>Company</span><span></span>
       </div>

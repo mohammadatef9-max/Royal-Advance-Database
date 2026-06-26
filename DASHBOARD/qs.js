@@ -24,7 +24,10 @@ let pcOverrides = {};  // key: villa_id+':'+activity_code
 let billedRecords = {}; // key: villa_id+':'+activity_code → pc_id
 let wirData = {};      // key: villa_id+':'+activity_code → {approved, response_date}
 let pcSigsList = [];   // for current PC
-let globalSigs = [];
+let globalSigs = [];   // rows of the template currently being edited in Config (alias of sigTplData[curSigTpl])
+let sigTplData = {};   // { templateName: [ {position_title, full_name, company} ] } — all templates, edited in Config
+let curSigTpl = 'Default'; // template currently shown in the Config Signatories tab
+let pcSigTplData = {}; // { templateName: [rows] } — loaded when the PC signatory editor opens, for the Load-template picker
 let allVillasCache = [];
 let subcontractorsList = [];
 let allScopePCs = [];       // all PCs for currently selected scope (for running totals)
@@ -612,21 +615,29 @@ async function loadScopeConfig() {
   updateClusterFilter();
 }
 
+// Build the raw_subcontractor PostgREST clause for a scope's subcontractor, merging the
+// canonical name with all of its aliases (the raw_subcontractor strings that map to it).
+// Returns a bare clause like `raw_subcontractor=in.("A","B")` (no leading ? or &), or ''
+// when there is no sub name. This is the single source of truth for sub-name matching —
+// villa detection AND activity-completion both use it so a scope only ever counts WIRs
+// raised by its own subcontractor.
+async function subRawClause(subName) {
+  if (!subName) return '';
+  // Fetch canonical_name itself too — it may be stored in a different case than subName,
+  // and the raw WIR data uses the exact canonical_name casing (e.g. "HO RS TECHNICAL" ≠ "HO RS Technical").
+  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias,canonical_name`);
+  if (aliases.length) {
+    const names = [...new Set([subName, ...aliases.map(a => a.alias), ...aliases.map(a => a.canonical_name).filter(Boolean)])];
+    return `raw_subcontractor=in.(${names.map(n => `"${n}"`).join(',')})`;
+  }
+  return `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
+}
+
 // ── Auto-detect villas from WIR data for this subcontractor ──
 async function _detectWirVillas() {
   const subName = selectedScope.subcontractor_name;
   if (!subName) return [];
-  // Collect all aliases (the raw_subcontractor strings) that map to this canonical name.
-  // Also fetch canonical_name itself — it may be stored in a different case than subName,
-  // and the raw WIR data uses the exact canonical_name casing (e.g. "HO RS TECHNICAL" ≠ "HO RS Technical").
-  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias,canonical_name`);
-  let nameFilter;
-  if (aliases.length) {
-    const names = [...new Set([subName, ...aliases.map(a => a.alias), ...aliases.map(a => a.canonical_name).filter(Boolean)])];
-    nameFilter = `raw_subcontractor=in.(${names.map(n => `"${n}"`).join(',')})`;
-  } else {
-    nameFilter = `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
-  }
+  const nameFilter = await subRawClause(subName);
   // Activities MUST be configured first — without them we can't scope the detection
   // (omitting the filter would return every villa the sub has touched, which is wrong)
   // For split activities use base_code (the original WIR code, e.g. "3190") not the synthetic
@@ -786,8 +797,13 @@ async function loadPCData() {
     baseToSplits[base].push(a.activity_code);
   });
 
+  // Only count WIRs raised by THIS scope's subcontractor (canonical + merged aliases), so a
+  // shared activity code on a villa can't cross-credit another sub's approved WIR to this scope.
+  const subClause = await subRawClause(selectedScope.subcontractor_name);
+  const subQ = subClause ? '&' + subClause : '';
+
   const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
-    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
+    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
     fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason`),
     fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id`),
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
@@ -937,10 +953,7 @@ function ctxMatchVillaType(rawType, villaTypes) {
 async function ctxDetectVillas(scope, villaTypes, activities) {
   const subName = scope.subcontractor_name;
   if (!subName) return [];
-  const aliases = await fa(`subcontractor_aliases?canonical_name=ilike.${encodeURIComponent(subName)}&select=alias,canonical_name`);
-  let nameFilter = aliases.length
-    ? `raw_subcontractor=in.(${[...new Set([subName, ...aliases.map(a=>a.alias), ...aliases.map(a=>a.canonical_name).filter(Boolean)])].map(n=>`"${n}"`).join(',')})`
-    : `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
+  const nameFilter = await subRawClause(subName);
   const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
   if (!actCodes.length) return [];
   const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
@@ -963,8 +976,12 @@ async function buildScopeCtx(scope) {
   const actCodes = activities.map(a => a.activity_code);
   if (villaIds.length && actCodes.length) {
     const vStr = villaIds.join(','), aStr = actCodes.map(c => `"${c}"`).join(',');
+    // Scope WIRs to this scope's own subcontractor (canonical + merged aliases) so a shared
+    // activity code can't cross-credit another sub's approved WIR.
+    const subClause = await subRawClause(scope.subcontractor_name);
+    const subQ = subClause ? '&' + subClause : '';
     const [wirRows, ovRows, bRows] = await Promise.all([
-      fa(`v_latest_wir_status?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})&select=villa_id,raw_activity_code,normalised_status,response_date`),
+      fa(`v_latest_wir_status?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
       fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete`),
       fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id`),
     ]);
@@ -1062,6 +1079,7 @@ function renderProgressSheet() {
 
   // Build rows
   let rows = '';
+  let totRate = 0, totPrevAed = 0, totCurAed = 0, totTodAed = 0;
   if (!visibleVillas.length) {
     rows = `<tr><td colspan="100" style="text-align:center;color:var(--tx3);padding:24px;font-size:12px">No villas in Cluster ${psClusterFilter}.</td></tr>`;
   }
@@ -1071,6 +1089,7 @@ function renderProgressSheet() {
     const prevAed = prev * rate;
     const curAed = current * rate;
     const todAed = toDate * rate;
+    totRate += rate; totPrevAed += prevAed; totCurAed += curAed; totTodAed += todAed;
 
     let actCells = '';
     scopeActivityGroups.forEach(grp => {
@@ -1103,6 +1122,18 @@ function renderProgressSheet() {
       <td class="aed-cell aed-date">${fmtAED(todAed)}</td>
     </tr>`;
   });
+
+  // Totals row — sums Rate / Prev / Current / To Date across all visible villas
+  if (visibleVillas.length) {
+    const labelSpan = 4 + scopeActivities.length; // Sr+Villa+Type+Cluster + one per activity
+    rows += `<tr class="ps-total-row">
+      <td class="left" colspan="${labelSpan}" style="text-align:right;font-weight:800;font-size:12px;padding:7px 12px">TOTAL (${visibleVillas.length} villa${visibleVillas.length===1?'':'s'})</td>
+      <td class="rate-cell" style="font-weight:800">${fmtAED(totRate)}</td>
+      <td class="aed-cell aed-prev" style="font-weight:800">${fmtAED(totPrevAed)}</td>
+      <td class="aed-cell aed-cur" style="font-weight:800">${fmtAED(totCurAed)}</td>
+      <td class="aed-cell aed-date" style="font-weight:800">${fmtAED(totTodAed)}</td>
+    </tr>`;
+  }
 
   document.getElementById('ps-wrap').innerHTML = `
     <table class="ps-table">
@@ -1167,7 +1198,7 @@ function _buildPrintHeader() {
         <td ${tdV} colspan="7">${escH(scopeTitleCombined)}</td>
       </tr>
     </table>`;
-  // Mirror to the summary page header too
+  // Mirror onto the progress-sheet page header too (summary prints first, progress after)
   const ph2 = document.getElementById('print-cert-header-2');
   if (ph2) ph2.innerHTML = ph.innerHTML;
 }
@@ -2414,10 +2445,11 @@ async function submitNewPC() {
   const scopeRows = ids.map((sid,i) => ({ pc_id: res.id, scope_id: sid, sort_order: i }));
   if (scopeRows.length) await fp('qs_pc_scopes', scopeRows);
 
-  // Copy global signatories to this PC
-  const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+  // Copy the Default signatory template to this PC (a different template can be loaded later
+  // from Edit Signatories). Re-number sort_order locally so it's gap-free.
+  const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&template_name=eq.Default&order=sort_order.asc');
   if (globalSigsCopy.length) {
-    const sigCopies = globalSigsCopy.map(s => ({ pc_id: res.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: s.sort_order }));
+    const sigCopies = globalSigsCopy.map((s,i) => ({ pc_id: res.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: i }));
     await fp('qs_pc_signatories', sigCopies);
   }
 
@@ -2786,12 +2818,12 @@ async function submitHistPC() {
     // Link the scope (historical PCs are single-scope)
     await fp('qs_pc_scopes', [{ pc_id: res.id, scope_id: selectedScope.id, sort_order: 0 }]);
 
-    // Copy global signatories
-    const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+    // Copy the Default signatory template (a different template can be loaded from Edit Signatories)
+    const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&template_name=eq.Default&order=sort_order.asc');
     if (globalSigsCopy.length) {
-      await fp('qs_pc_signatories', globalSigsCopy.map(s => ({
+      await fp('qs_pc_signatories', globalSigsCopy.map((s,i) => ({
         pc_id: res.id, position_title: s.position_title,
-        full_name: s.full_name, company: s.company, sort_order: s.sort_order
+        full_name: s.full_name, company: s.company, sort_order: i
       })));
     }
 
@@ -3058,10 +3090,24 @@ function renderCfgVillas() {
 function filterVillaAssign() { renderCfgVillas(); }
 
 async function loadGlobalSigs() {
-  globalSigs = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
+  const all = await fa('qs_signatories?is_active=eq.true&order=template_name.asc,sort_order.asc&select=position_title,full_name,company,sort_order,template_name');
+  sigTplData = {};
+  all.forEach(s => {
+    const t = s.template_name || 'Default';
+    (sigTplData[t] = sigTplData[t] || []).push({ position_title:s.position_title, full_name:s.full_name, company:s.company });
+  });
+  if (!sigTplData['Default']) sigTplData['Default'] = [];
+  if (!sigTplData[curSigTpl]) curSigTpl = 'Default';
+  globalSigs = sigTplData[curSigTpl];
 }
 
 function renderCfgSigs() {
+  // Template picker
+  const sel = document.getElementById('cfg-sigs-tpl');
+  if (sel) {
+    const names = Object.keys(sigTplData).sort((a,b) => a==='Default'?-1 : b==='Default'?1 : a.localeCompare(b));
+    sel.innerHTML = names.map(n => `<option value="${escH(n)}" ${n===curSigTpl?'selected':''}>${escH(n)}${n==='Default'?' (new PCs inherit this)':''}</option>`).join('');
+  }
   const list = document.getElementById('cfg-sigs-list');
   list.innerHTML = globalSigs.map((s,i) => `
     <div class="sig-edit-row">
@@ -3069,12 +3115,43 @@ function renderCfgSigs() {
       <input type="text" value="${escH(s.full_name)}" placeholder="Full Name" onchange="globalSigs[${i}].full_name=this.value">
       <input type="text" value="${escH(s.company||'RA')}" placeholder="Company" onchange="globalSigs[${i}].company=this.value">
       <button class="icon-btn del" onclick="globalSigs.splice(${i},1);renderCfgSigs()">🗑</button>
-    </div>`).join('') || '<div style="color:var(--tx3);font-size:12px">No signatories yet.</div>';
+    </div>`).join('') || '<div style="color:var(--tx3);font-size:12px">No signatories in this template yet.</div>';
 }
 
 function addGlobalSig() {
-  globalSigs.push({ position_title:'', full_name:'', company:'RA', sort_order: globalSigs.length, is_active:true });
+  globalSigs.push({ position_title:'', full_name:'', company:'RA' });
   renderCfgSigs();
+}
+
+// ── Signatory template management (Config → Signatories) ──
+// Edits are held in memory across templates and persisted together when you click Save Changes.
+function switchSigTpl(name) {
+  curSigTpl = name || 'Default';
+  globalSigs = sigTplData[curSigTpl] || (sigTplData[curSigTpl] = []);
+  renderCfgSigs();
+}
+function newSigTpl() {
+  const name = (prompt('New template name (e.g. Mechanical, Electrical):', '') || '').trim();
+  if (!name) return;
+  if (sigTplData[name]) { alert(`A template named "${name}" already exists.`); switchSigTpl(name); return; }
+  // Seed a new template from the current one so you only tweak the differences
+  sigTplData[name] = (globalSigs || []).map(s => ({ position_title:s.position_title, full_name:s.full_name, company:s.company }));
+  switchSigTpl(name);
+}
+function renameSigTpl() {
+  if (curSigTpl === 'Default') { alert('The Default template can’t be renamed — new PCs inherit it.'); return; }
+  const name = (prompt('Rename template:', curSigTpl) || '').trim();
+  if (!name || name === curSigTpl) return;
+  if (sigTplData[name]) { alert(`A template named "${name}" already exists.`); return; }
+  sigTplData[name] = sigTplData[curSigTpl];
+  delete sigTplData[curSigTpl];
+  switchSigTpl(name);
+}
+function deleteSigTpl() {
+  if (curSigTpl === 'Default') { alert('The Default template can’t be deleted.'); return; }
+  if (!confirm(`Delete signatory template "${curSigTpl}"? This applies after you click Save Changes.`)) return;
+  delete sigTplData[curSigTpl];
+  switchSigTpl('Default');
 }
 
 async function saveConfigScope() {
@@ -3150,14 +3227,20 @@ async function saveConfigScope() {
       renderDetectedVillas();
     }
     else if (cfgTab === 'sigs') {
-      // Upsert global sigs
+      // Persist ALL templates in one pass (replace the whole table). sigTplData holds every
+      // template in memory, so a full clear-and-reinsert keeps them consistent.
       await fdel('qs_signatories?sort_order=gte.0');
-      if (globalSigs.length) {
-        const rows = globalSigs.map((s,i) => ({ position_title:s.position_title, full_name:s.full_name, company:s.company||'RA', sort_order:i, is_active:true }));
-        await fp('qs_signatories', rows);
-      }
-      audit('qs_signatories', 'UPDATE_GLOBAL_SIGS', sid, { scope: selectedScope.subcontractor_name, sigs_count: globalSigs.length });
-      showMsg(msg3,'ok','Global signatories saved.');
+      const rows = [];
+      Object.keys(sigTplData).forEach(tpl => {
+        let ord = 0;
+        sigTplData[tpl].forEach(s => {
+          if (!(s.position_title||'').trim() && !(s.full_name||'').trim()) return; // skip blank rows
+          rows.push({ position_title:s.position_title||'', full_name:s.full_name||'', company:s.company||'RA', sort_order:ord++, is_active:true, template_name:tpl });
+        });
+      });
+      if (rows.length) await fp('qs_signatories', rows);
+      audit('qs_signatories', 'UPDATE_GLOBAL_SIGS', sid, { templates: Object.keys(sigTplData).length, sigs_count: rows.length });
+      showMsg(msg3,'ok',`Signatory templates saved (${Object.keys(sigTplData).length}).`);
       await loadGlobalSigs(); renderCfgSigs();
     }
     else if (cfgTab === 'contract') {
@@ -3386,11 +3469,36 @@ async function deleteVO(id) {
 // ══════════════════════════════════════════════
 // PC SIGNATORIES
 // ══════════════════════════════════════════════
-function openPcSigs() {
+async function openPcSigs() {
   document.getElementById('pcsig-pc-label').textContent = `PC #${selectedPC.pc_number} · ${selectedPC.period_label}`;
+  await loadPcSigTemplates();
+  const sel = document.getElementById('pcsig-tpl');
+  if (sel) {
+    const names = Object.keys(pcSigTplData).sort((a,b) => a==='Default'?-1 : b==='Default'?1 : a.localeCompare(b));
+    sel.innerHTML = '<option value="">— Load a template… —</option>' + names.map(n => `<option value="${escH(n)}">${escH(n)} (${pcSigTplData[n].length})</option>`).join('');
+    sel.value = '';
+  }
   renderPcSigsList();
   document.getElementById('pcsig-msg').className = 'form-msg';
   document.getElementById('modal-pc-sigs').style.display = 'flex';
+}
+
+// Load all signatory templates (for the PC editor's Load-template picker)
+async function loadPcSigTemplates() {
+  const all = await fa('qs_signatories?is_active=eq.true&order=template_name.asc,sort_order.asc&select=position_title,full_name,company,sort_order,template_name');
+  pcSigTplData = {};
+  all.forEach(s => { const t = s.template_name || 'Default'; (pcSigTplData[t] = pcSigTplData[t] || []).push(s); });
+  if (!pcSigTplData['Default']) pcSigTplData['Default'] = [];
+}
+
+// Replace this PC's signatories with the chosen template (does not save until "Save Signatories")
+function applyPcSigTpl(name) {
+  if (!name) return;
+  const rows = pcSigTplData[name] || [];
+  pcSigsList = rows.map((s,i) => ({ pc_id: selectedPC.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: i }));
+  renderPcSigsList();
+  const sel = document.getElementById('pcsig-tpl'); if (sel) sel.value = '';
+  showMsg(document.getElementById('pcsig-msg'), 'ok', `Loaded "${name}" — click Save Signatories to apply.`);
 }
 
 function renderPcSigsList() {
@@ -3410,8 +3518,8 @@ function addPcSig() {
 }
 
 async function resetPcSigs() {
-  const defaults = await fa('qs_signatories?is_active=eq.true&order=sort_order.asc');
-  pcSigsList = defaults.map(s => ({ pc_id: selectedPC.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: s.sort_order }));
+  const defaults = await fa('qs_signatories?is_active=eq.true&template_name=eq.Default&order=sort_order.asc');
+  pcSigsList = defaults.map((s,i) => ({ pc_id: selectedPC.id, position_title: s.position_title, full_name: s.full_name, company: s.company, sort_order: i }));
   renderPcSigsList();
 }
 
