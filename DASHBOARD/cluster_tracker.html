@@ -682,6 +682,7 @@ body.in-shell header { display: none !important; }
     <div class="mr"><label>Villa</label><input type="text" id="m-v" readonly></div>
     <div class="mr"><label>Activity</label><input type="text" id="m-a" readonly></div>
     <div class="mr"><label>WIR Status (DC)</label><input type="text" id="m-w" readonly style="color:#64748b"></div>
+    <div class="mr"><label>WIR Revision / Dates</label><input type="text" id="m-wm" readonly style="color:#64748b" title="Latest WIR revision, submitted &amp; response dates"></div>
     <div class="mr"><label>Site Progress</label>
       <select id="m-s"><option value="not_started">Not Started</option><option value="in_progress">In Progress</option><option value="completed">Completed</option></select>
     </div>
@@ -821,7 +822,7 @@ const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water sup
 
 let disc='mech';
 let COLS=COLS_MECH.map(c=>({...c}));
-let villas=[],wirD={},wirSubD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
+let villas=[],wirD={},wirSubD={},wirMetaD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
 let ncrActByVilla=new Map(); // villa_id -> Set of activity_codes with open NCR/SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
 let rejOnly=false;
@@ -845,6 +846,14 @@ const resolveWirCode=code=>{let c=code,seen=new Set(),hops=0;while(wirCodeAliase
 const canonSub=s=>{if(!s)return null;const t=String(s).trim();return subAliases[t]||t;};
 
 const gW=(vid,code)=>wirD[vid]?.[code]||'not_submitted';
+// WIR dates/revision for the winning code among the given codes (latest WIR per villa+activity)
+const gWMeta=(vid,codes)=>{
+  const cs=Array.isArray(codes)?codes:[codes];
+  const best=bestWir(cs.map(c=>gW(vid,c)));
+  for(const c of cs){ if(gW(vid,c)===best && wirMetaD[vid]?.[c]) return wirMetaD[vid][c]; }
+  for(const c of cs){ if(wirMetaD[vid]?.[c]) return wirMetaD[vid][c]; }
+  return null;
+};
 const gC=(vid,code)=>clrD[vid]?.[code]||'not_submitted';
 const gP=(vid,code)=>progD[vid]?.[code]?.status||'not_started';
 // Returns {name, source:'wir'|'manual'} or null
@@ -960,7 +969,7 @@ async function init(){
     // ── Batch 2: aliases + status data in parallel ──
     lm('Loading status data…');
     const [wirRaw, clr, prog, alRows, wcaRows] = await Promise.all([
-      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor&match_status=eq.matched'),
+      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'),
       fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
       fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
       fa('subcontractor_aliases?select=alias,canonical_name'),
@@ -976,12 +985,15 @@ async function init(){
     wirRaw.forEach(r=>{
       if(!wirD[r.villa_id])wirD[r.villa_id]={};
       if(!wirSubD[r.villa_id])wirSubD[r.villa_id]={};
+      if(!wirMetaD[r.villa_id])wirMetaD[r.villa_id]={};
       const code=r.raw_activity_code;
       const st=wirD[r.villa_id];
+      const meta={revision:r.revision,revision_no:r.revision_no,submitted_date:r.submitted_date,response_date:r.response_date};
       const ord=['approved','under_review','rejected','not_submitted'];
-      // Store raw code status
+      // Store raw code status (+ dates/revision for the winning row)
       const existing=st[code]||'not_submitted',incoming=r.normalised_status||'not_submitted';
-      if(ord.indexOf(incoming)<ord.indexOf(existing))st[code]=incoming;
+      if(ord.indexOf(incoming)<ord.indexOf(existing)){st[code]=incoming;wirMetaD[r.villa_id][code]=meta;}
+      else if(!wirMetaD[r.villa_id][code])wirMetaD[r.villa_id][code]=meta;
       if(r.raw_subcontractor&&!wirSubD[r.villa_id][code])wirSubD[r.villa_id][code]=r.raw_subcontractor;
       // Apply WIR code alias — promote old code status to new code if better
       const resolved=resolveWirCode(code);
@@ -989,6 +1001,7 @@ async function init(){
         const existingR=st[resolved]||'not_submitted';
         if(ord.indexOf(incoming)<ord.indexOf(existingR)){
           st[resolved]=incoming;
+          wirMetaD[r.villa_id][resolved]=meta;
           if(r.raw_subcontractor&&!wirSubD[r.villa_id][resolved])wirSubD[r.villa_id][resolved]=r.raw_subcontractor;
         }
       }
@@ -2070,6 +2083,18 @@ function openMod(vid,actCode,actLabel,codes){
     document.getElementById('m-v').value=`Villa ${v.villa_no} — ${v.cluster} (${v.villa_type||'—'})`;
     document.getElementById('m-a').value=actLabel+(codesArr.length>1?` [${codesArr.join(', ')}]`:'');
     document.getElementById('m-w').value=sl(wir);
+    // WIR revision + dates (latest WIR for this villa+activity)
+    const meta=gWMeta(vid,codesArr);
+    const mwm=document.getElementById('m-wm');
+    if(mwm){
+      if(meta && (meta.revision||meta.revision_no!=null||meta.submitted_date||meta.response_date)){
+        const rn=meta.revision_no??0;
+        const rev=meta.revision||('C'+String(rn).padStart(2,'0'));
+        const sub=(meta.submitted_date||'').slice(0,10)||'—';
+        const resp=(meta.response_date||'').slice(0,10)||'—';
+        mwm.value=`Rev ${rev}${rn>0?' (×'+rn+')':''} · Submitted ${sub} · Response ${resp}`;
+      } else { mwm.value='— no WIR on record —'; }
+    }
     document.getElementById('m-s').value=prog.status||'not_started';
     document.getElementById('m-sd').value=prog.start_date||'';
     document.getElementById('m-fd').value=prog.finish_date||'';

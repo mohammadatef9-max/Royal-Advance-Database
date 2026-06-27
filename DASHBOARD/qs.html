@@ -870,11 +870,33 @@ textarea{resize:vertical;min-height:60px}
       <div class="warn-strip" id="ov-warn" style="display:none">⚠ This activity was previously billed — overriding will not affect billing history.</div>
       <div class="form-row">
         <label>Mark as</label>
-        <select id="ov-complete">
-          <option value="1">✓ Complete (override WIR as approved)</option>
-          <option value="0">✗ Not Complete (override WIR as rejected)</option>
+        <select id="ov-complete" onchange="onOvModeChange()">
           <option value="wir">↩ Use WIR data (remove override)</option>
+          <option value="1">✓ Complete — pay in full (100%)</option>
+          <option value="partial">◐ Partial payment — pay part of this WIR</option>
+          <option value="void">⊘ Void — skip this PC (bill in a later PC)</option>
+          <option value="0">✗ Not Complete (override WIR as rejected)</option>
         </select>
+      </div>
+      <!-- Partial-payment controls (shown only when "Partial payment" is selected) -->
+      <div id="ov-partial" style="display:none;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:10px 12px;margin-bottom:10px">
+        <div id="ov-partial-ctx" style="font-size:11px;color:var(--tx3);margin-bottom:8px"></div>
+        <div class="form-row" style="margin-bottom:8px">
+          <label>% paid for this WIR (to date)</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input id="ov-pct" type="number" min="0" max="100" step="1" value="50" style="width:90px" oninput="onOvPctInput()">
+            <span style="font-size:12px;color:var(--tx2)">% &nbsp;·&nbsp; <span id="ov-pct-hint">—</span></span>
+          </div>
+        </div>
+        <label style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase">Unpaid remainder</label>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);cursor:pointer">
+            <input type="radio" name="ov-carry" value="carry" checked> Carry to next PC (auto-billable next period)
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--tx2);cursor:pointer">
+            <input type="radio" name="ov-carry" value="withhold"> Withhold (release later by editing this override)
+          </label>
+        </div>
       </div>
       <div class="form-row"><label>Reason *</label><textarea id="ov-reason" rows="2" placeholder="Explain why this override is needed…"></textarea></div>
       <div class="form-msg" id="ov-msg"></div>

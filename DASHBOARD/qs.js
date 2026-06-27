@@ -21,7 +21,7 @@ let scopeActivityGroups = [];
 let scopeActivities = []; // flat, with group info
 let scopeVillas = [];
 let pcOverrides = {};  // key: villa_id+':'+activity_code
-let billedRecords = {}; // key: villa_id+':'+activity_code → pc_id
+let billedRecords = {}; // key: villa_id+':'+activity_code → [{pc_id, pct, carry}] (one per PC that billed part of the cell)
 let wirData = {};      // key: villa_id+':'+activity_code → {approved, response_date}
 let pcSigsList = [];   // for current PC
 let globalSigs = [];   // rows of the template currently being edited in Config (alias of sigTplData[curSigTpl])
@@ -806,8 +806,8 @@ async function loadPCData() {
 
   const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
     fa(`v_latest_wir_by_sub?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
-    fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason`),
-    fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id`),
+    fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason,payment_pct,carry_remainder`),
+    fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id,billed_pct,carry_remainder`),
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
   ]);
 
@@ -834,9 +834,13 @@ async function loadPCData() {
   pcOverrides = {};
   overrideRows.forEach(o => { pcOverrides[o.villa_id + ':' + o.activity_code] = o; });
 
-  // Index billed records + map each PC id to its number (for prev/current/later ordering)
+  // Index billed records as key → [{pc_id, pct, carry}] (a cell can be billed across several PCs
+  // when a partial payment carries its remainder forward).
   billedRecords = {};
-  billedRows.forEach(b => { billedRecords[b.villa_id + ':' + b.activity_code] = b.locked_pc_id; });
+  billedRows.forEach(b => {
+    const k = b.villa_id + ':' + b.activity_code;
+    (billedRecords[k] = billedRecords[k] || []).push({ pc_id: b.locked_pc_id, pct: b.billed_pct == null ? 1 : Number(b.billed_pct), carry: b.carry_remainder !== false });
+  });
   // Legacy safety: a locked PC that has NO billed records of its own would render an empty grid.
   // Fall back to the to-date view in that case (matches what reopen→relock would show).
   lockedBilledMissing = (selectedPC.status === 'locked') && !billedRows.some(b => b.locked_pc_id === selectedPC.id);
@@ -891,46 +895,78 @@ function renderProgressSection() {
 // ══════════════════════════════════════════════
 // CALCULATION ENGINE
 // ══════════════════════════════════════════════
+function clamp01(n){ return Math.max(0, Math.min(1, n)); }
+
+// Core per-cell billing engine (shared by the globals path and the multi-scope ctx path).
+// Returns the billed fractions of one activity on one villa for the current PC, supporting:
+//  • full payment (pct=1), • void/not-complete (is_complete=false → 0 this PC, returns next PC),
+//  • partial payment (override.payment_pct = cumulative paid-to-date share of the cell),
+//  • carry vs withhold of the unpaid remainder across PCs (billed record's carry flag).
+// billedList: [{pc_id, pct, carry}] (any PC). override: row|undefined. wirApproved: bool. locked: bool.
+function computeCellBilling(billedList, override, wirApproved, locked) {
+  const curNum = selectedPC ? selectedPC.pc_number : Infinity;
+  const recs = (billedList || []).map(b => ({ pct: b.pct, carry: b.carry, num: pcNumById[b.pc_id] ?? null, pc_id: b.pc_id }));
+  const prevRecs  = recs.filter(r => r.num !== null && r.num < curNum).sort((a,b) => a.num - b.num);
+  const nowRec    = recs.find(r => selectedPC && r.pc_id === selectedPC.id);
+  const laterRecs = recs.filter(r => r.num !== null && r.num > curNum);
+
+  const prevPct = clamp01(prevRecs.reduce((a,r) => a + (r.pct || 0), 0));
+  const remaining = Math.max(0, 1 - prevPct);
+  // Does the unpaid balance flow into this PC automatically? Fresh cells do; otherwise it depends
+  // on the most-recent prior lock's carry flag (withheld balances wait for an explicit override).
+  const carriesIn = prevRecs.length === 0 ? true : (prevRecs[prevRecs.length - 1].carry !== false);
+
+  const isCompleteToDate = override !== undefined ? !!override.is_complete : wirApproved;
+
+  let curPct = 0;
+  if (locked) {
+    curPct = nowRec ? (nowRec.pct || 0) : 0;
+  } else if (isCompleteToDate && remaining > 1e-9) {
+    // An explicit complete override can release a previously-withheld balance
+    const releasedByOverride = override !== undefined && override.is_complete;
+    if (carriesIn || releasedByOverride) {
+      const target = (override && override.payment_pct != null) ? clamp01(Number(override.payment_pct)) : 1;
+      curPct = Math.min(remaining, Math.max(0, target - prevPct));
+    }
+  }
+  const todPct = clamp01(prevPct + curPct);
+
+  const wasBilledPrev = prevPct > 1e-9;
+  const isBilledNow   = locked ? !!nowRec : curPct > 1e-9;
+  const billedLater   = laterRecs.length > 0;
+  // Approved work whose remaining balance is NOT being billed now and won't auto-carry → withheld
+  const withheldPct   = (!locked && isCompleteToDate && remaining > 1e-9 && curPct < 1e-9) ? remaining : 0;
+  const isPartial     = (curPct > 1e-9 && curPct < remaining - 1e-9) || todPct < 1 - 1e-9 && (wasBilledPrev || curPct > 1e-9);
+
+  let source;
+  if (override !== undefined) source = override.is_complete ? (isPartial ? 'override-partial' : 'override-on') : 'override-off';
+  else source = isCompleteToDate ? 'approved' : 'not-approved';
+
+  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source,
+           prevPct, curPct, todPct, withheldPct, remaining, isPartial };
+}
+
 function getActivityStatus(villa_id, activity_code) {
   const key = villa_id + ':' + activity_code;
-  const billedPcId = billedRecords[key];
   const override = pcOverrides[key];
   const wir = wirData[key];
-
-  // Determine if approved to-date
-  let isCompleteToDate;
-  let source; // 'wir' | 'override-on' | 'override-off' | 'prev-billed'
-  if (override !== undefined) {
-    isCompleteToDate = override.is_complete;
-    source = override.is_complete ? 'override-on' : 'override-off';
-  } else {
-    isCompleteToDate = wir?.approved === true;
-    source = isCompleteToDate ? 'approved' : 'not-approved';
-  }
-
-  // Order by PC number: billed earlier = PREV, this PC = NOW, later = ignore for this PC
-  const curNum   = selectedPC ? selectedPC.pc_number : Infinity;
-  const billedNum = (billedPcId !== undefined) ? (pcNumById[billedPcId] ?? null) : null;
-  const isBilledNow   = billedPcId !== undefined && billedPcId === selectedPC.id;
-  const wasBilledPrev = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum < curNum;
-  const billedLater   = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum > curNum;
-
-  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source, override, wir };
+  const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
+  const r = computeCellBilling(billedRecords[key], override, wir?.approved === true, locked);
+  return { ...r, override, wir };
 }
 
 function calcVillaWorkdone(villa_id) {
   let prev = 0, current = 0, toDate = 0;
-  // A locked PC's "current" = only what was billed IN THIS PC; a draft's "current" = approvable now.
-  // (A legacy locked PC with no billed records falls back to the to-date view so it isn't blank.)
-  const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
+  // Fractional: each cell contributes (group×activity weight) × the billed fraction for prev/current.
+  // Partial payments and carried/withheld balances are handled inside computeCellBilling().
   scopeActivityGroups.forEach(grp => {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     grpActs.forEach(act => {
-      const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater } = getActivityStatus(villa_id, act.activity_code);
-      if (billedLater) return;  // billed in a later PC → not part of this PC's history
+      const { prevPct, curPct } = getActivityStatus(villa_id, act.activity_code);
       const contrib = grp.group_weight * act.activity_weight;
-      if (wasBilledPrev) { prev += contrib; toDate += contrib; }
-      else if (locked ? isBilledNow : isCompleteToDate) { current += contrib; toDate += contrib; }
+      prev += contrib * prevPct;
+      current += contrib * curPct;
+      toDate += contrib * (prevPct + curPct);
     });
   });
   return { prev, current, toDate };
@@ -984,39 +1020,31 @@ async function buildScopeCtx(scope) {
     const subQ = subClause ? '&' + subClause : '';
     const [wirRows, ovRows, bRows] = await Promise.all([
       fa(`v_latest_wir_by_sub?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
-      fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete`),
-      fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id`),
+      fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,payment_pct,carry_remainder`),
+      fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id,billed_pct,carry_remainder`),
     ]);
     wirRows.forEach(w => { const k=w.villa_id+':'+w.raw_activity_code; if(!wir[k]||w.normalised_status==='approved') wir[k]={approved:w.normalised_status==='approved',response_date:w.response_date}; });
     ovRows.forEach(o => { overrides[o.villa_id+':'+o.activity_code]=o; });
-    bRows.forEach(b => { billed[b.villa_id+':'+b.activity_code]=b.locked_pc_id; });
+    bRows.forEach(b => { const k=b.villa_id+':'+b.activity_code; (billed[k]=billed[k]||[]).push({ pc_id:b.locked_pc_id, pct:b.billed_pct==null?1:Number(b.billed_pct), carry:b.carry_remainder!==false }); });
   }
   return { scope, villaTypes, activityGroups, activities, villas, variations, wir, overrides, billed };
 }
 function ctxActStatus(ctx, villa_id, activity_code) {
   const key = villa_id+':'+activity_code;
-  const billedPcId = ctx.billed[key];
   const override = ctx.overrides[key];
   const wir = ctx.wir[key];
-  const isCompleteToDate = (override !== undefined) ? override.is_complete : (wir?.approved === true);
-  const curNum   = selectedPC ? selectedPC.pc_number : Infinity;
-  const billedNum = (billedPcId !== undefined) ? (pcNumById[billedPcId] ?? null) : null;
-  const isBilledNow   = billedPcId !== undefined && billedPcId === selectedPC.id;
-  const wasBilledPrev = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum < curNum;
-  const billedLater   = billedPcId !== undefined && !isBilledNow && billedNum !== null && billedNum > curNum;
-  const source = override!==undefined ? (override.is_complete?'override-on':'override-off') : (isCompleteToDate?'approved':'not-approved');
-  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source };
+  const locked = selectedPC && selectedPC.status === 'locked';
+  return computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked);
 }
 function ctxWorkdone(ctx, villa_id) {
   let prev=0, current=0, toDate=0;
-  const locked = selectedPC && selectedPC.status === 'locked';
   ctx.activityGroups.forEach(grp => {
     ctx.activities.filter(a => a.group_id === grp.id).forEach(act => {
-      const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater } = ctxActStatus(ctx, villa_id, act.activity_code);
-      if (billedLater) return;
+      const { prevPct, curPct } = ctxActStatus(ctx, villa_id, act.activity_code);
       const contrib = (grp.group_weight||0) * (act.activity_weight||0);
-      if (wasBilledPrev) { prev += contrib; toDate += contrib; }
-      else if (locked ? isBilledNow : isCompleteToDate) { current += contrib; toDate += contrib; }
+      prev += contrib * prevPct;
+      current += contrib * curPct;
+      toDate += contrib * (prevPct + curPct);
     });
   });
   return { prev, current, toDate };
@@ -1097,22 +1125,34 @@ function renderProgressSheet() {
     scopeActivityGroups.forEach(grp => {
       const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
       grpActs.forEach(act => {
-        const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source } = getActivityStatus(sv.villa_id, act.activity_code);
-        let cls = 'act-cell';
-        let label = '—';
-        if (wasBilledPrev) { cls += ' prev-billed readonly'; label = '✓ₚ'; }
-        else if (isBilledNow) { cls += ' approved readonly'; label = '✓ₗ'; }
-        else if (source === 'override-on') { cls += ' override-on'; label = '✓ᵒ'; }
-        else if (source === 'override-off') { cls += ' override-off'; label = '✗ᵒ'; }
-        else if (source === 'approved') { cls += ' approved'; label = '✓'; }
-        else { cls += ' not-approved'; label = '—'; }
-        // Cells contributing to CURRENT-period billing — mirrors calcVillaWorkdone(). Highlighted
-        // green in print only, so the activities being billed this period are easy to scan.
-        const isCurrentCell = !wasBilledPrev && !billedLater && (effLocked ? isBilledNow : isCompleteToDate);
-        if (isCurrentCell) cls += ' cur-progress';
-        if (!wasBilledPrev && canEdit) cls += '';
-        const click = (!wasBilledPrev && canEdit) ? `onclick="openOverride(${sv.villa_id},'${escH(act.activity_code)}','${escH(sv.villa_no)}','${escH(act.activity_name)}')"` : '';
-        actCells += `<td style="text-align:center;vertical-align:middle;padding:5px 8px"><div class="${cls}" ${click} title="${escH(act.activity_name)}">${label}</div></td>`;
+        const st = getActivityStatus(sv.villa_id, act.activity_code);
+        const { prevPct, curPct, withheldPct, isCompleteToDate, source } = st;
+        const pP = Math.round(prevPct * 100), pC = Math.round(curPct * 100);
+        let cls = 'act-cell', label = '—', tip = act.activity_name;
+        if (curPct > 1e-9) {
+          // Billing in THIS PC (current). Full → ✓; partial / top-up → show the % billed now.
+          const full = pC >= 100 && prevPct < 1e-9;
+          cls += ' approved cur-progress' + (effLocked ? ' readonly' : '');
+          label = full ? '✓' : pC + '%';
+          tip += prevPct > 1e-9 ? ` — +${pC}% this PC (${pP}% billed before)` : (full ? '' : ` — ${pC}% this PC`);
+        } else if (prevPct > 1e-9) {
+          // Already billed in earlier PC(s), nothing new now
+          cls += ' prev-billed readonly';
+          label = pP >= 100 ? '✓ₚ' : pP + '%ₚ';
+          tip += ` — ${pP}% billed in earlier PCs`;
+        } else if (withheldPct > 1e-9) {
+          cls += ' override-off'; label = '⊘'; tip += ' — approved but withheld this PC';
+        } else if (source === 'override-off') {
+          cls += ' override-off'; label = '⊘'; tip += ' — voided / not billed this PC';
+        } else if (isCompleteToDate) {
+          cls += ' approved'; label = '✓';
+        } else {
+          cls += ' not-approved'; label = '—';
+        }
+        // Editable in a draft PC unless the cell is already fully billed
+        const editable = canEdit && prevPct < 1 - 1e-9;
+        const click = editable ? `onclick="openOverride(${sv.villa_id},'${escH(act.activity_code)}','${escH(sv.villa_no)}','${escH(act.activity_name)}')"` : '';
+        actCells += `<td style="text-align:center;vertical-align:middle;padding:5px 8px"><div class="${cls}" ${click} title="${escH(tip)}">${label}</div></td>`;
       });
     });
 
@@ -1926,48 +1966,99 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
   if (!canManage && !canAdmin) return;
   ovPending = { villa_id: parseInt(villa_id), activity_code, villa_no, act_name };
   const key = villa_id + ':' + activity_code;
-  const billed = billedRecords[key];
   const ovExisting = pcOverrides[key];
-  const wir = wirData[key];
+  const st = getActivityStatus(villa_id, activity_code);
+  // Stash the cell's prior-billed share so the partial controls can show context & validate
+  ovPending.prevPct = st.prevPct || 0;
+  const prevTxt = st.prevPct > 1e-9 ? ` (${Math.round(st.prevPct*100)}% already billed in earlier PCs)` : '';
+
+  let ovTxt;
+  if (!ovExisting) ovTxt = 'None (using WIR data)';
+  else if (!ovExisting.is_complete) ovTxt = '⊘ Void / Not complete this PC';
+  else if (ovExisting.payment_pct != null && Number(ovExisting.payment_pct) < 1)
+    ovTxt = `◐ Partial — ${Math.round(Number(ovExisting.payment_pct)*100)}% paid, remainder ${ovExisting.carry_remainder!==false?'carries to next PC':'withheld'}`;
+  else ovTxt = '✓ Complete (full payment)';
 
   document.getElementById('ov-info').innerHTML = `
     <b>Villa:</b> VI-${escH(villa_no)} &nbsp;|&nbsp; <b>Activity:</b> ${escH(activity_code)} — ${escH(act_name)}<br>
-    <b>WIR Status:</b> ${wir?.approved ? '✓ Approved' : '— Not approved'}<br>
-    ${ovExisting ? `<b>Current Override:</b> ${ovExisting.is_complete ? '✓ Override: Complete' : '✗ Override: Not Complete'} — ${escH(ovExisting.override_reason||'')}` : '<b>Current Override:</b> None (using WIR data)'}`;
+    <b>WIR Status:</b> ${st.wir?.approved ? '✓ Approved' : '— Not approved'}${prevTxt}<br>
+    <b>Current Override:</b> ${ovTxt}${ovExisting?.override_reason ? ' — '+escH(ovExisting.override_reason) : ''}`;
 
-  document.getElementById('ov-warn').style.display = billed ? '' : 'none';
-  document.getElementById('ov-complete').value = ovExisting ? (ovExisting.is_complete ? '1' : '0') : 'wir';
+  document.getElementById('ov-warn').style.display = st.wasBilledPrev ? '' : 'none';
+  // Preselect the mode from the existing override
+  let mode = 'wir';
+  if (ovExisting) {
+    if (!ovExisting.is_complete) mode = 'void';
+    else if (ovExisting.payment_pct != null && Number(ovExisting.payment_pct) < 1) mode = 'partial';
+    else mode = '1';
+  }
+  document.getElementById('ov-complete').value = mode;
+  document.getElementById('ov-pct').value = ovExisting?.payment_pct != null ? Math.round(Number(ovExisting.payment_pct)*100) : 100;
+  const carry = !ovExisting || ovExisting.carry_remainder !== false;
+  document.querySelector(`input[name="ov-carry"][value="${carry?'carry':'withhold'}"]`).checked = true;
   document.getElementById('ov-reason').value = '';
   document.getElementById('ov-msg').className = 'form-msg';
+  onOvModeChange();
   document.getElementById('modal-override').style.display = 'flex';
+}
+
+function onOvModeChange() {
+  const mode = document.getElementById('ov-complete').value;
+  document.getElementById('ov-partial').style.display = mode === 'partial' ? '' : 'none';
+  if (mode === 'partial') {
+    document.getElementById('ov-partial-ctx').textContent = ovPending && ovPending.prevPct > 1e-9
+      ? `${Math.round(ovPending.prevPct*100)}% of this WIR was billed in earlier PCs. Enter the TOTAL % paid to date.`
+      : 'Enter how much of this WIR’s value to pay in this PC.';
+    onOvPctInput();
+  }
+}
+
+function onOvPctInput() {
+  const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-pct').value) || 0));
+  const prevPctNum = Math.round((ovPending?.prevPct || 0) * 100);
+  const thisPc = Math.max(0, pct - prevPctNum);
+  const hint = document.getElementById('ov-pct-hint');
+  if (hint) hint.textContent = `bills ${thisPc}% now, ${Math.max(0,100-pct)}% remaining`;
 }
 
 async function submitOverride() {
   if (!ovPending) return;
-  const val = document.getElementById('ov-complete').value;
+  const val = document.getElementById('ov-complete').value;  // wir | 1 | partial | void | 0
   const reason = document.getElementById('ov-reason').value.trim();
   const msg = document.getElementById('ov-msg');
 
   if (val !== 'wir' && !reason) { showMsg(msg, 'err', 'Reason is required for an override.'); return; }
 
+  // Resolve the override fields from the selected mode
+  let is_complete = true, payment_pct = null, carry_remainder = true;
+  if (val === '1') { is_complete = true; payment_pct = null; }
+  else if (val === 'void' || val === '0') { is_complete = false; payment_pct = null; }
+  else if (val === 'partial') {
+    is_complete = true;
+    const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-pct').value) || 0)) / 100;
+    const prev = ovPending.prevPct || 0;
+    if (pct <= prev + 1e-9) { showMsg(msg, 'err', `Enter a % greater than what's already billed (${Math.round(prev*100)}%).`); return; }
+    if (pct >= 1 - 1e-9) { showMsg(msg, 'err', 'Use “Complete — pay in full” for 100%.'); return; }
+    payment_pct = pct;
+    carry_remainder = (document.querySelector('input[name="ov-carry"]:checked')?.value || 'carry') === 'carry';
+  }
+
   const key = ovPending.villa_id + ':' + ovPending.activity_code;
   try {
     if (val === 'wir') {
-      // Remove override
       await fdel(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`);
       audit('qs_pc_overrides', 'REMOVE_OVERRIDE', selectedPC.id, null, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
       delete pcOverrides[key];
     } else {
-      const isComplete = val === '1';
-      const body = { pc_id: selectedPC.id, villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, is_complete: isComplete, override_reason: reason, created_by: currentUser?.full_name || '' };
+      const fields = { is_complete, override_reason: reason, payment_pct, carry_remainder };
       const existing = pcOverrides[key];
       if (existing) {
-        await fpatch(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`, { is_complete: isComplete, override_reason: reason });
+        await fpatch(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`, fields);
       } else {
-        await fp('qs_pc_overrides', body);
+        await fp('qs_pc_overrides', { pc_id: selectedPC.id, villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, created_by: currentUser?.full_name || '', ...fields });
       }
-      audit('qs_pc_overrides', existing ? 'UPDATE_OVERRIDE' : 'CREATE_OVERRIDE', selectedPC.id, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, is_complete: isComplete, reason, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
-      pcOverrides[key] = { villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, is_complete: isComplete, override_reason: reason };
+      audit('qs_pc_overrides', existing ? 'UPDATE_OVERRIDE' : 'CREATE_OVERRIDE', selectedPC.id, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, mode: val, payment_pct, carry_remainder, reason, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
+      pcOverrides[key] = { villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, ...fields };
     }
     closeModal('modal-override');
     renderProgressSheet();
@@ -1990,13 +2081,20 @@ async function submitPC() {
 // Billable items across all scopes in the PC (or the single scope)
 function collectBillableItems() {
   const items = [];
+  // A cell is billable in this PC when it has a positive current fraction (curPct). The fraction
+  // and the carry flag (from the override) are persisted so partial/carried balances roll forward.
+  const push = (scope_id, sv, act, st, carry) => {
+    if (st.curPct > 1e-9)
+      items.push({ scope_id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no,
+                   billed_pct: Math.round(st.curPct * 1e6) / 1e6, carry_remainder: carry });
+  };
   if (isMultiPC && pcSections.length > 1) {
     pcSections.forEach(s => {
       s.ctx.villas.forEach(sv => {
         s.ctx.activities.forEach(act => {
           const st = ctxActStatus(s.ctx, sv.villa_id, act.activity_code);
-          if (st.isCompleteToDate && !st.wasBilledPrev)
-            items.push({ scope_id: s.scope.id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no });
+          const ov = s.ctx.overrides[sv.villa_id + ':' + act.activity_code];
+          push(s.scope.id, sv, act, st, ov ? (ov.carry_remainder !== false) : true);
         });
       });
     });
@@ -2004,8 +2102,8 @@ function collectBillableItems() {
     scopeVillas.forEach(sv => {
       scopeActivities.forEach(act => {
         const st = getActivityStatus(sv.villa_id, act.activity_code);
-        if (st.isCompleteToDate && !st.wasBilledPrev)
-          items.push({ scope_id: selectedScope.id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no });
+        const ov = pcOverrides[sv.villa_id + ':' + act.activity_code];
+        push(selectedScope.id, sv, act, st, ov ? (ov.carry_remainder !== false) : true);
       });
     });
   }
@@ -2051,7 +2149,10 @@ async function openLock() {
   // ── Build billing summary (across every scope in this PC) ─────────────
   const billItems = collectBillableItems();
   const count = billItems.length;
-  const summary = billItems.map(it => `<div>VI-${escH(it.villa_no)} · ${escH(it.activity_code)}</div>`).join('');
+  const summary = billItems.map(it => {
+    const pctTxt = it.billed_pct < 0.999 ? ` · <b>${Math.round(it.billed_pct*100)}%</b>${it.carry_remainder ? ' (rest carries)' : ' (rest withheld)'}` : '';
+    return `<div>VI-${escH(it.villa_no)} · ${escH(it.activity_code)}${pctTxt}</div>`;
+  }).join('');
 
   if (!count) warnings.push('No new billable items in this PC — it will be locked with zero new records.');
 
@@ -2069,12 +2170,14 @@ async function openLock() {
 async function confirmLock() {
   const msg = document.getElementById('lock-msg');
   try {
-    // 1. Write billed records for every scope in the PC (ON CONFLICT DO NOTHING)
-    const newBilledItems = collectBillableItems().map(it => ({ scope_id: it.scope_id, villa_id: it.villa_id, activity_code: it.activity_code, locked_pc_id: selectedPC.id }));
+    // 1. Write billed records for every scope in the PC, capturing the billed fraction and whether
+    //    the unpaid balance carries forward. Conflict target includes locked_pc_id so a cell can be
+    //    billed across several PCs (partial → carry); re-locking the same PC is idempotent.
+    const newBilledItems = collectBillableItems().map(it => ({ scope_id: it.scope_id, villa_id: it.villa_id, activity_code: it.activity_code, locked_pc_id: selectedPC.id, billed_pct: it.billed_pct, carry_remainder: it.carry_remainder }));
     if (newBilledItems.length) {
-      await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
+      await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code,locked_pc_id`, {
         method:'POST',
-        headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+        headers: getH({'Prefer':'resolution=merge-duplicates,return=minimal'}),
         body: JSON.stringify(newBilledItems)
       });
     }

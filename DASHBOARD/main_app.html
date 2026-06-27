@@ -435,6 +435,10 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 1 0 4.6 4.6L21 12l-3 3-9 9-3-3 9-9 1.7-1.7z"/></svg></span>
         <span class="nl">Cluster Tracker</span>
       </div>
+      <div class="nav perm-gate" id="nav-wir_viewer" data-label="WIR Viewer" data-perm="view_dashboard" onclick="go('wir_viewer')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+        <span class="nl">WIR Viewer</span>
+      </div>
       <div class="nav perm-gate" id="nav-ncr_sor" data-label="NCR / SOR Tracker" data-perm="view_ncr" onclick="go('ncr_sor')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
         <span class="nl">NCR / SOR</span>
@@ -583,6 +587,7 @@ body.banner-open .shell{margin-top:40px}
       </div>
       <iframe id="frame-dashboard"          title="Dashboard"></iframe>
       <iframe id="frame-cluster_tracker"    title="Cluster Tracker"></iframe>
+      <iframe id="frame-wir_viewer"         title="WIR Viewer"></iframe>
       <iframe id="frame-target_list"        title="Weekly Target List"></iframe>
       <iframe id="frame-clearance_viewer"   title="Clearance Viewer"></iframe>
       <iframe id="frame-clearance_release"  title="Release Requests"></iframe>
@@ -622,6 +627,7 @@ const FRAME_TGT = (location.protocol === 'file:' || location.origin === 'null' |
 const PAGES = {
   dashboard:         { title:'Dashboard',            desc:'Project overview & live stats',          file:'dashboard.html',          built:true },
   cluster_tracker:   { title:'Cluster Tracker',      desc:'WIR & progress by villa',                file:'cluster_tracker.html',    built:true },
+  wir_viewer:        { title:'WIR Viewer',           desc:'All WIRs — filter by date, status, cluster, revision', file:'wir_viewer.html', built:true },
   target_list:       { title:'Weekly Target List',   desc:'Weekly villa targets & WIR status',      file:'target_list.html',        built:true },
   clearance_viewer:  { title:'Clearance Viewer',     desc:'Clearance status by villa & activity',   file:'clearance_viewer.html',   built:true },
   clearance_release: { title:'Release Requests',     desc:'Clearance release & rejection workflow', file:'clearance_release.html',  built:true },
@@ -876,6 +882,7 @@ function bootApp(profile, token) {
 function preloadAllFrames() {
   const order = [
     'cluster_tracker',
+    'wir_viewer',
     'target_list',
     'clearance_viewer',
     'clearance_release',
