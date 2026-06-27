@@ -646,8 +646,10 @@ async function _detectWirVillas() {
   if (!actCodes.length) return [];
 
   const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
-  // Get distinct villa_ids that have WIR entries for this sub + these specific activities
-  const wirRows = await fa(`v_latest_wir_status?${nameFilter}${actFilter}&select=villa_id`);
+  // Get distinct villa_ids that have WIR entries for this sub + these specific activities.
+  // Use the per-subcontractor view so we don't miss villas where another sub raised the latest
+  // revision for a shared activity code (the project-wide view would collapse this sub's row away).
+  const wirRows = await fa(`v_latest_wir_by_sub?${nameFilter}${actFilter}&select=villa_id`);
   const villaIds = [...new Set(wirRows.map(r => r.villa_id).filter(Boolean))];
   if (!villaIds.length) return [];
   // Fetch villa metadata (include cluster_id for cluster filtering)
@@ -803,7 +805,7 @@ async function loadPCData() {
   const subQ = subClause ? '&' + subClause : '';
 
   const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
-    fa(`v_latest_wir_status?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
+    fa(`v_latest_wir_by_sub?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
     fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason`),
     fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id`),
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
@@ -957,7 +959,7 @@ async function ctxDetectVillas(scope, villaTypes, activities) {
   const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
   if (!actCodes.length) return [];
   const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
-  const wirRows = await fa(`v_latest_wir_status?${nameFilter}${actFilter}&select=villa_id`);
+  const wirRows = await fa(`v_latest_wir_by_sub?${nameFilter}${actFilter}&select=villa_id`);
   const villaIds = [...new Set(wirRows.map(r => r.villa_id).filter(Boolean))];
   if (!villaIds.length) return [];
   const villas = await fa(`villas?id=in.(${villaIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true&order=cluster_id.asc,villa_no.asc`);
@@ -981,7 +983,7 @@ async function buildScopeCtx(scope) {
     const subClause = await subRawClause(scope.subcontractor_name);
     const subQ = subClause ? '&' + subClause : '';
     const [wirRows, ovRows, bRows] = await Promise.all([
-      fa(`v_latest_wir_status?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
+      fa(`v_latest_wir_by_sub?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
       fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete`),
       fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id`),
     ]);
@@ -1095,7 +1097,7 @@ function renderProgressSheet() {
     scopeActivityGroups.forEach(grp => {
       const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
       grpActs.forEach(act => {
-        const { isCompleteToDate, wasBilledPrev, isBilledNow, source } = getActivityStatus(sv.villa_id, act.activity_code);
+        const { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source } = getActivityStatus(sv.villa_id, act.activity_code);
         let cls = 'act-cell';
         let label = '—';
         if (wasBilledPrev) { cls += ' prev-billed readonly'; label = '✓ₚ'; }
@@ -1104,6 +1106,10 @@ function renderProgressSheet() {
         else if (source === 'override-off') { cls += ' override-off'; label = '✗ᵒ'; }
         else if (source === 'approved') { cls += ' approved'; label = '✓'; }
         else { cls += ' not-approved'; label = '—'; }
+        // Cells contributing to CURRENT-period billing — mirrors calcVillaWorkdone(). Highlighted
+        // green in print only, so the activities being billed this period are easy to scan.
+        const isCurrentCell = !wasBilledPrev && !billedLater && (effLocked ? isBilledNow : isCompleteToDate);
+        if (isCurrentCell) cls += ' cur-progress';
         if (!wasBilledPrev && canEdit) cls += '';
         const click = (!wasBilledPrev && canEdit) ? `onclick="openOverride(${sv.villa_id},'${escH(act.activity_code)}','${escH(sv.villa_no)}','${escH(act.activity_name)}')"` : '';
         actCells += `<td style="text-align:center;vertical-align:middle;padding:5px 8px"><div class="${cls}" ${click} title="${escH(act.activity_name)}">${label}</div></td>`;
