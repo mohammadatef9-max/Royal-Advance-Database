@@ -1243,7 +1243,9 @@ async function loadData(){
   var resolveWirCode=function(c){var seen=new Set(),h=0;while(wirAliases[c]&&!seen.has(c)&&h<5){seen.add(c);c=wirAliases[c];h++;}return c;};
   var wirStPriority=function(s){s=(s||'').toLowerCase().trim();if(s==='approved'||s==='a'||s==='b')return 0;if(s==='under_review'||s==='ur')return 1;if(s==='rejected'||s==='c'||s==='d')return 2;return 3;};
   document.getElementById('lm').textContent='Loading WIR data...';
-  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type&raw_cluster=eq.'+CLUSTER);
+  var _kpWs=null; try{_kpWs=sessionStorage.getItem('kp_ws');}catch(e){}
+  var _wsF=_kpWs==='civil'?'&discipline=eq.civil':(_kpWs==='mep'?'&or=(discipline.is.null,discipline.in.(mechanical,electrical))':'');
+  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type&raw_cluster=eq.'+CLUSTER+_wsF);
   var wirBestMap={};
   wirRows.forEach(function(row){
     var rawCode=row.raw_activity_code||'';

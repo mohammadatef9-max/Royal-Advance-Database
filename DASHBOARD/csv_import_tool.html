@@ -311,7 +311,8 @@ body.in-shell header { display: none !important; }
 <div class="container dc-content" style="max-width:1100px">
 
   <div class="dc-subtabs">
-    <button class="dc-subtab-btn active" id="dc-tab-btn-wir" onclick="switchDCTab('wir')">📋 WIR Log</button>
+    <button class="dc-subtab-btn active" id="dc-tab-btn-wir" onclick="switchDCTab('wir')">📋 WIR Log (MEP)</button>
+    <button class="dc-subtab-btn" id="dc-tab-btn-civ" onclick="switchDCTab('civ')">🏗️ WIR Log (Civil)</button>
     <button class="dc-subtab-btn" id="dc-tab-btn-clr" onclick="switchDCTab('clr')">🗂️ Clearance Log</button>
   </div>
 
@@ -446,6 +447,54 @@ body.in-shell header { display: none !important; }
       </div>
       <div class="prog-bar" style="display:block"><div class="prog-fill" id="prog-fill-clr" style="width:0%"></div></div>
       <div class="dc-log-box" id="log-clr"></div>
+    </div>
+  </div>
+
+  <!-- CIVIL WIR sub-tab (one workbook, one sheet per activity) -->
+  <div class="dc-subtab-pane" id="dc-tab-civ">
+    <div class="card" style="padding:14px 16px">
+      <div class="sec-title">Step 1 — Drop the Civil WIR Log (single workbook · all activity sheets) · Header row 15 · Code from "Discipline" column</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:12px">
+        <div class="drop-zone" id="dz-civ" ondragover="dcCivDragOver(event)" ondragleave="dcCivDragLeave()" ondrop="dcCivDrop(event)" onclick="document.getElementById('fi-civ').click()">
+          <div class="dz-icon">🏗️</div><div class="dz-label">Civil WIR Log</div><div class="dz-sub">CI · GT · ST · PC · AR — every sheet read automatically</div>
+          <div class="dz-filename" id="fn-civ"></div><div class="dz-count" id="fc-civ"></div><div class="dz-error" id="fe-civ"></div>
+          <button class="dz-clear" id="clr-civ" style="display:none" onclick="dcCivClear(event)">✕</button>
+        </div>
+        <input type="file" id="fi-civ" accept=".xlsx,.xlsm,.xls" onchange="dcCivFileInput(event)">
+      </div>
+    </div>
+
+    <div class="dc-summary-bar" id="sum-civ" style="display:none">
+      <div class="dc-stat-item"><div class="dc-stat-val accent" id="scv-total">0</div><div class="dc-stat-lbl">Total Rows</div></div>
+      <div class="dc-stat-sep"></div>
+      <div class="dc-stat-item"><div class="dc-stat-val" id="scv-sheets">0</div><div class="dc-stat-lbl">Activity Sheets</div></div>
+      <div class="dc-stat-item"><div class="dc-stat-val amber" id="scv-removed">0</div><div class="dc-stat-lbl">Removed (E/blank)</div></div>
+      <div class="dc-stat-item"><div class="dc-stat-val green" id="scv-clean">0</div><div class="dc-stat-lbl">Clean Rows</div></div>
+      <div class="bar-right">
+        <button class="btn-ghost" onclick="dcCivClearAll()">✕ Clear</button>
+        <button class="btn btn-primary" id="btn-upload-civ" onclick="dcStartCivilUpload()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          Upload to System
+        </button>
+      </div>
+    </div>
+
+    <div class="dc-preview-section">
+      <div class="dc-preview-head">
+        <div><div class="dc-preview-title">Preview — Civil WIR</div><div class="dc-preview-sub" id="prev-sub-civ">Drop the civil workbook above to begin</div></div>
+      </div>
+      <div class="dc-tbl-wrap" id="prev-tbl-civ">
+        <div class="empty-state"><div class="empty-icon">📋</div><div>Drop the civil WIR workbook</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">All activity sheets merged · code taken from the Discipline column</div></div>
+      </div>
+    </div>
+
+    <div class="dc-upload-section" id="upload-civ" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:600">Upload Progress</div>
+        <div style="font-size:11px;color:var(--text-dim)" id="upload-status-civ"></div>
+      </div>
+      <div class="prog-bar" style="display:block"><div class="prog-fill" id="prog-fill-civ" style="width:0%"></div></div>
+      <div class="dc-log-box" id="log-civ"></div>
     </div>
   </div>
 
@@ -1256,7 +1305,7 @@ function dcBuildClrColMap(hdrRow){
 const dcState={wir:{plumbing:null,hvac:null,electrical:null,merged:[]},clr:{mep:null,civil:null,merged:[]}};
 
 function switchDCTab(tab){
-  ['wir','clr'].forEach(t=>{
+  ['wir','clr','civ'].forEach(t=>{
     document.getElementById('dc-tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('dc-tab-btn-'+t).classList.toggle('active',t===tab);
   });
@@ -1502,7 +1551,9 @@ async function dcStartUpload(tab){
   const table=tab==='wir'?'dc_import_log':'clearance_import_log';
 
   dcAddLog(tab,'🗑 Clearing existing '+table+' records…','info');
-  const del=await fetch(SB+'/rest/v1/'+table+'?id=gte.0',{method:'DELETE',headers:getH({'Prefer':'return=minimal'})});
+  // WIR replace mode is now discipline-scoped so MEP and Civil imports never wipe each other.
+  const delFilter = tab==='wir' ? '?or=(discipline.is.null,discipline.in.(mechanical,electrical))' : '?id=gte.0';
+  const del=await fetch(SB+'/rest/v1/'+table+delFilter,{method:'DELETE',headers:getH({'Prefer':'return=minimal'})});
   if(!del.ok){
     const errTxt=await del.text();
     dcAddLog(tab,'❌ Delete failed ('+del.status+'): '+errTxt.slice(0,120),'err');
@@ -1616,6 +1667,166 @@ async function dcStartUpload(tab){
     // Refresh materialized status views so trackers / release requests reflect this import immediately
     try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); dcAddLog(tab,'🔄 Status views refreshed','info'); }
     catch(e){ dcAddLog(tab,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
+  }
+  btn.disabled=false;
+}
+
+// ─── CIVIL WIR IMPORT (one workbook · one sheet per activity) ──────────────
+const dcCiv={rows:[],sheets:0,removed:0,name:''};
+const CIV_FIELD_BY_HDR={
+  'discipline':'code','description':'activity','location':'cluster',
+  'villa no/ building':'villa','villa no/building':'villa','villa no':'villa','villa no.':'villa',
+  'sub- contractor name':'sub','sub-contractor name':'sub','sub contractor name':'sub',
+  'submitted date':'submitted','response date':'response','status':'status','revision':'revision'
+};
+function dcCivDragOver(e){e.preventDefault();document.getElementById('dz-civ').classList.add('drag-over');}
+function dcCivDragLeave(){document.getElementById('dz-civ').classList.remove('drag-over');}
+function dcCivDrop(e){e.preventDefault();document.getElementById('dz-civ').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)dcProcessCivilFile(f);}
+function dcCivFileInput(e){const f=e.target.files[0];if(f)dcProcessCivilFile(f);}
+function dcCivClear(e){if(e&&e.stopPropagation)e.stopPropagation();dcCivClearAll();}
+function dcCivClearAll(){
+  dcCiv.rows=[];dcCiv.sheets=0;dcCiv.removed=0;dcCiv.name='';
+  document.getElementById('dz-civ').classList.remove('loaded','error');
+  ['fn-civ','fc-civ','fe-civ'].forEach(id=>document.getElementById(id).textContent='');
+  document.getElementById('clr-civ').style.display='none';
+  document.getElementById('sum-civ').style.display='none';
+  document.getElementById('fi-civ').value='';
+  document.getElementById('prev-tbl-civ').innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div>Drop the civil WIR workbook</div></div>';
+}
+
+function dcProcessCivilFile(file){
+  document.getElementById('dz-civ').classList.remove('loaded','error');
+  document.getElementById('fe-civ').textContent='';
+  document.getElementById('fn-civ').textContent='Reading…';
+  const reader=new FileReader();
+  reader.onload=function(ev){ setTimeout(function(){
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array',cellDates:true,dense:true});
+      let allRows=[],removed=0,sheetsUsed=0;
+      for(const sn of wb.SheetNames){
+        if(/summary/i.test(sn)) continue;
+        const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:false,dateNF:'DD/MM/YYYY',defval:''});
+        let hdrIdx=-1;
+        for(let i=0;i<Math.min(raw.length,30);i++){
+          const cells=(raw[i]||[]).map(c=>(c||'').toString().trim().toLowerCase());
+          if(cells.indexOf('discipline')>=0 && cells.indexOf('status')>=0 && cells.indexOf('submitted date')>=0){hdrIdx=i;break;}
+        }
+        if(hdrIdx<0) continue;
+        const hdr=raw[hdrIdx], colMap={};
+        hdr.forEach((h,i)=>{const key=(h||'').toString().trim().toLowerCase().replace(/\s+/g,' ');const f=CIV_FIELD_BY_HDR[key];if(f&&!(f in colMap))colMap[f]=i;});
+        if(!('code' in colMap)||!('villa' in colMap)) continue;
+        sheetsUsed++;
+        for(let i=hdrIdx+1;i<raw.length;i++){
+          const r=raw[i]; if(!r||r.every(c=>c===null||c===undefined||c==='')) continue;
+          const get=f=>(f in colMap && r[colMap[f]]!=null)?r[colMap[f]].toString().trim():'';
+          const villa=get('villa'), code=get('code'), st=get('status');
+          if(!villa||!code){removed++;continue;}
+          if(st==='E'||st==='e'){removed++;continue;}
+          allRows.push({code,activity:get('activity'),cluster:get('cluster'),villa,sub:get('sub'),status:st,submitted:get('submitted'),response:get('response'),revision:get('revision'),_sheet:sn});
+        }
+      }
+      if(!sheetsUsed) throw new Error('No civil activity sheets found (need Activity Code + Discipline + Status headers).');
+      dcCiv.rows=allRows;dcCiv.sheets=sheetsUsed;dcCiv.removed=removed;dcCiv.name=file.name;
+      document.getElementById('dz-civ').classList.add('loaded');
+      document.getElementById('fn-civ').textContent=file.name;
+      document.getElementById('fc-civ').textContent=allRows.length+' rows · '+sheetsUsed+' sheets';
+      document.getElementById('clr-civ').style.display='block';
+      dcRenderCivPreview();
+      dcToast('Civil: '+allRows.length+' rows from '+sheetsUsed+' sheets','ok');
+    }catch(err){
+      document.getElementById('dz-civ').classList.add('error');
+      document.getElementById('fn-civ').textContent=file.name;
+      document.getElementById('fe-civ').textContent='⚠ '+err.message;
+      dcToast('Error: '+err.message,'err');
+    }
+  },0); };
+  reader.readAsArrayBuffer(file);
+}
+
+function dcRenderCivPreview(){
+  const rows=dcCiv.rows;
+  document.getElementById('sum-civ').style.display=rows.length?'flex':'none';
+  document.getElementById('scv-total').textContent=rows.length;
+  document.getElementById('scv-sheets').textContent=dcCiv.sheets;
+  document.getElementById('scv-removed').textContent=dcCiv.removed;
+  document.getElementById('scv-clean').textContent=rows.length;
+  document.getElementById('prev-sub-civ').textContent=dcCiv.name?(dcCiv.name+' · '+rows.length+' rows'):'Drop the civil workbook above';
+  const cols=[['_sheet','Sheet'],['code','Code'],['activity','Description'],['cluster','Cluster'],['villa','Villa'],['sub','Sub-Contractor'],['status','Status'],['submitted','Submitted'],['response','Response'],['revision','Rev']];
+  let html='<table class="preview-table"><thead><tr>'+cols.map(c=>'<th>'+c[1]+'</th>').join('')+'</tr></thead><tbody>';
+  rows.slice(0,8).forEach(r=>{html+='<tr>'+cols.map(c=>'<td>'+dcEsc(r[c[0]]||'—')+'</td>').join('')+'</tr>';});
+  html+='</tbody></table>';
+  document.getElementById('prev-tbl-civ').innerHTML=rows.length?html:'<div class="empty-state"><div class="empty-icon">📋</div><div>Drop the civil WIR workbook</div></div>';
+}
+
+async function dcStartCivilUpload(){
+  const rows=dcCiv.rows;
+  if(!rows.length){dcToast('No data to upload','err');return;}
+  const btn=document.getElementById('btn-upload-civ');btn.disabled=true;
+  document.getElementById('upload-civ').style.display='block';
+  document.getElementById('log-civ').innerHTML='';
+  document.getElementById('prog-fill-civ').style.width='0%';
+  dcAddLog('civ','🔐 Checking authentication…','info');
+  if(!await waitForToken(5000)){dcAddLog('civ','❌ Not authenticated. Please log in first.','err');btn.disabled=false;return;}
+  dcAddLog('civ','✅ Auth OK — loading reference data…','info');
+  let villaMap={},actMap={};
+  try{
+    const [clusters,villas,acts]=await Promise.all([
+      sbGet('clusters?select=id,code'),
+      sbGetAll('villas?select=id,villa_no,cluster_id'),
+      sbGetAll('activities?select=id,activity_code&is_active=eq.true&discipline=eq.civil'),
+    ]);
+    const cm={};clusters.forEach(c=>cm[c.id]=c.code);
+    villas.forEach(v=>{const cl=cm[v.cluster_id]||'';villaMap[cl+'_'+v.villa_no]=v.id;villaMap[cl.replace('C','')+'_'+v.villa_no]=v.id;});
+    acts.forEach(a=>actMap[a.activity_code.trim()]=a.id);
+    dcAddLog('civ','✅ '+villas.length+' villas · '+acts.length+' civil activities loaded','info');
+  }catch(e){dcAddLog('civ','❌ Reference data error: '+e.message,'err');btn.disabled=false;return;}
+
+  dcAddLog('civ','🗑 Clearing existing civil WIR records…','info');
+  const del=await fetch(SB+'/rest/v1/dc_import_log?discipline=eq.civil',{method:'DELETE',headers:getH({'Prefer':'return=minimal'})});
+  if(!del.ok){dcAddLog('civ','❌ Delete failed ('+del.status+'): '+(await del.text()).slice(0,120),'err');btn.disabled=false;return;}
+  dcAddLog('civ','✅ Old civil records cleared','info');
+
+  let batchId=null;
+  try{
+    const br=await fetch(SB+'/rest/v1/import_batches',{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify({file_name:'civil_wir_'+new Date().toISOString().slice(0,10),record_type:'wir',total_rows:rows.length,status:'processing'})});
+    if(br.ok){const bd=await br.json();batchId=Array.isArray(bd)?bd[0]?.id:bd?.id;}
+  }catch(e){}
+
+  const CHUNK=50; let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0;
+  for(let i=0;i<rows.length;i++){
+    const r=rows[i];
+    const villa=parseInt(r.villa); const cluster=(r.cluster||'').trim().toUpperCase(); const code=(r.code||'').trim();
+    if(!villa||isNaN(villa)||!cluster||!code){skipped++;continue;}
+    const vid=villaMap[cluster+'_'+villa]; const aid=actMap[code];
+    const ms=!vid?'unmatched_villa':!aid?'unmatched_activity':'matched';
+    if(ms==='matched')matched++;else unmatched++;
+    const rev=r.revision||null;
+    records.push({import_batch_id:batchId,villa_id:vid||null,activity_id:aid||null,record_type:'wir',
+      raw_activity_code:code,raw_villa_no:villa,raw_cluster:cluster,raw_activity_name:r.activity||null,
+      raw_villa_type:null,raw_subcontractor:r.sub||null,raw_status:r.status||null,
+      normalised_status:normaliseWir(r.status),discipline:'civil',discipline_raw:code,
+      submitted_date:safeDate(r.submitted),response_date:safeDate(r.response),
+      revision:rev,revision_no:rev?parseInt(rev.replace(/[^0-9]/g,''))||0:null,source_row_no:i+1,match_status:ms});
+    if(records.length>=CHUNK||(i===rows.length-1&&records.length>0)){
+      const chunk=records.splice(0,records.length); let ok=false;
+      for(let attempt=1;attempt<=3;attempt++){
+        try{const resp=await fetch(SB+'/rest/v1/dc_import_log',{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify(chunk)});if(resp.ok){ok=true;break;}dcAddLog('civ','⚠ chunk attempt '+attempt+' failed ('+resp.status+'): '+(await resp.text()).slice(0,100),'warn');}
+        catch(e){dcAddLog('civ','⚠ chunk network error: '+e.message,'warn');}
+        if(attempt<3)await new Promise(res=>setTimeout(res,600*attempt));
+      }
+      if(ok)uploaded+=chunk.length;else chunksFailed++;
+      document.getElementById('prog-fill-civ').style.width=Math.round((i+1)/rows.length*100)+'%';
+      document.getElementById('upload-status-civ').textContent=uploaded+'/'+rows.length+' rows';
+    }
+  }
+  if(batchId){await fetch(SB+'/rest/v1/import_batches?id=eq.'+batchId,{method:'PATCH',headers:getH(),body:JSON.stringify({matched_rows:matched,skipped_rows:unmatched+skipped,status:chunksFailed>0?'completed_with_errors':'completed'})});}
+  document.getElementById('prog-fill-civ').style.width='100%';
+  const summary=uploaded+' uploaded · '+matched+' matched · '+unmatched+' unmatched · '+skipped+' skipped'+(chunksFailed>0?' · '+chunksFailed+' chunks FAILED':'');
+  dcAddLog('civ',(chunksFailed>0?'⚠ Completed with errors — ':'✅ Done — ')+summary,chunksFailed>0?'warn':'ok');
+  dcToast(chunksFailed>0?'Completed with errors':'Civil upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
+  if(uploaded>0){
+    try{window.parent.postMessage({type:'data_updated',dataType:'wir',uploadedBy:window.__MEP_USER__?.full_name||'',rows:uploaded},'*');}catch(e){}
+    try{await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'});dcAddLog('civ','🔄 Status views refreshed','info');}catch(e){}
   }
   btn.disabled=false;
 }

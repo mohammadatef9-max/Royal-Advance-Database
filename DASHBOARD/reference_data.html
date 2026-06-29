@@ -150,6 +150,7 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
 }
 .disc-mechanical{background:rgba(79,140,255,.14);color:#93b6ff}
 .disc-electrical{background:rgba(244,201,90,.14);color:#f4c95a}
+.disc-civil{background:rgba(186,117,23,.16);color:#e0a458}
 .disc-civil{background:rgba(163,179,255,.14);color:#a3b3ff}
 .disc-both{background:rgba(110,226,163,.14);color:#6ee2a3}
 
@@ -918,11 +919,13 @@ function renderWirStats(data) {
   const active = data.filter(r => r.is_active).length;
   const mech   = data.filter(r => r.discipline === 'mechanical').length;
   const elec   = data.filter(r => r.discipline === 'electrical').length;
+  const civ    = data.filter(r => r.discipline === 'civil').length;
   document.getElementById('wir-stats').innerHTML = `
     <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${data.length}</strong> total</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--approved)"></div><strong>${active}</strong> active</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${mech}</strong> mechanical</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--progress)"></div><strong>${elec}</strong> electrical</div>
+    ${civ ? `<div class="stat-chip"><div class="stat-dot" style="background:#BA7517"></div><strong>${civ}</strong> civil</div>` : ''}
   `;
 }
 
@@ -1066,11 +1069,13 @@ function renderClrStats(data) {
   const active = data.filter(r => r.is_active).length;
   const mech   = data.filter(r => r.discipline === 'mechanical').length;
   const elec   = data.filter(r => r.discipline === 'electrical').length;
+  const civ    = data.filter(r => r.discipline === 'civil').length;
   document.getElementById('clr-stats').innerHTML = `
     <div class="stat-chip"><div class="stat-dot" style="background:var(--text-muted)"></div><strong>${data.length}</strong> total</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--approved)"></div><strong>${active}</strong> active</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--accent)"></div><strong>${mech}</strong> mechanical</div>
     <div class="stat-chip"><div class="stat-dot" style="background:var(--progress)"></div><strong>${elec}</strong> electrical</div>
+    ${civ ? `<div class="stat-chip"><div class="stat-dot" style="background:#BA7517"></div><strong>${civ}</strong> civil</div>` : ''}
   `;
 }
 

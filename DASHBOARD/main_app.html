@@ -209,6 +209,31 @@ body.banner-open .shell{margin-top:40px}
 .nav.active .nl{font-weight:500}
 .sidebar.collapsed .nav .nl{opacity:0;width:0;padding:0}
 .nav.perm-hidden{display:none}
+.nav.ws-hidden{display:none}
+.sb-section-label.ws-hidden{display:none}
+/* Workspace picker */
+#ws-picker{position:fixed;inset:0;z-index:9000;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:24px}
+#ws-picker.show{display:flex}
+.wsp-title{font-size:20px;font-weight:600;color:var(--text)}
+.wsp-sub{font-size:13px;color:var(--text-muted);margin-top:-12px}
+.wsp-grid{display:flex;gap:16px;flex-wrap:wrap;justify-content:center}
+.wsp-card{width:220px;background:var(--bg-panel);border:1px solid var(--border);border-radius:14px;padding:22px 18px;cursor:pointer;transition:all .15s;text-align:left}
+.wsp-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.wsp-card.disabled{opacity:.45;cursor:not-allowed}
+.wsp-card.disabled:hover{border-color:var(--border);transform:none}
+.wsp-ic{color:var(--accent-text);line-height:0}
+.wsp-card.disabled .wsp-ic{color:var(--text-dim)}
+#sb-ws-icon{display:inline-flex;color:var(--accent-text);line-height:0}
+.wsp-nm{font-size:17px;font-weight:600;color:var(--text);margin-top:10px}
+.wsp-ds{font-size:12px;color:var(--text-muted);margin-top:3px}
+.wsp-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;margin-top:10px}
+.wsp-live{background:var(--st-approved-bg);color:var(--st-approved-tx)}
+.wsp-soon{background:var(--bg-cell);color:var(--text-dim)}
+/* sidebar workspace switch */
+.sb-ws{display:flex;align-items:center;gap:8px;margin:0 10px 8px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-muted)}
+.sb-ws:hover{border-color:var(--accent);color:var(--text)}
+.sb-ws .nm{font-weight:600;color:var(--text)}
+.sidebar.collapsed .sb-ws .lbl{display:none}
 .nav .nb{
   min-width:18px;height:18px;border-radius:9px;
   background:var(--st-rejected-bg);color:var(--st-rejected-tx);
@@ -398,6 +423,13 @@ body.banner-open .shell{margin-top:40px}
   </div>
 </div>
 
+<!-- WORKSPACE PICKER -->
+<div id="ws-picker">
+  <div class="wsp-title">Choose a workspace</div>
+  <div class="wsp-sub">Select which discipline you want to work in</div>
+  <div class="wsp-grid" id="wsp-grid"></div>
+</div>
+
 <!-- APP SHELL -->
 <div class="topbar">
   <button class="tb-toggle" onclick="toggleSB()" title="Toggle sidebar">
@@ -421,6 +453,12 @@ body.banner-open .shell{margin-top:40px}
 <div class="layout">
   <aside class="sidebar" id="sb">
     <div class="sb-scroll">
+
+      <div class="sb-ws" id="sb-ws" onclick="openWorkspacePicker()" title="Switch workspace" style="display:none">
+        <span id="sb-ws-icon"></span>
+        <span class="lbl"><span class="nm" id="sb-ws-name">MEP</span> <span style="color:var(--text-dim)">workspace</span></span>
+        <span class="lbl" id="sb-ws-switch" style="margin-left:auto;font-size:11px;color:var(--accent)">switch ⤵</span>
+      </div>
 
       <div class="sb-section-label">Overview</div>
       <div class="nav active perm-gate" id="nav-dashboard" data-label="Dashboard" data-perm="view_dashboard" onclick="go('dashboard')">
@@ -618,6 +656,31 @@ const SESSION_KEY = 'mep_session';
 
 let currentUser = null;
 let accessToken = null;
+
+// ── Discipline workspaces ──
+const WORKSPACES = {
+  mep:   { key:'mep',   label:'MEP',            icon:'<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/>', desc:'Mechanical · Electrical · Plumbing', live:true  },
+  civil: { key:'civil', label:'Civil',          icon:'<path d="M3 21h18"/><path d="M6 21V8l6-4 6 4v13"/><path d="M10 21v-5h4v5"/>', desc:'Structural · Grouting · Finishes',   live:true  },
+  infra: { key:'infra', label:'Infrastructure', icon:'<path d="M4 20 8 4"/><path d="M20 20 16 4"/><path d="M12 6v2M12 11v2M12 16v2"/>', desc:'Roads · Utilities · External works', live:false },
+};
+function wsIconSvg(key, size){
+  const w = WORKSPACES[key]; if (!w) return '';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${w.icon}</svg>`;
+}
+let activeWorkspace = null;     // currently entered workspace key
+let allowedWorkspaces = [];     // workspace keys this user may enter (live only)
+// Pages restricted to specific workspaces. Anything NOT listed shows in ALL workspaces.
+// (MEP-only pages stay out of the Civil/Infra workspaces; flip to add 'civil' as each is scoped.)
+const PAGE_WS = {
+  dashboard:['mep'], cluster_tracker:['mep'], ncr_sor:['mep'], target_list:['mep'],
+  obs:['mep'], obs_config:['mep'], qs:['mep'], progress_entry:['mep'],
+  clearance_release:['mep'],
+  // Keyplans are shared — they scope their WIR overlay to the active workspace (civil shows civil).
+};
+function pageInWorkspace(pageId, ws){ const a = PAGE_WS[pageId]; return !a || a.includes(ws); }
+// Landing page per workspace (MEP keeps the dashboard; others land on the WIR viewer until a
+// discipline-specific dashboard exists).
+function workspaceLanding(ws){ return ws === 'mep' ? 'dashboard' : 'wir_viewer'; }
 // Target origin for postMessage to iframes. On http(s) we pin to our own origin
 // (hardening); on file:// the origin is opaque ("null") and pinning blocks
 // delivery, so fall back to '*' for local testing.
@@ -870,11 +933,80 @@ function bootApp(profile, token) {
   try { if (localStorage.getItem('mep_sb_col')) { sbCollapsed = true; document.getElementById('sb').classList.add('collapsed'); } } catch(e) {}
   try { const t = localStorage.getItem('mep_theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e) {}
 
-  // Start — go to dashboard first, then preload everything else silently
+  // Start — pick a workspace, then preload everything else silently
   loadBadges();
   setInterval(loadBadges, 60000);
-  go('dashboard');
+  initWorkspace(profile);
   preloadAllFrames();
+}
+
+// ── WORKSPACES ──
+// Determine which workspaces this user may enter, then either auto-enter the only one,
+// reuse the last-chosen one, or show the picker.
+function initWorkspace(profile) {
+  const perms = profile.permissions || [];
+  const isAdmin = perms.includes('manage_users') && perms.includes('manage_system');
+  const acc = profile.workspace_access; // text[] | null
+  const liveKeys = Object.keys(WORKSPACES).filter(k => WORKSPACES[k].live);
+  if (isAdmin || !acc || !acc.length || acc.includes('all')) {
+    allowedWorkspaces = liveKeys.slice();
+  } else {
+    allowedWorkspaces = acc.filter(k => liveKeys.includes(k));
+    if (!allowedWorkspaces.length) allowedWorkspaces = liveKeys.slice(); // fail-open to avoid lockout
+  }
+  document.getElementById('sb-ws-switch').style.display = allowedWorkspaces.length > 1 ? '' : 'none';
+
+  let stored = null;
+  try { stored = localStorage.getItem('mep_workspace'); } catch(e) {}
+  if (stored && allowedWorkspaces.includes(stored)) { enterWorkspace(stored); return; }
+  if (allowedWorkspaces.length === 1) { enterWorkspace(allowedWorkspaces[0]); return; }
+  openWorkspacePicker();
+}
+
+function renderWorkspacePicker() {
+  const grid = document.getElementById('wsp-grid');
+  // Show allowed live workspaces, plus any "coming soon" ones (disabled) for context
+  const keys = [...new Set([...allowedWorkspaces, ...Object.keys(WORKSPACES).filter(k => !WORKSPACES[k].live)])];
+  grid.innerHTML = keys.map(k => {
+    const w = WORKSPACES[k]; if (!w) return '';
+    const enabled = w.live && allowedWorkspaces.includes(k);
+    return `<div class="wsp-card${enabled?'':' disabled'}" ${enabled?`onclick="enterWorkspace('${k}')"`:''}>
+      <div class="wsp-ic">${wsIconSvg(k,30)}</div>
+      <div class="wsp-nm">${w.label}</div>
+      <div class="wsp-ds">${w.desc}</div>
+      <span class="wsp-badge ${w.live?'wsp-live':'wsp-soon'}">${w.live?(enabled?'Enter':'No access'):'Coming soon'}</span>
+    </div>`;
+  }).join('');
+}
+
+function openWorkspacePicker() {
+  if (allowedWorkspaces.length <= 1) return; // nothing to switch to
+  renderWorkspacePicker();
+  document.getElementById('ws-picker').classList.add('show');
+}
+
+function enterWorkspace(ws) {
+  if (!allowedWorkspaces.includes(ws)) return;
+  const switched = activeWorkspace && activeWorkspace !== ws;
+  activeWorkspace = ws;
+  try { localStorage.setItem('mep_workspace', ws); } catch(e) {}
+  // Keyplans read kp_ws (shared sessionStorage) to scope their WIR overlay to this workspace.
+  try { sessionStorage.setItem('kp_ws', ws); } catch(e) {}
+  document.getElementById('ws-picker').classList.remove('show');
+  // Reload any already-loaded keyplan iframes so they re-fetch with the new discipline scope.
+  document.querySelectorAll('.content iframe').forEach(f => {
+    if (f.id && f.id.indexOf('frame-keyplan_') === 0 && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
+  });
+  // Sidebar indicator
+  const sbWs = document.getElementById('sb-ws');
+  sbWs.style.display = '';
+  document.getElementById('sb-ws-icon').innerHTML = wsIconSvg(ws,16);
+  document.getElementById('sb-ws-name').textContent = WORKSPACES[ws].label;
+  // Re-apply nav (perm + workspace) and broadcast context to iframes
+  applyPermissions(currentUser?.permissions || []);
+  broadcastToFrames({ type: 'workspace', workspace: ws });
+  // Land on a page valid for this workspace
+  if (!currentPage || !pageInWorkspace(currentPage, ws)) go(workspaceLanding(ws));
 }
 
 // ── PRELOAD all iframes silently in background after login ──
@@ -933,6 +1065,21 @@ function applyPermissions(permissions) {
     const hasAny = reqList.length === 0 || reqList.some(p => permissions.includes(p));
     el.classList.toggle('perm-hidden', !!(req && !isSuperAdmin && !hasAny));
   });
+  // Workspace gate: hide pages that don't belong to the active workspace
+  if (activeWorkspace) {
+    document.querySelectorAll('.nav[id^="nav-"]').forEach(el => {
+      const pageId = el.id.replace('nav-', '');
+      el.classList.toggle('ws-hidden', !pageInWorkspace(pageId, activeWorkspace));
+    });
+  }
+  // Hide section labels whose items are all hidden
+  document.querySelectorAll('.sb-section-label').forEach(lbl => {
+    let anyVisible = false;
+    for (let n = lbl.nextElementSibling; n && !n.classList.contains('sb-section-label'); n = n.nextElementSibling) {
+      if (n.classList.contains('nav') && !n.classList.contains('perm-hidden') && !n.classList.contains('ws-hidden')) { anyVisible = true; break; }
+    }
+    lbl.classList.toggle('ws-hidden', !anyVisible);
+  });
 }
 
 function hasPerm(code) {
@@ -973,6 +1120,11 @@ async function tryRestoreSession() {
 function go(pageId) {
   const page = PAGES[pageId];
   if (!page) return;
+  // Don't allow navigating into a page outside the active workspace — bounce to its landing page
+  if (activeWorkspace && !pageInWorkspace(pageId, activeWorkspace)) {
+    const land = workspaceLanding(activeWorkspace);
+    if (pageId !== land) return go(land);
+  }
 
   document.querySelectorAll('.nav').forEach(n => n.classList.remove('active'));
   const navEl = document.getElementById('nav-' + pageId);
@@ -1223,6 +1375,9 @@ window.addEventListener('message', function(e) {
         frame.contentWindow.postMessage({ type: 'theme', theme: theme }, FRAME_TGT);
         if (accessToken && currentUser) {
           frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT);
+        }
+        if (activeWorkspace) {
+          frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT);
         }
       }
     } catch(ex) {}

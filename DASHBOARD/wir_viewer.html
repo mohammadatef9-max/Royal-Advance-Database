@@ -289,6 +289,7 @@ input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:po
     <option value="">All Disciplines</option>
     <option value="mechanical">Mechanical</option>
     <option value="electrical">Electrical</option>
+    <option value="civil">Civil</option>
   </select>
   <select id="f-sub" onchange="onFilterChange()"><option value="">All Subcontractors</option></select>
   <select id="f-rev" onchange="onFilterChange()">
@@ -609,7 +610,22 @@ init();
         init();
       }
     }
+    if (e.data.type === 'workspace') { applyWorkspaceFilter(e.data.workspace); }
   });
+  // Lock the discipline filter to the active workspace so a Civil workspace never shows MEP rows.
+  function applyWorkspaceFilter(ws) {
+    const sel = document.getElementById('f-disc'); if (!sel) return;
+    if (ws === 'civil') {
+      [...sel.options].forEach(o => { o.hidden = (o.value !== 'civil'); });
+      sel.value = 'civil';
+    } else if (ws === 'mep') {
+      [...sel.options].forEach(o => { o.hidden = (o.value === 'civil'); });
+      if (sel.value === 'civil') sel.value = '';
+    } else {
+      [...sel.options].forEach(o => { o.hidden = false; });
+    }
+    try { if (typeof applyClientFilters === 'function' && _loadedOk) applyClientFilters(); } catch(e) {}
+  }
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
 })();
 </script>

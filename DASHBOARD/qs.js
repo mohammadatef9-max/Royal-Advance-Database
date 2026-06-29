@@ -159,7 +159,7 @@ async function loadScopes() {
   // Use explicit is_template filters in the query so the DB does the separation —
   // avoids any risk of templates leaking into the scope list if is_template is
   // ever returned as null/undefined by PostgREST (e.g. column visibility, old cache).
-  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template';
+  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template,is_variation,vo_ref,parent_scope_id';
   const [realScopes, templates, pcs, vos, pcScopes] = await Promise.all([
     fa(`qs_scopes?select=${SCOPE_COLS}&is_template=eq.false&order=subcontractor_name.asc`),
     fa('qs_scopes?select=id,subcontractor_name,scope_title,is_template&is_template=eq.true&order=subcontractor_name.asc'),
@@ -211,15 +211,26 @@ function renderScopeList() {
     const scopes = groups[name];
     const hasSelected = scopes.some(s => selectedScope?.id === s.id);
     const open = searching || hasSelected || !!expandedSubs[name];
-    const cards = !open ? '' : scopes.map(s => {
+    const renderCard = (s, isVar) => {
       const lp = s.latestPc;
       const badgeClass = lp ? lp.status : 'none';
       const badgeText = lp ? `PC#${lp.pc_number} · ${lp.period_label}` : 'No PCs yet';
-      return `<div class="scope-card sub-scope${selectedScope?.id===s.id?' active':''}" onclick="event.stopPropagation();selectScope(${s.id})">
-        <div class="sc-sub" style="color:var(--tx);font-weight:600">${escH(s.scope_title||'(untitled scope)')}</div>
+      const label = isVar
+        ? `<span style="color:var(--accent);font-weight:700;font-family:monospace">${escH(s.vo_ref||'VO')}</span> ${escH(s.scope_title||'')}`
+        : escH(s.scope_title||'(untitled scope)');
+      return `<div class="scope-card sub-scope${selectedScope?.id===s.id?' active':''}"${isVar?' style="margin-left:14px;border-left:2px solid var(--accent-soft,#243044)"':''} onclick="event.stopPropagation();selectScope(${s.id})">
+        <div class="sc-sub" style="color:var(--tx);font-weight:600">${label}</div>
         <div class="sc-meta"><span class="sc-badge ${badgeClass}">${escH(badgeText)}</span></div>
       </div>`;
-    }).join('');
+    };
+    // Base scopes first, each followed by its variation children (indented). Orphan VOs fall back to group level.
+    const bases = scopes.filter(s => !s.is_variation);
+    const varsByParent = {};
+    scopes.filter(s => s.is_variation).forEach(s => { (varsByParent[s.parent_scope_id] = varsByParent[s.parent_scope_id] || []).push(s); });
+    const cards = !open ? '' : (
+      bases.map(b => renderCard(b,false) + (varsByParent[b.id]||[]).map(v => renderCard(v,true)).join('')).join('') +
+      scopes.filter(s => s.is_variation && !bases.some(b => b.id === s.parent_scope_id)).map(v => renderCard(v,true)).join('')
+    );
     return `<div class="sub-group">
       <div class="sub-head${hasSelected?' active':''}" onclick="toggleSub(${gi})">
         <span class="sub-caret">${open?'▾':'▸'}</span>
@@ -595,7 +606,9 @@ async function selectScope(id) {
   document.getElementById('btn-delete-scope').style.display = isSuperAdmin ? '' : 'none';
   document.getElementById('btn-edit-scope').style.display = canAdmin ? '' : 'none';
   document.getElementById('btn-add-scope').style.display = (canManage||canAdmin) ? '' : 'none';
-  document.getElementById('btn-variations').style.display = (canManage||canAdmin) ? '' : 'none';
+  document.getElementById('btn-add-vo').style.display = (canManage||canAdmin) ? '' : 'none';
+  // Header sub-line: show the VO ref for variation scopes
+  document.getElementById('sh-sub').textContent = (selectedScope.is_variation && selectedScope.vo_ref ? selectedScope.vo_ref + ' · ' : '') + (selectedScope.scope_title || '');
   document.getElementById('btn-config-scope').style.display = canAdmin ? '' : 'none';
   document.getElementById('btn-new-pc').style.display = (canManage||canAdmin) ? '' : 'none';
   document.getElementById('pc-area').style.display = 'none';
@@ -680,12 +693,16 @@ async function autoDetectScopeVillas() {
     billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
   } catch(e) {}
 
+  // Count only NON-variation base scopes as ambiguous siblings — variation scopes have their own
+  // distinct activity (WIR) codes, so WIR detection can tell them apart and they don't force the
+  // billing-only fallback. (A base scope + its VO children still WIR-detects normally.)
   const siblings = allScopes.filter(s =>
-    (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
-    (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
+    !s.is_variation && (
+      (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
+      (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name))
   ).length;
 
-  // Multi-scope sub: WIR can't distinguish scopes → billing-only once billed, else empty
+  // Multiple base scopes for one sub: WIR can't distinguish them → billing-only once billed, else empty
   if (siblings > 1) return billedIds.length ? await _villasByIds(billedIds) : [];
 
   // Single-scope sub: union of billed villas + WIR-detected so new approvals always appear
@@ -976,6 +993,7 @@ function getVillaRate(villa_type_label) {
   const vt = scopeVillaTypes.find(t => t.villa_type_label === villa_type_label);
   return vt ? parseFloat(vt.rate_aed) : 0;
 }
+
 
 // ══════════════════════════════════════════════
 // MULTI-SCOPE SECTION ENGINE (parallel, context-based — does not touch the globals path)
@@ -1768,7 +1786,7 @@ function renderPaymentSummaryMulti() {
   let bodyRows = '';
   sections.forEach((sec, si) => {
     const sc = sec.scope;
-    const label = (sc.sca_ref ? escH(sc.sca_ref)+': ' : '') + escH(sc.scope_title || sc.subcontractor_name || ('Scope '+(si+1)));
+    const label = (sc.is_variation && sc.vo_ref ? escH(sc.vo_ref)+': ' : (sc.sca_ref ? escH(sc.sca_ref)+': ' : '')) + escH(sc.scope_title || sc.subcontractor_name || ('Scope '+(si+1)));
     bodyRows += `<tr class="section-row"><td class="center">${si+1}</td><td colspan="14">${label}</td></tr>`;
     sec.entries.forEach(t => {
       // Per cluster/scope: show detected villas in this scope (not total qty_contracted)
@@ -2276,26 +2294,44 @@ async function _loadSubsList() {
   }
 }
 
-async function openNewScope(prefillSub) {
+let _nsVoParentPreset = null;   // preset parent scope id when opening "Add VO"
+
+// Fill the "Variation of (base scope)" dropdown with non-variation scopes of the typed subcontractor.
+function nsVoParentOptions(subName, selectedParentId, excludeId) {
+  const sel = document.getElementById('ns-vo-parent'); if (!sel) return;
+  const bases = allScopes.filter(s => !s.is_variation && !s.is_template && s.id !== excludeId &&
+    (subName ? s.subcontractor_name === subName : true));
+  sel.innerHTML = bases.length
+    ? bases.map(b => `<option value="${b.id}" ${b.id===selectedParentId?'selected':''}>${escH((b.sca_ref?b.sca_ref+': ':'')+(b.scope_title||('Scope '+b.id)))}</option>`).join('')
+    : '<option value="">— no base scope for this subcontractor —</option>';
+}
+function onNsVoToggle() {
+  const on = document.getElementById('ns-is-vo').checked;
+  document.getElementById('ns-vo-fields').style.display = on ? '' : 'none';
+  if (on) nsVoParentOptions((document.getElementById('ns-sub-search').value||'').trim(), _nsVoParentPreset, editScopeMode ? selectedScope.id : null);
+}
+
+async function openNewScope(prefillSub, voParent) {
   await _loadSubsList();
   editScopeMode = false;
-  document.getElementById('ns-modal-title').textContent = prefillSub ? ('Add Scope · ' + prefillSub) : 'New Subcontractor Scope';
-  document.getElementById('ns-submit-btn').textContent = 'Create Scope';
+  _nsVoParentPreset = voParent ? voParent.id : null;
+  document.getElementById('ns-modal-title').textContent = voParent ? ('Add Variation · ' + (voParent.scope_title||prefillSub||'')) : (prefillSub ? ('Add Scope · ' + prefillSub) : 'New Subcontractor Scope');
+  document.getElementById('ns-submit-btn').textContent = voParent ? 'Create Variation' : 'Create Scope';
   document.getElementById('ns-sub-search').value = prefillSub || '';
   document.getElementById('ns-sub-dropdown').style.display = 'none';
   document.getElementById('ns-display-name').value = '';
   document.getElementById('ns-scope').value = '';
   document.getElementById('ns-sca').value = '';
   document.getElementById('ns-package').value = '';
+  document.getElementById('ns-is-vo').checked = !!voParent;
+  document.getElementById('ns-vo-ref').value = '';
+  onNsVoToggle();
   document.getElementById('ns-msg').className = 'form-msg';
   document.getElementById('modal-new-scope').style.display = 'flex';
   setTimeout(() => {
-    if (prefillSub) {
-      document.getElementById('ns-scope').focus(); // subcontractor already chosen → go to Scope of Works
-    } else {
-      document.getElementById('ns-sub-search').focus();
-      filterSubOptions(); // explicitly show full list on open
-    }
+    if (voParent) document.getElementById('ns-vo-ref').focus();
+    else if (prefillSub) document.getElementById('ns-scope').focus();
+    else { document.getElementById('ns-sub-search').focus(); filterSubOptions(); }
   }, 80);
 }
 
@@ -2303,6 +2339,7 @@ async function openEditScope() {
   if (!canAdmin) return;
   await _loadSubsList();
   editScopeMode = true;
+  _nsVoParentPreset = selectedScope.parent_scope_id || null;
   document.getElementById('ns-modal-title').textContent = 'Edit Scope';
   document.getElementById('ns-submit-btn').textContent = 'Save Changes';
   document.getElementById('ns-sub-search').value = selectedScope.subcontractor_name || '';
@@ -2311,6 +2348,9 @@ async function openEditScope() {
   document.getElementById('ns-scope').value = selectedScope.scope_title || '';
   document.getElementById('ns-sca').value = selectedScope.sca_ref || '';
   document.getElementById('ns-package').value = selectedScope.package || '';
+  document.getElementById('ns-is-vo').checked = !!selectedScope.is_variation;
+  document.getElementById('ns-vo-ref').value = selectedScope.vo_ref || '';
+  onNsVoToggle();
   document.getElementById('ns-msg').className = 'form-msg';
   document.getElementById('modal-new-scope').style.display = 'flex';
 }
@@ -2342,6 +2382,7 @@ function filterSubOptions() {
 function selectSubcontractor(name) {
   document.getElementById('ns-sub-search').value = name;
   document.getElementById('ns-sub-dropdown').style.display = 'none';
+  if (document.getElementById('ns-is-vo')?.checked) nsVoParentOptions(name, _nsVoParentPreset, editScopeMode ? selectedScope.id : null);
 }
 
 async function submitScope() {
@@ -2351,6 +2392,13 @@ async function submitScope() {
   if (!name) { showMsg(msg,'err','Subcontractor name is required.'); return; }
   if (!scope) { showMsg(msg,'err','Scope of Works is required.'); return; }
   const displayName = (document.getElementById('ns-display-name').value || '').trim();
+  // Variation fields
+  const isVo = document.getElementById('ns-is-vo').checked;
+  const voRef = (document.getElementById('ns-vo-ref').value || '').trim();
+  const voParent = parseInt(document.getElementById('ns-vo-parent').value) || null;
+  if (isVo && !voRef) { showMsg(msg,'err','VO Ref is required for a variation.'); return; }
+  if (isVo && !voParent) { showMsg(msg,'err','Select the base scope this VO belongs to.'); return; }
+  if (isVo && editScopeMode && voParent === selectedScope.id) { showMsg(msg,'err','A VO cannot be a variation of itself.'); return; }
   const body = {
     subcontractor_name: name,
     display_name: displayName || null,
@@ -2358,6 +2406,9 @@ async function submitScope() {
     scope_title: scope,
     sca_ref: (document.getElementById('ns-sca').value || '').trim(),
     package: (document.getElementById('ns-package').value || '').trim(),
+    is_variation: isVo,
+    vo_ref: isVo ? voRef : null,
+    parent_scope_id: isVo ? voParent : null,
   };
   const saveBtn = document.getElementById('ns-submit-btn');
   if (saveBtn) saveBtn.disabled = true;
@@ -2504,21 +2555,25 @@ function openNewPC() {
   document.getElementById('npc-msg').className = 'form-msg';
   document.getElementById('npc-historical').checked = false;
   document.getElementById('npc-submit-btn').textContent = 'Create PC';
-  // Scope multi-select (sibling scopes of the same subcontractor)
+  // Scope multi-select (sibling scopes of the same subcontractor). VO scopes of the current
+  // base scope are auto-included (pre-checked) so its variations appear on every PC.
   const sib = allScopes.filter(s => s.is_active !== false && (
     (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
     (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
   ));
-  newPcScopeIds = [selectedScope.id];
+  const voChildIds = sib.filter(s => s.is_variation && s.parent_scope_id === selectedScope.id).map(s => s.id);
+  newPcScopeIds = [...new Set([selectedScope.id, ...voChildIds])];
   const row = document.getElementById('npc-scopes-row');
   const list = document.getElementById('npc-scopes-list');
   if (sib.length > 1) {
     row.style.display = '';
     list.innerHTML = sib.map(s => {
       const isPrimary = s.id === selectedScope.id;
+      const checked = newPcScopeIds.includes(s.id);
+      const tag = s.is_variation ? `<span style="color:var(--accent);font-weight:700;font-family:monospace">${escH(s.vo_ref||'VO')}</span> ` : '';
       return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:${isPrimary?'default':'pointer'}">
-        <input type="checkbox" value="${s.id}" ${isPrimary?'checked disabled':''} onchange="toggleNpcScope(${s.id},this.checked)" style="width:14px;height:14px">
-        <span><strong>${escH(s.sca_ref||s.scope_title||('Scope '+s.id))}</strong>${(s.scope_title&&s.sca_ref)?' · '+escH(s.scope_title):''}${isPrimary?' <span style="color:var(--tx3)">(current)</span>':''}</span>
+        <input type="checkbox" value="${s.id}" ${isPrimary?'checked disabled':(checked?'checked':'')} onchange="toggleNpcScope(${s.id},this.checked)" style="width:14px;height:14px">
+        <span>${tag}<strong>${escH(s.sca_ref||s.scope_title||('Scope '+s.id))}</strong>${(s.scope_title&&s.sca_ref)?' · '+escH(s.scope_title):''}${isPrimary?' <span style="color:var(--tx3)">(current)</span>':''}</span>
       </label>`;
     }).join('');
   } else {
