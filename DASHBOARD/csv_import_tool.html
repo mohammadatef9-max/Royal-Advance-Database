@@ -1529,7 +1529,7 @@ async function dcStartUpload(tab){
     const [clusters,villas,acts,clrs]=await Promise.all([
       sbGet('clusters?select=id,code'),
       sbGetAll('villas?select=id,villa_no,cluster_id'),
-      tab==='wir'?sbGetAll('activities?select=id,activity_code&is_active=eq.true'):Promise.resolve([]),
+      tab==='wir'?sbGetAll('activities?select=id,activity_code&is_active=eq.true&discipline=in.(mechanical,electrical)'):Promise.resolve([]),
       tab==='clr'?sbGetAll('clearance_activities?select=id,clearance_code&is_active=eq.true'):Promise.resolve([]),
     ]);
     const cm={};clusters.forEach(c=>cm[c.id]=c.code);
@@ -1674,11 +1674,16 @@ async function dcStartUpload(tab){
 // ─── CIVIL WIR IMPORT (one workbook · one sheet per activity) ──────────────
 const dcCiv={rows:[],sheets:0,removed:0,name:''};
 const CIV_FIELD_BY_HDR={
-  'discipline':'code','description':'activity','location':'cluster',
+  'activity code':'code','activity':'code',   // col [4] — the real WIR/activity code
+  'description':'name',                        // col [5] — activity name
+  'discipline':'disc_raw',                     // col [11] — trade group (CI/GT/ST/PC/AR)
+  'location':'cluster',
   'villa no/ building':'villa','villa no/building':'villa','villa no':'villa','villa no.':'villa',
   'sub- contractor name':'sub','sub-contractor name':'sub','sub contractor name':'sub',
   'submitted date':'submitted','response date':'response','status':'status','revision':'revision'
 };
+// Strip the villa/cluster-specific tail so an activity code maps to a clean reusable name.
+function civCleanName(d){ d=(d||'').replace(/\s+/g,' ').trim(); var n=d.replace(/,?\s*(cluster|zone|villa|plot|sector|level)\b.*$/i,'').trim(); return (n||d).slice(0,140); }
 function dcCivDragOver(e){e.preventDefault();document.getElementById('dz-civ').classList.add('drag-over');}
 function dcCivDragLeave(){document.getElementById('dz-civ').classList.remove('drag-over');}
 function dcCivDrop(e){e.preventDefault();document.getElementById('dz-civ').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)dcProcessCivilFile(f);}
@@ -1722,7 +1727,7 @@ function dcProcessCivilFile(file){
           const villa=get('villa'), code=get('code'), st=get('status');
           if(!villa||!code){removed++;continue;}
           if(st==='E'||st==='e'){removed++;continue;}
-          allRows.push({code,activity:get('activity'),cluster:get('cluster'),villa,sub:get('sub'),status:st,submitted:get('submitted'),response:get('response'),revision:get('revision'),_sheet:sn});
+          allRows.push({code,name:civCleanName(get('name')),disc_raw:get('disc_raw'),cluster:get('cluster'),villa,sub:get('sub'),status:st,submitted:get('submitted'),response:get('response'),revision:get('revision'),_sheet:sn});
         }
       }
       if(!sheetsUsed) throw new Error('No civil activity sheets found (need Activity Code + Discipline + Status headers).');
@@ -1751,7 +1756,7 @@ function dcRenderCivPreview(){
   document.getElementById('scv-removed').textContent=dcCiv.removed;
   document.getElementById('scv-clean').textContent=rows.length;
   document.getElementById('prev-sub-civ').textContent=dcCiv.name?(dcCiv.name+' · '+rows.length+' rows'):'Drop the civil workbook above';
-  const cols=[['_sheet','Sheet'],['code','Code'],['activity','Description'],['cluster','Cluster'],['villa','Villa'],['sub','Sub-Contractor'],['status','Status'],['submitted','Submitted'],['response','Response'],['revision','Rev']];
+  const cols=[['_sheet','Sheet'],['disc_raw','Group'],['code','Code'],['name','Activity'],['cluster','Cluster'],['villa','Villa'],['sub','Sub-Contractor'],['status','Status'],['submitted','Submitted'],['response','Response'],['revision','Rev']];
   let html='<table class="preview-table"><thead><tr>'+cols.map(c=>'<th>'+c[1]+'</th>').join('')+'</tr></thead><tbody>';
   rows.slice(0,8).forEach(r=>{html+='<tr>'+cols.map(c=>'<td>'+dcEsc(r[c[0]]||'—')+'</td>').join('')+'</tr>';});
   html+='</tbody></table>';
@@ -1779,6 +1784,21 @@ async function dcStartCivilUpload(){
     villas.forEach(v=>{const cl=cm[v.cluster_id]||'';villaMap[cl+'_'+v.villa_no]=v.id;villaMap[cl.replace('C','')+'_'+v.villa_no]=v.id;});
     acts.forEach(a=>actMap[a.activity_code.trim()]=a.id);
     dcAddLog('civ','✅ '+villas.length+' villas · '+acts.length+' civil activities loaded','info');
+
+    // Auto-create any civil activity codes that aren't in the catalogue yet (code = col [4]),
+    // so Reference Data stays in sync with the file and rows match.
+    const newActs={};
+    rows.forEach(r=>{const c=(r.code||'').trim(); if(c && !actMap[c] && !newActs[c]) newActs[c]=(r.name||c);});
+    const newCodes=Object.keys(newActs);
+    if(newCodes.length){
+      dcAddLog('civ','➕ Creating '+newCodes.length+' new civil activities…','info');
+      const payload=newCodes.map(c=>({activity_code:c,activity_name:newActs[c],discipline:'civil',activity_type:'wir',is_active:true}));
+      await fetch(SB+'/rest/v1/activities?on_conflict=activity_code,discipline',{method:'POST',headers:getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),body:JSON.stringify(payload)});
+      // Re-load so every civil code (new + existing) has an id
+      const acts2=await sbGetAll('activities?select=id,activity_code&is_active=eq.true&discipline=eq.civil');
+      actMap={}; acts2.forEach(a=>actMap[a.activity_code.trim()]=a.id);
+      dcAddLog('civ','✅ Catalogue now has '+acts2.length+' civil activities','info');
+    }
   }catch(e){dcAddLog('civ','❌ Reference data error: '+e.message,'err');btn.disabled=false;return;}
 
   dcAddLog('civ','🗑 Clearing existing civil WIR records…','info');
@@ -1802,9 +1822,9 @@ async function dcStartCivilUpload(){
     if(ms==='matched')matched++;else unmatched++;
     const rev=r.revision||null;
     records.push({import_batch_id:batchId,villa_id:vid||null,activity_id:aid||null,record_type:'wir',
-      raw_activity_code:code,raw_villa_no:villa,raw_cluster:cluster,raw_activity_name:r.activity||null,
+      raw_activity_code:code,raw_villa_no:villa,raw_cluster:cluster,raw_activity_name:r.name||null,
       raw_villa_type:null,raw_subcontractor:r.sub||null,raw_status:r.status||null,
-      normalised_status:normaliseWir(r.status),discipline:'civil',discipline_raw:code,
+      normalised_status:normaliseWir(r.status),discipline:'civil',discipline_raw:r.disc_raw||null,
       submitted_date:safeDate(r.submitted),response_date:safeDate(r.response),
       revision:rev,revision_no:rev?parseInt(rev.replace(/[^0-9]/g,''))||0:null,source_row_no:i+1,match_status:ms});
     if(records.length>=CHUNK||(i===rows.length-1&&records.length>0)){

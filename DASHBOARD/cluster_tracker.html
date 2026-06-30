@@ -377,6 +377,7 @@ body.in-shell header { display: none !important; }
   <div class="disc-group">
     <button class="btn-disc active" id="disc-mech" onclick="setDisc('mech')"><span class="disc-dot"></span>Mechanical</button>
     <button class="btn-disc" id="disc-elec" onclick="setDisc('elec')"><span class="disc-dot" style="background:var(--st-progress-tx)"></span>Electrical</button>
+    <button class="btn-disc" id="disc-civil" onclick="setDisc('civil')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>Civil</button>
   </div>
   <!-- Cluster -->
   <select id="fcl" onchange="render()">
@@ -814,14 +815,19 @@ const COLS_ELEC=[
   {key:'e_earth',      label:'Earth Pit\n4271',             type:'pair', actCodes:['4271'],visible:true},
 ];
 
+// Civil starts with NO activity columns — the user configures them via the column manager.
+const COLS_CIVIL=[];
+
 const WS=[{v:'approved',l:'Approved',c:'#34d399',bg:'#064e3b'},{v:'rejected',l:'Rejected',c:'#f87171',bg:'#7f1d1d'},{v:'under_review',l:'Under Review',c:'#c7d2fe',bg:'#312e81'},{v:'not_submitted',l:'Not Submitted',c:'#4b5563',bg:'#1f2937'}];
 const CS=[{v:'fully_approved',l:'Fully Approved',c:'#34d399',bg:'#064e3b'},{v:'not_approved',l:'Not Approved',c:'#f87171',bg:'#7f1d1d'},{v:'pending',l:'Pending',c:'#fcd34d',bg:'#78350f'},{v:'not_submitted',l:'Not Submitted',c:'#4b5563',bg:'#1f2937'}];
 const PS=[{v:'completed',l:'Completed',c:'#34d399',bg:'#064e3b'},{v:'in_progress',l:'In Progress',c:'#fcd34d',bg:'#78350f'},{v:'not_started',l:'Not Started',c:'#4b5563',bg:'#1f2937'}];
 
 const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water supply':'3100','high level ppr':'3100','hl drainage installation':'3060','hl drainage install':'3060','high level drainage':'3060','drainage installation':'3060','drainage':'3060','leak test drainage h/l':'3070','leak test drainage hl':'3070','drainage leak test':'3070','gravity leak test':'3070','leak test':'3070','acoustic':'3170','acoustic lagging':'3170','acoustic wir':'3170','ppr pressure test':'3110','pressure test water supply':'3110','ppr press test':'3110','ppr insulation':'3180','hot water insulation':'3180','insulation':'3180','copper installation':'3210','ac copper installation':'3210','hl ac refrigerant':'3210','copper pressure test':'3220','ac copper pressure':'3220','duct dry area':'3190','pi duct dry':'3190','dry area duct':'3190','duct dry':'3190','duct wet area':'3200','pi duct wet':'3200','wet area duct':'3200','duct wet':'3200','exhaust fan':'3290','exhaust fan installation':'3290','exhaust':'3290','fcu installation':'3300','fcu install':'3300','vrf indoor':'3300','fcu':'3300','shaft closing':'3150','shaft closing villa':'3150','shaft':'3150','cdp installation':'3270','cdp':'3270','cdp wir':'3270','rain water':'3000','underground drainage':'3000','ugd':'3000','pex pipes':'3050','pex installation':'3050','gf pex':'3050','pex':'3050','drain pipe in wall':'3060','drain pipe wall':'3060','suspension dry':'3190G','suspension dry area':'3190G','gf suspension dry':'3190G','suspension wet':'3200G','suspension wet area':'3200G','gf suspension wet':'3200G','board closing dry':'3520','fc closing dry':'3520','false ceiling dry':'3520','board closing wet':'3530','false ceiling wet':'3530','false ceiling wet area':'3530','bathtub':'3590','bathtub installation':'3590','bathtub leak test':'3590','wc':'3140','wc flush tank':'3140','wc stand':'3140','water closet':'3140','roof foundation':'3540','roof water supply':'3540','vrf outdoor':'3560','vrf outdoor unit':'3560','outdoor unit':'3560','solar panel':'3301','solar water heater':'3301','balcony drain':'3162','rain water outlet':'3162','balcony rainwater':'3162','balcony/rainwater outlet':'3162','leak test balcony':'3162','balcony outlet':'3162'};
 
-let disc='mech';
-let COLS=COLS_MECH.map(c=>({...c}));
+// Active workspace (shared with the shell + keyplans via sessionStorage). Civil → civil discipline.
+let CT_WS=null; try{CT_WS=sessionStorage.getItem('kp_ws');}catch(e){}
+let disc = CT_WS==='civil' ? 'civil' : 'mech';
+let COLS=(disc==='civil'?COLS_CIVIL:COLS_MECH).map(c=>({...c}));
 let villas=[],wirD={},wirSubD={},wirMetaD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
 let ncrActByVilla=new Map(); // villa_id -> Set of activity_codes with open NCR/SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
@@ -910,14 +916,14 @@ async function saveDefaultLayout(){
       await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:json})});
     }
     closeMgr();render();
-    alert('Default '+(disc==='mech'?'Mechanical':'Electrical')+' view saved — everyone will see it on their next refresh.');
+    alert('Default '+(disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil')+' view saved — everyone will see it on their next refresh.');
   }catch(e){alert('Failed to save default: '+e.message);}
 }
 
 // Reset the live view back to the current global default (or the built-in defaults if none set)
 async function resetToDefault(){
   const ok=await loadLayout(disc);
-  if(!ok){COLS=disc==='mech'?COLS_MECH.map(c=>({...c})):COLS_ELEC.map(c=>({...c}));}
+  if(!ok){COLS=(disc==='mech'?COLS_MECH:disc==='elec'?COLS_ELEC:COLS_CIVIL).map(c=>({...c}));}
   buildCmList();render();
 }
 async function loadLayout(d){
@@ -927,7 +933,7 @@ async function loadLayout(d){
     if(!rows.length)return false;
     const saved=JSON.parse(rows[0].layout);
     // Apply saved layout: use saved order/visibility/labels/codes but merge in any new default cols
-    const defaults=d==='mech'?COLS_MECH:COLS_ELEC;
+    const defaults=d==='mech'?COLS_MECH:d==='elec'?COLS_ELEC:COLS_CIVIL;
     const savedKeys=new Set(saved.map(c=>c.key));
     // Start with saved cols (respects deletions — keys not in saved are gone)
     COLS=saved.map(sc=>{
@@ -968,8 +974,10 @@ async function init(){
 
     // ── Batch 2: aliases + status data in parallel ──
     lm('Loading status data…');
+    // Scope WIR to the active workspace's discipline (civil shares some codes with MEP).
+    const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
     const [wirRaw, clr, prog, alRows, wcaRows] = await Promise.all([
-      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'),
+      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF),
       fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
       fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
       fa('subcontractor_aliases?select=alias,canonical_name'),
@@ -1019,6 +1027,7 @@ async function init(){
     // villa types collected into vMap — populated via openVtypeFilter popup
 
     document.getElementById('loading').style.display='none';
+    applyCtWorkspace();
     await loadLayout(disc);
     render();
 
@@ -1043,12 +1052,21 @@ async function init(){
 
 function setDisc(d){
   disc=d;
-  COLS=d==='mech'?COLS_MECH.map(c=>({...c})):COLS_ELEC.map(c=>({...c}));
+  COLS=(d==='mech'?COLS_MECH:d==='elec'?COLS_ELEC:COLS_CIVIL).map(c=>({...c}));
   colF={};
   document.getElementById('disc-mech').classList.toggle('active',d==='mech');
   document.getElementById('disc-elec').classList.toggle('active',d==='elec');
+  var dcv=document.getElementById('disc-civil'); if(dcv)dcv.classList.toggle('active',d==='civil');
   updateChips();
   loadLayout(d).then(()=>render());
+}
+// Show only the Civil pill in the civil workspace; mech/elec in MEP.
+function applyCtWorkspace(){
+  var civ = CT_WS==='civil';
+  var dm=document.getElementById('disc-mech'), de=document.getElementById('disc-elec'), dcv=document.getElementById('disc-civil');
+  if(dm)dm.style.display=civ?'none':'';
+  if(de)de.style.display=civ?'none':'';
+  if(dcv){dcv.style.display=civ?'':'none';dcv.classList.toggle('active',civ);}
 }
 
 function render(){buildHeader();buildTable();applyFilters();}
@@ -1596,7 +1614,7 @@ function _renderViewsList(views){
 async function buildViewsList(){
   const u=window.__MEP_USER__;
   const uLabel=document.getElementById('vp-user-label');
-  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':'Electrical');
+  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil');
 
   const el=document.getElementById('sv-list');
   if(!el)return;
@@ -2252,7 +2270,7 @@ function doCopy(mode){
 }
 function printTracker(){
   const cl=document.getElementById('fcl').value||'All Clusters';
-  const discLabel=disc==='mech'?'Mechanical':'Electrical';
+  const discLabel=disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil';
   const now=new Date();
   const dateStr=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
@@ -2675,6 +2693,9 @@ document.getElementById('clr-modal').addEventListener('click',function(e){if(e.t
     if (!e.data || typeof e.data !== 'object') return;
     if (e.data.type === 'theme') { applyTheme(e.data.theme); try { localStorage.setItem('mep_theme', e.data.theme); } catch(ex) {} }
     if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; window.__MEP_PERMS__ = e.data.user?.permissions||[]; applyEditPerms(); }
+    if (e.data.type === 'workspace') {
+      try { var w = e.data.workspace||''; if (w && w !== sessionStorage.getItem('kp_ws')) { sessionStorage.setItem('kp_ws', w); location.reload(); } } catch(_e) {}
+    }
   });
   // Hide own topbar when running inside the main shell
   if (window.self !== window.top) document.body.classList.add('in-shell');

@@ -672,10 +672,11 @@ let allowedWorkspaces = [];     // workspace keys this user may enter (live only
 // Pages restricted to specific workspaces. Anything NOT listed shows in ALL workspaces.
 // (MEP-only pages stay out of the Civil/Infra workspaces; flip to add 'civil' as each is scoped.)
 const PAGE_WS = {
-  dashboard:['mep'], cluster_tracker:['mep'], ncr_sor:['mep'], target_list:['mep'],
+  dashboard:['mep'], ncr_sor:['mep'], target_list:['mep'],
   obs:['mep'], obs_config:['mep'], qs:['mep'], progress_entry:['mep'],
   clearance_release:['mep'],
-  // Keyplans are shared — they scope their WIR overlay to the active workspace (civil shows civil).
+  // Cluster Tracker + Keyplans are shared — they scope their grid/overlay to the active workspace
+  // (Civil shows a civil-only, empty-until-configured Cluster Tracker).
 };
 function pageInWorkspace(pageId, ws){ const a = PAGE_WS[pageId]; return !a || a.includes(ws); }
 // Landing page per workspace (MEP keeps the dashboard; others land on the WIR viewer until a
@@ -993,9 +994,9 @@ function enterWorkspace(ws) {
   // Keyplans read kp_ws (shared sessionStorage) to scope their WIR overlay to this workspace.
   try { sessionStorage.setItem('kp_ws', ws); } catch(e) {}
   document.getElementById('ws-picker').classList.remove('show');
-  // Reload any already-loaded keyplan iframes so they re-fetch with the new discipline scope.
+  // Reload already-loaded discipline-scoped iframes so they re-fetch with the new scope.
   document.querySelectorAll('.content iframe').forEach(f => {
-    if (f.id && f.id.indexOf('frame-keyplan_') === 0 && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
+    if (f.id && (f.id.indexOf('frame-keyplan_') === 0 || f.id === 'frame-cluster_tracker') && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
   });
   // Sidebar indicator
   const sbWs = document.getElementById('sb-ws');
