@@ -133,7 +133,7 @@ body.in-shell .topbar{display:none!important}
 </div>
 
 <div class="topbar">
-  <span class="tb-crumb">MEP</span>
+  <span class="tb-crumb" id="tb-crumb">MEP</span>
   <span class="tb-sep">/</span>
   <span class="tb-title">Dashboard</span>
   <div class="tb-spacer"></div>
@@ -207,6 +207,8 @@ function getH(x){
 
 let mode='wir',wirD=[],clrD=[],actCl='',sCol='cluster',sDir=1;
 let chSt=null,chRt=null;
+let WS=null; try{WS=sessionStorage.getItem('kp_ws');}catch(e){}
+const WS_LABEL={civil:'CIVIL',mep:'MEP'};
 
 (function tick(){document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8);setTimeout(tick,1000);})();
 
@@ -222,10 +224,18 @@ async function fetchAll(p){
 
 async function init(){
   try{
+    document.getElementById('tb-crumb').textContent=WS_LABEL[WS]||'MEP';
+    const wsFilter = WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
     msg('Loading WIR data…');
-    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline');
+    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline'+wsFilter);
     msg('Loading clearance data…');
-    clrD=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
+    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
+    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline');
+    const clrDiscMap={};clrActs.forEach(c=>clrDiscMap[c.clearance_code]=c.discipline);
+    clrD=allClr.filter(r=>{
+      const d=clrDiscMap[r.raw_clearance_code];
+      return WS==='civil' ? d==='civil' : d!=='civil';
+    });
     msg('Rendering…');renderAll();hideLoad();
   }catch(e){msg('Error: '+e.message);}
 }
@@ -236,7 +246,7 @@ function setMode(m){
   mode=m;actCl='';
   document.getElementById('tab-wir').classList.toggle('active',m==='wir');
   document.getElementById('tab-clr').classList.toggle('active',m==='clr');
-  const ds=document.getElementById('f-disc');if(ds)ds.style.display=m==='wir'?'':'none';
+  const ds=document.getElementById('f-disc');if(ds)ds.style.display=(m==='wir'&&WS!=='civil')?'':'none';
   renderAll();
 }
 function D(){return mode==='wir'?wirD:clrD;}
@@ -252,7 +262,7 @@ function renderAll(){
   const data=D();
   document.getElementById('sec-kpi').textContent='Overall · '+(mode==='wir'?'WIR':'Clearance');
   const discSel=document.getElementById('f-disc');
-  if(discSel) discSel.style.display=mode==='wir'?'':'none';
+  if(discSel) discSel.style.display=(mode==='wir'&&WS!=='civil')?'':'none';
   renderKPIs(data);renderCharts(data);renderClusters(data);populateF(data);applyF();
 }
 
@@ -273,10 +283,10 @@ function renderKPIs(data){
     <div class="kpi ${k.c}"><div class="kpi-v">${k.v}</div><div class="kpi-l">${k.l}</div><div class="kpi-s">${k.s}</div><div class="kpi-bar"></div></div>
   `).join('');
 
-  // Discipline KPIs — WIR mode only
+  // Discipline KPIs — WIR mode only, MEP workspace only (Civil is a single discipline already)
   const discKpiEl=document.getElementById('disc-kpi-row');
   if(discKpiEl){
-    if(mode==='wir'){
+    if(mode==='wir'&&WS!=='civil'){
       const discs=['mechanical','electrical'];
       const discLabels={mechanical:'⚙ Mechanical',electrical:'⚡ Electrical'};
       const discColors={mechanical:'var(--accent-text)',electrical:'var(--progress)'};

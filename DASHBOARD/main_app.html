@@ -672,16 +672,15 @@ let allowedWorkspaces = [];     // workspace keys this user may enter (live only
 // Pages restricted to specific workspaces. Anything NOT listed shows in ALL workspaces.
 // (MEP-only pages stay out of the Civil/Infra workspaces; flip to add 'civil' as each is scoped.)
 const PAGE_WS = {
-  dashboard:['mep'], ncr_sor:['mep'], target_list:['mep'],
+  ncr_sor:['mep'], target_list:['mep'],
   obs:['mep'], obs_config:['mep'], qs:['mep'], progress_entry:['mep'],
   clearance_release:['mep'],
-  // Cluster Tracker + Keyplans are shared — they scope their grid/overlay to the active workspace
-  // (Civil shows a civil-only, empty-until-configured Cluster Tracker).
+  // Dashboard + Cluster Tracker + Keyplans are shared — they scope their KPIs/grid/overlay to the
+  // active workspace (Civil shows civil-only totals; its Cluster Tracker starts empty until configured).
 };
 function pageInWorkspace(pageId, ws){ const a = PAGE_WS[pageId]; return !a || a.includes(ws); }
-// Landing page per workspace (MEP keeps the dashboard; others land on the WIR viewer until a
-// discipline-specific dashboard exists).
-function workspaceLanding(ws){ return ws === 'mep' ? 'dashboard' : 'wir_viewer'; }
+// Landing page per workspace — Dashboard is shared and self-scopes to the active workspace.
+function workspaceLanding(ws){ return (ws === 'mep' || ws === 'civil') ? 'dashboard' : 'wir_viewer'; }
 // Target origin for postMessage to iframes. On http(s) we pin to our own origin
 // (hardening); on file:// the origin is opaque ("null") and pinning blocks
 // delivery, so fall back to '*' for local testing.
@@ -947,13 +946,21 @@ function bootApp(profile, token) {
 function initWorkspace(profile) {
   const perms = profile.permissions || [];
   const isAdmin = perms.includes('manage_users') && perms.includes('manage_system');
-  const acc = profile.workspace_access; // text[] | null
   const liveKeys = Object.keys(WORKSPACES).filter(k => WORKSPACES[k].live);
-  if (isAdmin || !acc || !acc.length || acc.includes('all')) {
+  // Permission-driven: access_mep / access_civil on the user's main role decide which
+  // workspaces they may enter (manage via User Management → role permissions). Falls back
+  // to the legacy per-user workspace_access field, then to all (fail-open, avoids lockout).
+  const permWs = liveKeys.filter(k => perms.includes('access_' + k));
+  const acc = profile.workspace_access; // text[] | null (legacy per-user override)
+  if (isAdmin) {
     allowedWorkspaces = liveKeys.slice();
-  } else {
+  } else if (permWs.length) {
+    allowedWorkspaces = permWs;
+  } else if (acc && acc.length && !acc.includes('all')) {
     allowedWorkspaces = acc.filter(k => liveKeys.includes(k));
     if (!allowedWorkspaces.length) allowedWorkspaces = liveKeys.slice(); // fail-open to avoid lockout
+  } else {
+    allowedWorkspaces = liveKeys.slice();
   }
   document.getElementById('sb-ws-switch').style.display = allowedWorkspaces.length > 1 ? '' : 'none';
 
@@ -996,7 +1003,7 @@ function enterWorkspace(ws) {
   document.getElementById('ws-picker').classList.remove('show');
   // Reload already-loaded discipline-scoped iframes so they re-fetch with the new scope.
   document.querySelectorAll('.content iframe').forEach(f => {
-    if (f.id && (f.id.indexOf('frame-keyplan_') === 0 || f.id === 'frame-cluster_tracker') && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
+    if (f.id && (f.id.indexOf('frame-keyplan_') === 0 || f.id === 'frame-cluster_tracker' || f.id === 'frame-dashboard') && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
   });
   // Sidebar indicator
   const sbWs = document.getElementById('sb-ws');

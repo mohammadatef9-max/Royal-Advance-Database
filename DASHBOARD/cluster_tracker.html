@@ -244,6 +244,7 @@ tr.rh{display:none}
 .sv-disc-badge{font-size:9px;padding:1px 6px;border-radius:4px;font-weight:700;flex-shrink:0}
 .sv-disc-mech{background:var(--accent-soft);color:var(--accent-text)}
 .sv-disc-elec{background:var(--st-progress-bg);color:var(--st-progress-tx)}
+.sv-disc-civil{background:rgba(224,164,88,.16);color:#e0a458}
 .sv-user-note{font-size:10px;color:var(--text-faint);padding:4px 2px}
 .cm-item{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg-cell);border:1px solid var(--border-subtle);border-radius:8px;margin-bottom:5px;cursor:grab;flex-wrap:wrap}
 .cm-item:active{cursor:grabbing;opacity:.6}
@@ -377,7 +378,12 @@ body.in-shell header { display: none !important; }
   <div class="disc-group">
     <button class="btn-disc active" id="disc-mech" onclick="setDisc('mech')"><span class="disc-dot"></span>Mechanical</button>
     <button class="btn-disc" id="disc-elec" onclick="setDisc('elec')"><span class="disc-dot" style="background:var(--st-progress-tx)"></span>Electrical</button>
-    <button class="btn-disc" id="disc-civil" onclick="setDisc('civil')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>Civil</button>
+    <button class="btn-disc civ-tab" id="disc-CI" onclick="setDisc('CI')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>CI</button>
+    <button class="btn-disc civ-tab" id="disc-GT" onclick="setDisc('GT')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>GT</button>
+    <button class="btn-disc civ-tab" id="disc-ST" onclick="setDisc('ST')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>ST</button>
+    <button class="btn-disc civ-tab" id="disc-PC" onclick="setDisc('PC')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>PC</button>
+    <button class="btn-disc civ-tab" id="disc-AR" onclick="setDisc('AR')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>AR</button>
+    <button class="btn-disc civ-tab" id="disc-RC" onclick="setDisc('RC')" style="display:none"><span class="disc-dot" style="background:#e0a458"></span>RC</button>
   </div>
   <!-- Cluster -->
   <select id="fcl" onchange="render()">
@@ -815,8 +821,12 @@ const COLS_ELEC=[
   {key:'e_earth',      label:'Earth Pit\n4271',             type:'pair', actCodes:['4271'],visible:true},
 ];
 
-// Civil starts with NO activity columns — the user configures them via the column manager.
-const COLS_CIVIL=[];
+// Civil is split into the same sheets as the source WIR workbook. Each sheet starts with
+// NO activity columns — the user configures them via the column manager, per sheet.
+const CIVIL_SHEETS=['CI','GT','ST','PC','AR','RC'];
+const COLS_CIVIL={CI:[],GT:[],ST:[],PC:[],AR:[],RC:[]};
+function defaultColsFor(d){ if(d==='mech')return COLS_MECH; if(d==='elec')return COLS_ELEC; return COLS_CIVIL[d]||[]; }
+function discLabelFor(d){ if(d==='mech')return 'Mechanical'; if(d==='elec')return 'Electrical'; return d; }
 
 const WS=[{v:'approved',l:'Approved',c:'#34d399',bg:'#064e3b'},{v:'rejected',l:'Rejected',c:'#f87171',bg:'#7f1d1d'},{v:'under_review',l:'Under Review',c:'#c7d2fe',bg:'#312e81'},{v:'not_submitted',l:'Not Submitted',c:'#4b5563',bg:'#1f2937'}];
 const CS=[{v:'fully_approved',l:'Fully Approved',c:'#34d399',bg:'#064e3b'},{v:'not_approved',l:'Not Approved',c:'#f87171',bg:'#7f1d1d'},{v:'pending',l:'Pending',c:'#fcd34d',bg:'#78350f'},{v:'not_submitted',l:'Not Submitted',c:'#4b5563',bg:'#1f2937'}];
@@ -826,8 +836,8 @@ const ACT_ALIASES={'ppr installation':'3100','ppr install':'3100','ppr water sup
 
 // Active workspace (shared with the shell + keyplans via sessionStorage). Civil → civil discipline.
 let CT_WS=null; try{CT_WS=sessionStorage.getItem('kp_ws');}catch(e){}
-let disc = CT_WS==='civil' ? 'civil' : 'mech';
-let COLS=(disc==='civil'?COLS_CIVIL:COLS_MECH).map(c=>({...c}));
+let disc = CT_WS==='civil' ? CIVIL_SHEETS[0] : 'mech';
+let COLS=defaultColsFor(disc).map(c=>({...c}));
 let villas=[],wirD={},wirSubD={},wirMetaD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
 let ncrActByVilla=new Map(); // villa_id -> Set of activity_codes with open NCR/SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
@@ -916,14 +926,14 @@ async function saveDefaultLayout(){
       await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:json})});
     }
     closeMgr();render();
-    alert('Default '+(disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil')+' view saved — everyone will see it on their next refresh.');
+    alert('Default '+discLabelFor(disc)+' view saved — everyone will see it on their next refresh.');
   }catch(e){alert('Failed to save default: '+e.message);}
 }
 
 // Reset the live view back to the current global default (or the built-in defaults if none set)
 async function resetToDefault(){
   const ok=await loadLayout(disc);
-  if(!ok){COLS=(disc==='mech'?COLS_MECH:disc==='elec'?COLS_ELEC:COLS_CIVIL).map(c=>({...c}));}
+  if(!ok){COLS=defaultColsFor(disc).map(c=>({...c}));}
   buildCmList();render();
 }
 async function loadLayout(d){
@@ -933,7 +943,7 @@ async function loadLayout(d){
     if(!rows.length)return false;
     const saved=JSON.parse(rows[0].layout);
     // Apply saved layout: use saved order/visibility/labels/codes but merge in any new default cols
-    const defaults=d==='mech'?COLS_MECH:d==='elec'?COLS_ELEC:COLS_CIVIL;
+    const defaults=defaultColsFor(d);
     const savedKeys=new Set(saved.map(c=>c.key));
     // Start with saved cols (respects deletions — keys not in saved are gone)
     COLS=saved.map(sc=>{
@@ -1052,21 +1062,25 @@ async function init(){
 
 function setDisc(d){
   disc=d;
-  COLS=(d==='mech'?COLS_MECH:d==='elec'?COLS_ELEC:COLS_CIVIL).map(c=>({...c}));
+  COLS=defaultColsFor(d).map(c=>({...c}));
   colF={};
   document.getElementById('disc-mech').classList.toggle('active',d==='mech');
   document.getElementById('disc-elec').classList.toggle('active',d==='elec');
-  var dcv=document.getElementById('disc-civil'); if(dcv)dcv.classList.toggle('active',d==='civil');
+  document.querySelectorAll('.civ-tab').forEach(function(btn){btn.classList.toggle('active',btn.id==='disc-'+d);});
   updateChips();
   loadLayout(d).then(()=>render());
 }
-// Show only the Civil pill in the civil workspace; mech/elec in MEP.
+// Show one pill per civil sheet (CI/GT/ST/PC/AR/RC — same names as the source WIR workbook tabs)
+// in the civil workspace; Mechanical/Electrical in MEP.
 function applyCtWorkspace(){
   var civ = CT_WS==='civil';
-  var dm=document.getElementById('disc-mech'), de=document.getElementById('disc-elec'), dcv=document.getElementById('disc-civil');
+  var dm=document.getElementById('disc-mech'), de=document.getElementById('disc-elec');
   if(dm)dm.style.display=civ?'none':'';
   if(de)de.style.display=civ?'none':'';
-  if(dcv){dcv.style.display=civ?'':'none';dcv.classList.toggle('active',civ);}
+  document.querySelectorAll('.civ-tab').forEach(function(btn){
+    btn.style.display=civ?'':'none';
+    btn.classList.toggle('active', civ && btn.id==='disc-'+disc);
+  });
 }
 
 function render(){buildHeader();buildTable();applyFilters();}
@@ -1564,7 +1578,7 @@ function applyView(name){
   if(!view)return;
   try{
     const saved=JSON.parse(view.cols);
-    const defaults=disc==='mech'?COLS_MECH:COLS_ELEC;
+    const defaults=defaultColsFor(disc);
     COLS=saved.map(sc=>{
       const def=defaults.find(c=>c.key===sc.key);
       return def?{...def,...sc}:sc;
@@ -1592,8 +1606,8 @@ function _renderViewsList(views){
     el.innerHTML='<div class="sv-empty">No saved views yet.<br>Set up your columns then click <strong>Save Current</strong>.</div>';
     return;
   }
-  const discClass=disc==='mech'?'sv-disc-mech':'sv-disc-elec';
-  const discLabel=disc==='mech'?'Mech':'Elec';
+  const discClass=disc==='mech'?'sv-disc-mech':disc==='elec'?'sv-disc-elec':'sv-disc-civil';
+  const discLabel=disc==='mech'?'Mech':disc==='elec'?'Elec':disc;
   el.innerHTML=views.slice().reverse().map(v=>{
     let visCnt=0;
     try{visCnt=JSON.parse(v.cols).filter(c=>c.visible&&c.type!=='divider').length;}catch(e){}
@@ -1614,7 +1628,7 @@ function _renderViewsList(views){
 async function buildViewsList(){
   const u=window.__MEP_USER__;
   const uLabel=document.getElementById('vp-user-label');
-  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+(disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil');
+  if(uLabel) uLabel.textContent=(u?.display_name||u?.full_name||'You')+' · '+discLabelFor(disc);
 
   const el=document.getElementById('sv-list');
   if(!el)return;
@@ -2270,7 +2284,7 @@ function doCopy(mode){
 }
 function printTracker(){
   const cl=document.getElementById('fcl').value||'All Clusters';
-  const discLabel=disc==='mech'?'Mechanical':disc==='elec'?'Electrical':'Civil';
+  const discLabel=discLabelFor(disc);
   const now=new Date();
   const dateStr=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 

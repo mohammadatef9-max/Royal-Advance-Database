@@ -431,20 +431,36 @@ let existingRequests={};
 })();
 
 // ─── INIT ──────────────────────────────────────────
+let _loadedOk=false, _loading=false;
 async function init(){
+  if(_loading||_loadedOk) return;
+  _loading=true;
   showLoading(true,'Initializing…');
-  await Promise.all([populateFilters(), loadVillaMap(), loadClearanceActivities()]);
-  await loadExistingRequests();
-  fetchPreview();
+  try{
+    await Promise.all([populateFilters(), loadVillaMap(), loadClearanceActivities()]);
+    await loadExistingRequests();
+    _loadedOk=true;
+    fetchPreview(); // has its own error handling; fire-and-forget as before
+  }catch(e){
+    console.error(e);
+    // Only surface an error if we actually had a token — a pre-token preload attempt is expected
+    // to fail and will be retried automatically when the session message arrives.
+    let hasTok=!!window.__MEP_TOKEN__;
+    if(!hasTok){try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);hasTok=!!(j&&j.access_token);}}catch(_){}}
+    if(hasTok) showToast('Failed to load data','err');
+  }
+  finally{_loading=false;showLoading(false);}
 }
 
 async function loadVillaMap(){
   const cr=await fetch(`${SB}/rest/v1/clusters?select=id,code`,{headers:getH()});
+  if(!cr.ok) throw new Error(cr.status);
   const clusters=await cr.json();
   const clMap={};clusters.forEach(c=>clMap[c.id]=c.code);
   let all=[],offset=0;
   while(true){
     const r=await fetch(`${SB}/rest/v1/villas?select=id,villa_no,cluster_id&limit=1000&offset=${offset}`,{headers:getH()});
+    if(!r.ok) throw new Error(r.status);
     const d=await r.json();if(!Array.isArray(d)||!d.length)break;
     all=all.concat(d);if(d.length<1000)break;offset+=1000;
   }
@@ -453,6 +469,7 @@ async function loadVillaMap(){
 
 async function loadClearanceActivities(){
   const r=await fetch(`${SB}/rest/v1/clearance_activities?select=id,clearance_code&limit=500`,{headers:getH()});
+  if(!r.ok) throw new Error(r.status);
   const d=await r.json();if(Array.isArray(d))d.forEach(c=>clrActivityMap[c.clearance_code]=c.id);
 }
 
@@ -470,6 +487,7 @@ async function fetchAllPages(url){
   let all=[],offset=0;
   while(true){
     const r=await fetch(`${url}&limit=1000&offset=${offset}`,{headers:getH()});
+    if(!r.ok) throw new Error(r.status);
     const d=await r.json();
     if(!Array.isArray(d)||!d.length) break;
     all=all.concat(d);
@@ -480,10 +498,13 @@ async function fetchAllPages(url){
 }
 
 async function populateFilters(){
+  // Source codes/villa-types from the small reference tables (clearance_activities ~80 rows,
+  // villas ~2,200 rows) instead of scanning the full clearance_import_log (17k+ rows) with an
+  // unindexed ORDER BY — that full-table sort/paginate was taking 60+ seconds end to end.
   const [clusterRows, codeRows, typeRows] = await Promise.all([
     fetch(`${SB}/rest/v1/clusters?select=code&order=code`,{headers:getH()}).then(r=>r.json()),
-    fetchAllPages(`${SB}/rest/v1/clearance_import_log?select=raw_clearance_code,raw_activity_name&order=raw_clearance_code`),
-    fetchAllPages(`${SB}/rest/v1/clearance_import_log?select=raw_villa_type&order=raw_villa_type`),
+    fetchAllPages(`${SB}/rest/v1/clearance_activities?select=clearance_code,clearance_name&order=clearance_code`),
+    fetchAllPages(`${SB}/rest/v1/villas?select=villa_type&order=villa_type`),
   ]);
 
   const clSel=document.getElementById('f-cluster');
@@ -492,13 +513,13 @@ async function populateFilters(){
 
   const codeSel=document.getElementById('f-code');
   const seen=new Set();
-  codeRows.filter(r=>r.raw_clearance_code).sort((a,b)=>a.raw_clearance_code.localeCompare(b.raw_clearance_code))
-    .forEach(r=>{if(seen.has(r.raw_clearance_code))return;seen.add(r.raw_clearance_code);
-      const o=document.createElement('option');o.value=r.raw_clearance_code;
-      o.textContent=r.raw_clearance_code+(r.raw_activity_name?' — '+r.raw_activity_name:'');codeSel.appendChild(o);});
+  codeRows.filter(r=>r.clearance_code).sort((a,b)=>a.clearance_code.localeCompare(b.clearance_code))
+    .forEach(r=>{if(seen.has(r.clearance_code))return;seen.add(r.clearance_code);
+      const o=document.createElement('option');o.value=r.clearance_code;
+      o.textContent=r.clearance_code+(r.clearance_name?' — '+r.clearance_name:'');codeSel.appendChild(o);});
 
   const vtSel=document.getElementById('f-vtype');
-  [...new Set(typeRows.map(r=>r.raw_villa_type).filter(Boolean))].sort()
+  [...new Set(typeRows.map(r=>r.villa_type).filter(Boolean))].sort()
     .forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;vtSel.appendChild(o);});
 }
 
@@ -848,6 +869,10 @@ init();
     if (e.data.type === 'session') {
       window.__MEP_TOKEN__ = e.data.token;
       window.__MEP_USER__  = e.data.user;
+      // If the first init() ran during preload before the token arrived (→ failed), load now.
+      if (e.data.token && typeof init === 'function' && !_loadedOk) {
+        init();
+      }
     }
   });
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
