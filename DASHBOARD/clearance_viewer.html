@@ -89,6 +89,10 @@ input[type=text]{background:var(--bg-panel);border:1px solid var(--border);
   border-radius:7px;padding:6px 10px;color:var(--text);font-size:12px}
 input[type=text]:focus{outline:none;border-color:var(--accent)}
 input[type=text]::placeholder{color:var(--text-faint)}
+input[type=date]{background:var(--bg-panel);border:1px solid var(--border);
+  border-radius:7px;padding:5px 8px;color:var(--text);font-size:12px;color-scheme:dark}
+input[type=date]:focus{outline:none;border-color:var(--accent)}
+[data-theme="light"] input[type=date]{color-scheme:light}
 
 /* ── Bulk action bar ── */
 #bulk-bar{background:var(--accent-soft);border-bottom:1px solid var(--accent);
@@ -282,6 +286,14 @@ input[type=checkbox]{accent-color:var(--accent);width:13px;height:13px;cursor:po
   </select>
   <input id="f-villa" type="text" placeholder="Villa No" style="width:90px" oninput="onFilterChange()">
   <input id="f-ref" type="text" placeholder="Ref No" style="width:110px" oninput="onFilterChange()">
+  <div class="fbar-sep"></div>
+  <select id="f-datefield" onchange="onFilterChange()" title="Which date the range filters on">
+    <option value="clearance_received_date">Received date</option>
+    <option value="clearance_released_date">Released date</option>
+  </select>
+  <input id="f-from" type="date" title="From" onchange="onFilterChange()">
+  <span style="color:var(--text-faint)">→</span>
+  <input id="f-to" type="date" title="To" onchange="onFilterChange()">
   <div class="fbar-sep"></div>
   <button class="btn btn-gray" onclick="clearFilters()">
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
@@ -580,12 +592,16 @@ function applyClientFilters(){
   const selectedTypes=vtSel?Array.from(vtSel.selectedOptions).map(o=>o.value).filter(v=>v):[];
   // Villa number: exact integer match (raw_villa_no is an integer column)
   const fvnInt=fvnRaw&&!isNaN(parseInt(fvnRaw))?parseInt(fvnRaw):null;
+  const dateField=document.getElementById('f-datefield').value;
+  const from=document.getElementById('f-from').value||'';
+  const to=document.getElementById('f-to').value||'';
 
   currentRows=allRows.filter(r=>{
     if(fs && r.normalised_status!==fs) return false;
     if(selectedTypes.length>0 && !selectedTypes.includes(r.raw_villa_type)) return false;
     if(fvnInt!==null && r.raw_villa_no!==fvnInt) return false;
     if(fr && !(r.reference_number||'').toLowerCase().includes(fr.toLowerCase())) return false;
+    if(from||to){ const dv=(r[dateField]||'').slice(0,10); if(!dv) return false; if(from && dv<from) return false; if(to && dv>to) return false; }
     return true;
   });
 
@@ -629,7 +645,8 @@ function clearFilters(){
   try{mepComboReset('f-code');}catch(e){}
   const vtEl=document.getElementById('f-vtype');
   if(vtEl) Array.from(vtEl.options).forEach(o=>o.selected=o.value==='');
-  ['f-villa','f-ref'].forEach(id=>document.getElementById(id).value='');
+  ['f-villa','f-ref','f-from','f-to'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-datefield').value='clearance_received_date';
   selectedKeys.clear(); updateBulkBar();
   fetchPreview(); // always go back to preview when all filters cleared
 }
@@ -804,6 +821,8 @@ function printView(){
     const v=document.getElementById(id).value;if(v)filters.push(`${lbl}: ${v}`);});
   const fv=document.getElementById('f-villa').value;if(fv) filters.push('Villa: '+fv);
   const fr=document.getElementById('f-ref').value;if(fr) filters.push('Ref: '+fr);
+  const dfrom=document.getElementById('f-from').value, dto=document.getElementById('f-to').value;
+  if(dfrom||dto){ const dl=document.getElementById('f-datefield').selectedOptions[0].textContent; filters.push(`${dl}: ${dfrom||'…'} → ${dto||'…'}`); }
   document.getElementById('ph-date').textContent='Printed: '+new Date().toLocaleString();
   document.getElementById('ph-count').textContent=`${currentRows.length.toLocaleString()} records`;
   document.getElementById('ph-page').textContent=isPreview?'Preview (first 50 rows)':'All loaded records';
@@ -843,9 +862,13 @@ function checkPageAccess(){
   try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);stored=j.profile?.permissions||j.permissions||[];}}catch(e){}
   const all=[...new Set([...perms,...stored])];
   const admin=all.includes('manage_users')&&all.includes('manage_system');
-  if(admin||all.includes('request_release')) return;
-  document.getElementById('page-access-denied').style.display='flex';
-  document.querySelectorAll('body > *:not(#page-access-denied)').forEach(el=>el.style.visibility='hidden');
+  const ok=admin||all.includes('request_release');
+  // Two-way + null-safe: this runs at parse time (before #page-access-denied exists) AND
+  // again when the session message arrives — the old one-way version crashed the whole
+  // script for permission-less loads, which silently disabled the guard.
+  const denied=document.getElementById('page-access-denied');
+  if(denied)denied.style.display=ok?'none':'flex';
+  document.querySelectorAll('body > *:not(#page-access-denied)').forEach(el=>el.style.visibility=ok?'':'hidden');
 }
 
 checkPageAccess();
@@ -870,6 +893,8 @@ init();
     if (e.data.type === 'session') {
       window.__MEP_TOKEN__ = e.data.token;
       window.__MEP_USER__  = e.data.user;
+      window.__MEP_PERMS__ = e.data.user?.permissions || [];
+      try { checkPageAccess(); } catch(ex) {}
       // If the first init() ran during preload before the token arrived (→ failed), load now.
       if (e.data.token && typeof init === 'function' && !_loadedOk) {
         init();
