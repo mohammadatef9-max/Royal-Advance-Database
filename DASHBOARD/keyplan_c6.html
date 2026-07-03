@@ -1201,12 +1201,16 @@ async function loadData(){
     });
   }catch(e){console.warn('[keyplan] priority villas',e);}
   var _aa=await Promise.all([
-    fetchAll('activities?select=activity_code,activity_name&is_active=eq.true'),
+    fetchAll('activities?select=activity_code,activity_name,discipline&is_active=eq.true'),
     fetchAll('wir_code_aliases?select=old_code,new_code&is_active=eq.true')
   ]);
   var actsR=_aa[0],wirAliasRows=_aa[1];
   var actNameMap={};
-  if(Array.isArray(actsR))actsR.forEach(function(a){actNameMap[a.activity_code]=a.activity_name;});
+  var _wsN=null;try{_wsN=sessionStorage.getItem('kp_ws');}catch(e){}
+  if(Array.isArray(actsR))actsR.forEach(function(a){
+    var pref=(_wsN==='civil')?(a.discipline==='civil'):(a.discipline!=='civil');
+    if(pref||actNameMap[a.activity_code]===undefined)actNameMap[a.activity_code]=a.activity_name;
+  });
   var wirAliases={};
   if(Array.isArray(wirAliasRows))wirAliasRows.forEach(function(r){wirAliases[r.old_code.trim()]=r.new_code.trim();});
   var resolveWirCode=function(c){var seen=new Set(),h=0;while(wirAliases[c]&&!seen.has(c)&&h<5){seen.add(c);c=wirAliases[c];h++;}return c;};
@@ -1233,6 +1237,16 @@ async function loadData(){
   var wirActMap={};
   wirCsvData.forEach(function(r){if(r.actKey&&!wirActMap[r.actKey])wirActMap[r.actKey]=parseInt(r.code)||0;});
   var wirActKeys=Object.keys(wirActMap).sort(function(a,b){return wirActMap[a]-wirActMap[b]||a.localeCompare(b);});
+  // Civil workspace: include the full civil catalogue so activities with no WIRs in this
+  // cluster yet can still be selected (all villas show Not Submitted).
+  if(_wsN==='civil'&&Array.isArray(actsR)){
+    actsR.forEach(function(a){
+      if(a.discipline!=='civil')return;
+      var k=a.activity_code+(a.activity_name?' — '+a.activity_name:'');
+      if(!(k in wirActMap)){wirActMap[k]=parseInt(a.activity_code)||0;wirActKeys.push(k);}
+    });
+    wirActKeys.sort(function(a,b){return wirActMap[a]-wirActMap[b]||a.localeCompare(b);});
+  }
   var wirSel=document.getElementById('f-act');
   wirSel.innerHTML='<option value="">— Select Activity —</option>';
   wirActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;wirSel.appendChild(o);});
