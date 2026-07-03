@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=2"></script>
+<script src="shared.js?v=3"></script>
 <meta charset="UTF-8">
 <title>Cluster 3 — Keyplan</title>
 <style>
@@ -206,9 +206,9 @@ body.space-down #map-viewport{cursor:grab}
   </select>
   <div class="tb-div"></div>
   <span class="tl">Activity</span>
-  <input type="text" id="f-act-combo" list="f-act-list" onfocus="kpComboFill()" oninput="kpComboInput()" onkeydown="kpComboKey(event)" placeholder="Select or type activity..." autocomplete="off" title="Type to search, or pick from the list - Enter applies the first match" style="background:var(--bg-panel);color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:11px;font-family:inherit;width:300px">
-  <datalist id="f-act-list"></datalist>
-  <select id="f-act" onchange="onActivityChange(this)" style="display:none"><option value="">— Select Activity —</option></select>
+  
+  
+  <select id="f-act" onchange="onActivityChange(this)"><option value="">— Select Activity —</option></select>
   <select id="f-clr-act" style="display:none" onchange="onActivityChange(this)"><option value="">— Select Clearance —</option></select>
   <button class="tbtn active" id="btn-compare" onclick="toggleCompare()" style="display:none" title="Compare two WIR activities side-by-side">⊟ Compare</button>
   <select id="f-act2" style="display:none" onchange="onAct2Change(this)"><option value="">— 2nd Activity —</option></select>
@@ -730,10 +730,10 @@ document.getElementById('villa-layer').addEventListener('mouseleave',function(){
 
 function onModeChange(){
   currentMode=document.getElementById('f-mode').value;
-  var _fas=document.getElementById('f-act-combo');if(_fas)_fas.value='';
-  ['f-act','f-clr-act'].forEach(function(_id){var _s=document.getElementById(_id);if(_s)Array.prototype.forEach.call(_s.options,function(_o){_o.hidden=false;});});
+  
+  
   currentActivity='';currentActivity2='';compareMode=false;hiddenSubs=[];hiddenStatus=[];
-  document.getElementById('f-act').style.display='none';
+  document.getElementById('f-act').style.display=currentMode==='wir'?'':'none';
   document.getElementById('f-clr-act').style.display=currentMode==='clr'?'':'none';
   document.getElementById('f-act').value='';document.getElementById('f-clr-act').value='';
   document.getElementById('btn-compare').style.display='none';
@@ -847,43 +847,7 @@ function refreshCmpDate(){
   var dm=(currentMode==='wir'&&currentActivity)?buildDataMap(currentActivity):null;
   updateCmpDate(dm);
 }
-// -- Activity combobox: one field to type AND pick. The datalist shows the options of
-// whichever mode is active; picking (or fully typing) an entry applies it, Enter applies
-// the first substring match, clearing the field clears the activity.
-function kpComboSel(){return document.getElementById(currentMode==='clr'?'f-clr-act':'f-act');}
-function kpComboFill(){
-  var dl=document.getElementById('f-act-list');if(!dl)return;
-  var sel=kpComboSel();var h='';
-  Array.prototype.forEach.call(sel.options,function(o){
-    if(o.value)h+='<option value="'+o.value.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></option>';
-  });
-  dl.innerHTML=h;
-}
-function kpComboInput(){
-  var inp=document.getElementById('f-act-combo');var sel=kpComboSel();
-  var v=(inp.value||'').trim();
-  if(!v){if(sel.value){sel.value='';onActivityChange(sel);}return;}
-  for(var i=0;i<sel.options.length;i++){
-    var o=sel.options[i];
-    if(o.value&&o.value.toLowerCase()===v.toLowerCase()){
-      if(sel.value!==o.value){sel.value=o.value;onActivityChange(sel);}
-      return;
-    }
-  }
-}
-function kpComboKey(e){
-  if(e.key!=='Enter')return;
-  var inp=document.getElementById('f-act-combo');var sel=kpComboSel();
-  var q=(inp.value||'').toLowerCase().trim();if(!q)return;
-  for(var i=0;i<sel.options.length;i++){
-    var o=sel.options[i];
-    if(o.value&&o.value.toLowerCase().indexOf(q)>=0){
-      inp.value=o.value;
-      if(sel.value!==o.value){sel.value=o.value;onActivityChange(sel);}
-      break;
-    }
-  }
-}
+
 function updateNcrBlock(){
   var blk=document.getElementById('ncr-block');if(!blk)return;
   var n=0;
