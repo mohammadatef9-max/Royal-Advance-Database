@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Progress Entry · MEP</title>
@@ -1427,6 +1427,7 @@ function applyEditPerms(){
   // Hide own topbar when running inside the main shell
   if (window.self !== window.top) document.body.classList.add('in-shell');
   // Signal parent ready (for session token delivery)
+  try{mepCombo('f-activity');}catch(e){}
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
 })();
 </script>

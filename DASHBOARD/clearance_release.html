@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Clearance Release · MEP Tracker</title>
@@ -792,6 +792,7 @@ function renderReady(){
     }).join('');
   if(prevClr && presentCodes.includes(prevClr)) clrSel.value = prevClr;
   else clrSel.value = '';
+  try{mepComboReset('rf-clr');}catch(e){}
   const clr = clrSel.value;
 
   const clrStatus = document.getElementById('rf-clrstatus')?.value||'';
@@ -1119,6 +1120,7 @@ window.addEventListener('message',e=>{
   if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;window.__MEP_PERMS__=e.data.user?.permissions||[];checkPageAccess();}
 });
 if(window.self!==window.top)document.body.classList.add('in-shell');
+try{mepCombo('rf-clr');mepCombo('sef-clr');mepCombo('pf-clr');}catch(e){}
 try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
 
 // ── PAGE ACCESS GUARD ──

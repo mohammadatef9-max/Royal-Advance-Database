@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <title>Cluster 2 — Keyplan</title>
 <style>
@@ -238,7 +238,9 @@ body.edit-mode #edit-panel{display:flex}
   </select>
   <div class="tb-div"></div>
   <span class="tl">Activity</span>
-  <select id="f-act" onchange="onActivityChange(this)"><option value="">— Select Activity —</option></select>
+  <input type="text" id="f-act-combo" list="f-act-list" onfocus="kpComboFill()" oninput="kpComboInput()" onkeydown="kpComboKey(event)" placeholder="Select or type activity..." autocomplete="off" title="Type to search, or pick from the list - Enter applies the first match" style="background:var(--bg-panel);color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:11px;font-family:inherit;width:300px">
+  <datalist id="f-act-list"></datalist>
+  <select id="f-act" onchange="onActivityChange(this)" style="display:none"><option value="">— Select Activity —</option></select>
   <select id="f-clr-act" style="display:none" onchange="onActivityChange(this)"><option value="">— Select Clearance —</option></select>
   <button class="tbtn active" id="btn-compare" onclick="toggleCompare()" style="display:none" title="Compare two WIR activities side-by-side">⊟ Compare</button>
   <select id="f-act2" style="display:none" onchange="onAct2Change(this)"><option value="">— 2nd Activity —</option></select>
@@ -254,6 +256,12 @@ body.edit-mode #edit-panel{display:flex}
     </div>
   </div>
   <div class="tb-div"></div>
+  <button class="tbtn" id="btn-cmpdate" onclick="toggleCmpDate()" style="display:none" title="Show how many villas were already approved by an earlier date (numbers only, no highlighting)">📅 vs Date</button>
+  <span id="cmpdate-ctrls" style="display:none;align-items:center;gap:4px">
+    <input type="date" id="f-cmpdate" onchange="refreshCmpDate()" style="background:var(--bg-panel);color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:11px;font-family:inherit;color-scheme:dark">
+    <button class="tbtn" onclick="setCmpPreset('fri')" title="Most recent Friday (week ends Friday)">Last Fri</button>
+    <button class="tbtn" onclick="setCmpPreset('7d')" title="7 days ago">-7d</button>
+  </span>
   <button class="tbtn" id="btn-sub-labels" onclick="toggleSubLabels()">① Sub Labels</button>
   <select id="print-paper" class="tbtn" style="padding:5px 8px;cursor:pointer;font-size:11px">
     <option value="A4">A4 Landscape</option>
@@ -298,6 +306,12 @@ body.edit-mode #edit-panel{display:flex}
       <div class="stat" id="stat-UR" onclick="toggleStatus('UR')"><div class="stat-val" style="color:var(--review)" id="sv-ur">0</div><div class="stat-label" id="sl-ur">Review</div></div>
       <div class="stat" id="stat-RJ" onclick="toggleStatus('RJ')"><div class="stat-val" style="color:var(--rejected)" id="sv-rj">0</div><div class="stat-label" id="sl-rj">Reject</div></div>
       <div class="stat"><div class="stat-val" style="color:var(--accent)" id="sv-pct">—</div><div class="stat-label">%</div></div>
+    </div>
+    <div id="cmpdate-block" style="display:none;background:var(--bg-panel);border-radius:6px;padding:8px;border:1px solid rgba(79,140,255,0.35)">
+      <div class="of-title" style="color:var(--accent-text)">📅 Approved vs <span id="cmpdate-lbl">—</span></div>
+      <div class="of-row"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22c55e;margin-right:5px"></span>Was approved</span><span class="of-val" id="cmpdate-then">0</span></div>
+      <div class="of-row"><span>Approved now</span><span class="of-val" id="cmpdate-now">0</span></div>
+      <div class="of-row"><span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#06b6d4;margin-right:5px"></span>Gained since</span><span class="of-val" id="cmpdate-delta" style="color:#06b6d4">+0</span></div>
     </div>
     <div id="open-front-block" class="open-front-block">
       <div class="of-title">⌂ Open Front</div>
@@ -617,6 +631,8 @@ function updateStats(dm){
   document.getElementById('sv-ur').textContent=urV;
   document.getElementById('sv-rj').textContent=rjV;
   document.getElementById('sv-pct').textContent=pct;
+  try{updateCmpDate(dm);}catch(e){}
+  try{updateNcrBlock();}catch(e){}
   var ofCount=openFrontVillas.size;
   document.getElementById('of-count').textContent=ofCount;
   document.getElementById('open-front-block').classList.toggle('visible', ofCount>0);
@@ -748,8 +764,10 @@ document.getElementById('villa-layer').addEventListener('mouseleave',function(){
 
 function onModeChange(){
   currentMode=document.getElementById('f-mode').value;
+  var _fas=document.getElementById('f-act-combo');if(_fas)_fas.value='';
+  ['f-act','f-clr-act'].forEach(function(_id){var _s=document.getElementById(_id);if(_s)Array.prototype.forEach.call(_s.options,function(_o){_o.hidden=false;});});
   currentActivity='';currentActivity2='';compareMode=false;hiddenSubs=[];hiddenStatus=[];
-  document.getElementById('f-act').style.display=currentMode==='wir'?'':'none';
+  document.getElementById('f-act').style.display='none';
   document.getElementById('f-clr-act').style.display=currentMode==='clr'?'':'none';
   document.getElementById('f-act').value='';document.getElementById('f-clr-act').value='';
   document.getElementById('btn-compare').style.display='none';
@@ -757,6 +775,11 @@ function onModeChange(){
   document.getElementById('f-act2').style.display='none';
   document.getElementById('f-act2').value='';
   document.getElementById('cmp-legend').style.display='none';
+  cmpDateOn=false;
+  var _bcd=document.getElementById('btn-cmpdate');
+  if(_bcd){_bcd.style.display='none';_bcd.classList.remove('active');}
+  var _cdc=document.getElementById('cmpdate-ctrls');if(_cdc)_cdc.style.display='none';
+  var _cdb=document.getElementById('cmpdate-block');if(_cdb)_cdb.style.display='none';
   var l2=document.getElementById('cmp-leg2');if(l2)l2.style.display='none';
   document.querySelectorAll('.leg-item,.stat').forEach(function(el){el.classList.remove('hidden-filter');});
   renderVillas(null);updateStats(null);
@@ -767,6 +790,9 @@ function onActivityChange(sel){
   // Show/hide compare button in WIR mode when an activity is selected
   var btnCmp=document.getElementById('btn-compare');
   if(btnCmp) btnCmp.style.display=currentActivity?'':'none';
+  var btnCD=document.getElementById('btn-cmpdate');
+  if(btnCD) btnCD.style.display=(currentActivity&&currentMode==='wir')?'':'none';
+  if(!currentActivity){cmpDateOn=false;if(btnCD)btnCD.classList.remove('active');var _c1=document.getElementById('cmpdate-ctrls');if(_c1)_c1.style.display='none';var _c2=document.getElementById('cmpdate-block');if(_c2)_c2.style.display='none';}
   if(!currentActivity){
     compareMode=false;currentActivity2='';
     if(btnCmp)btnCmp.classList.remove('active');
@@ -831,6 +857,110 @@ function toggleCompare(){
     var dm=buildDataMap(currentActivity);
     renderVillas(dm,null);updateStats(dm);
   }
+}
+// -- Date comparison (WIR only): how many villas were already approved by an earlier date.
+// Numbers only -- the map colours are untouched. Approximation: current data, counted as
+// "approved then" when the latest approved WIR has response_date <= the chosen date.
+var cmpDateOn=false;
+function toggleCmpDate(){
+  cmpDateOn=!cmpDateOn;
+  document.getElementById('btn-cmpdate').classList.toggle('active',cmpDateOn);
+  document.getElementById('cmpdate-ctrls').style.display=cmpDateOn?'inline-flex':'none';
+  if(cmpDateOn&&!document.getElementById('f-cmpdate').value)setCmpPreset('fri');
+  else refreshCmpDate();
+}
+function setCmpPreset(kind){
+  var d=new Date();
+  if(kind==='fri'){var back=(d.getDay()+2)%7;if(back===0)back=7;d.setDate(d.getDate()-back);}
+  else{d.setDate(d.getDate()-7);}
+  var iso=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  document.getElementById('f-cmpdate').value=iso;
+  refreshCmpDate();
+}
+function refreshCmpDate(){
+  var dm=(currentMode==='wir'&&currentActivity)?buildDataMap(currentActivity):null;
+  updateCmpDate(dm);
+}
+// -- Activity combobox: one field to type AND pick. The datalist shows the options of
+// whichever mode is active; picking (or fully typing) an entry applies it, Enter applies
+// the first substring match, clearing the field clears the activity.
+function kpComboSel(){return document.getElementById(currentMode==='clr'?'f-clr-act':'f-act');}
+function kpComboFill(){
+  var dl=document.getElementById('f-act-list');if(!dl)return;
+  var sel=kpComboSel();var h='';
+  Array.prototype.forEach.call(sel.options,function(o){
+    if(o.value)h+='<option value="'+o.value.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></option>';
+  });
+  dl.innerHTML=h;
+}
+function kpComboInput(){
+  var inp=document.getElementById('f-act-combo');var sel=kpComboSel();
+  var v=(inp.value||'').trim();
+  if(!v){if(sel.value){sel.value='';onActivityChange(sel);}return;}
+  for(var i=0;i<sel.options.length;i++){
+    var o=sel.options[i];
+    if(o.value&&o.value.toLowerCase()===v.toLowerCase()){
+      if(sel.value!==o.value){sel.value=o.value;onActivityChange(sel);}
+      return;
+    }
+  }
+}
+function kpComboKey(e){
+  if(e.key!=='Enter')return;
+  var inp=document.getElementById('f-act-combo');var sel=kpComboSel();
+  var q=(inp.value||'').toLowerCase().trim();if(!q)return;
+  for(var i=0;i<sel.options.length;i++){
+    var o=sel.options[i];
+    if(o.value&&o.value.toLowerCase().indexOf(q)>=0){
+      inp.value=o.value;
+      if(sel.value!==o.value){sel.value=o.value;onActivityChange(sel);}
+      break;
+    }
+  }
+}
+function updateNcrBlock(){
+  var blk=document.getElementById('ncr-block');if(!blk)return;
+  var n=0;
+  if(currentMode==='wir'&&currentActivity){
+    // actKey format is "CODE - Name" and codes never contain spaces
+    var code=String(currentActivity).trim().split(' ')[0];
+    Object.keys(ncrVillaMap).forEach(function(vn){
+      (ncrVillaMap[vn]||[]).forEach(function(r){if(String(r.activity_code||'').trim()===code)n++;});
+    });
+  }
+  var cEl=document.getElementById('ncr-count');if(cEl)cEl.textContent=n;
+  blk.classList.toggle('visible',n>0);
+}
+function clearCmpTint(){
+  document.querySelectorAll('#villa-layer .villa[data-cmpnew]').forEach(function(el){
+    el.style.removeProperty('background');el.style.removeProperty('border-color');el.removeAttribute('data-cmpnew');
+  });
+}
+function updateCmpDate(dm){
+  var blk=document.getElementById('cmpdate-block');
+  if(!blk)return;
+  var date=document.getElementById('f-cmpdate').value;
+  if(!cmpDateOn||!date||currentMode!=='wir'||!dm||compareMode){blk.style.display='none';clearCmpTint();return;}
+  clearCmpTint();
+  var then=0,now=0;
+  Object.keys(dm).forEach(function(v){
+    var d=dm[v];
+    if(getWirStatus(d.status)!=='AP')return;
+    now++;
+    if(d.resp&&d.resp<=date){then++;}
+    else{
+      // Approved after the compare date -- highlighted cyan (legend: "Gained since")
+      var el=document.querySelector('#villa-layer .villa[data-v="'+v+'"]');
+      if(el){el.style.setProperty('background','#06b6d4','important');el.style.setProperty('border-color','#0891b2','important');el.setAttribute('data-cmpnew','1');}
+    }
+  });
+  var dt=new Date(date+'T00:00:00');
+  document.getElementById('cmpdate-lbl').textContent=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  document.getElementById('cmpdate-then').textContent=then;
+  document.getElementById('cmpdate-now').textContent=now;
+  var delta=now-then;
+  document.getElementById('cmpdate-delta').textContent=(delta>=0?'+':'')+delta;
+  blk.style.display='';
 }
 function updateSplitStats(dm,dm2){
   // Each side may be WIR or Clearance: counts bucketed as good/mid/bad/ns
@@ -1148,7 +1278,7 @@ async function loadData(){
   document.getElementById('lm').textContent='Loading WIR data...';
   var _kpWs=null; try{_kpWs=sessionStorage.getItem('kp_ws');}catch(e){}
   var _wsF=_kpWs==='civil'?'&discipline=eq.civil':(_kpWs==='mep'?'&or=(discipline.is.null,discipline.in.(mechanical,electrical))':'');
-  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type&raw_cluster=eq.'+CLUSTER+_wsF);
+  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,response_date&raw_cluster=eq.'+CLUSTER+_wsF);
   var wirBestMap={};
   wirRows.forEach(function(row){
     var rawCode=row.raw_activity_code||'';
@@ -1160,7 +1290,7 @@ async function loadData(){
     var pri=wirStPriority(row.raw_status);
     if(!wirBestMap[mk]||pri<wirStPriority(wirBestMap[mk].status)){
       wirBestMap[mk]={code:resolved,activity:name||resolved,actKey:actKey,
-        villa:villa,type:row.raw_villa_type||'',sub:row.raw_subcontractor||'',status:row.raw_status||''};
+        villa:villa,type:row.raw_villa_type||'',sub:row.raw_subcontractor||'',status:row.raw_status||'',resp:row.response_date||''};
     }
   });
   wirCsvData=Object.values(wirBestMap);
@@ -1206,8 +1336,8 @@ async function loadData(){
   try{
     var ncrRows=await fetchAll('ncr_sor_records?select=id,record_type,reference_no,villa_no,activity_code,activity_name,title,status,raised_date&is_active=eq.true&cluster=eq.'+CLUSTER+'&status=in.(open,in_progress)');
     ncrVillaMap={};ncrRows.forEach(function(r){var vn=String(r.villa_no||'');if(!ncrVillaMap[vn])ncrVillaMap[vn]=[];ncrVillaMap[vn].push(r);});
-    document.getElementById('ncr-count').textContent=ncrRows.length;
-    document.getElementById('ncr-block').classList.toggle('visible',ncrRows.length>0);
+    updateNcrBlock();
+    
   }catch(e){console.warn('[keyplan C2] NCR load failed:',e);}
   console.log('[keyplan C2 DXF] WIR:',wirCsvData.length,'rows,',wirActKeys.length,'acts | CLR:',clrCsvData.length,'rows,',clrActKeys.length,'acts | Open Fronts:',openFrontVillas.size);
   document.getElementById('hdr-info').textContent='267 Villas · '+wirCsvData.length+' WIR · '+clrCsvData.length+' CLR · '+openFrontVillas.size+' Open Fronts';

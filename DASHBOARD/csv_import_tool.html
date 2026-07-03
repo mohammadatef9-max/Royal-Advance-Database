@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Import Tool · MEP</title>
@@ -908,6 +908,16 @@ async function startImport(type){
   // Refresh materialized status views so trackers / release requests reflect this import immediately
   try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); addLog(type,'🔄 Status views refreshed','info'); }
   catch(e){ addLog(type,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
+  if(type==='wir'){
+    // Approved WIRs auto-complete the villa's site progress in the cluster tracker
+    try{ const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'}); const n=await r.json(); if(r.ok) addLog(type,'✅ Site progress synced — '+n+' activities marked completed','info'); }
+    catch(e){ addLog(type,'⚠ Progress sync failed (import still saved): '+e.message,'warn'); }
+  }
+  // Announce only after matviews + progress sync are done (refreshing earlier shows stale views)
+  try{
+    const who=window.__MEP_USER__?.full_name||'';
+    window.parent.postMessage({type:'data_updated',dataType:type==='wir'?'wir':'clearance',uploadedBy:who,rows:matched+unmatched},'*');
+  }catch(e){}
   btn.disabled=false;
 }
 
@@ -1660,13 +1670,20 @@ async function dcStartUpload(tab){
   dcToast(chunksFailed>0?'Completed with errors: '+uploaded+' rows':'Upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
 
   if(uploaded>0){
+    // Refresh materialized status views so trackers / release requests reflect this import immediately
+    try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); dcAddLog(tab,'🔄 Status views refreshed','info'); }
+    catch(e){ dcAddLog(tab,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
+    if(tab==='wir'){
+      // Approved WIRs auto-complete the villa's site progress in the cluster tracker
+      try{ const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'}); const n=await r.json(); if(r.ok) dcAddLog(tab,'✅ Site progress synced — '+n+' activities marked completed','info'); }
+      catch(e){ dcAddLog(tab,'⚠ Progress sync failed (import still saved): '+e.message,'warn'); }
+    }
+    // Announce ONLY after matviews + progress sync are done — announcing earlier made
+    // people refresh into stale views ("I refreshed and nothing changed").
     try{
       const who=window.__MEP_USER__?.full_name||'';
       window.parent.postMessage({type:'data_updated',dataType:tab,uploadedBy:who,rows:uploaded},'*');
     }catch(e){}
-    // Refresh materialized status views so trackers / release requests reflect this import immediately
-    try{ await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'}); dcAddLog(tab,'🔄 Status views refreshed','info'); }
-    catch(e){ dcAddLog(tab,'⚠ Status view refresh failed (data still saved): '+e.message,'warn'); }
   }
   btn.disabled=false;
 }
@@ -1845,8 +1862,11 @@ async function dcStartCivilUpload(){
   dcAddLog('civ',(chunksFailed>0?'⚠ Completed with errors — ':'✅ Done — ')+summary,chunksFailed>0?'warn':'ok');
   dcToast(chunksFailed>0?'Completed with errors':'Civil upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
   if(uploaded>0){
-    try{window.parent.postMessage({type:'data_updated',dataType:'wir',uploadedBy:window.__MEP_USER__?.full_name||'',rows:uploaded},'*');}catch(e){}
     try{await fetch(SB+'/rest/v1/rpc/refresh_status_matviews',{method:'POST',headers:getH(),body:'{}'});dcAddLog('civ','🔄 Status views refreshed','info');}catch(e){}
+    // Approved WIRs auto-complete the villa's site progress in the cluster tracker
+    try{const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'});const n=await r.json();if(r.ok)dcAddLog('civ','✅ Site progress synced — '+n+' activities marked completed','info');}catch(e){}
+    // Announce only after matviews + progress sync are done (refreshing earlier shows stale views)
+    try{window.parent.postMessage({type:'data_updated',dataType:'wir',uploadedBy:window.__MEP_USER__?.full_name||'',rows:uploaded},'*');}catch(e){}
   }
   btn.disabled=false;
 }

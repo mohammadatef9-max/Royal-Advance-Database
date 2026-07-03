@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -405,9 +405,13 @@ async function init(){
 // so it loads regardless of when the iframe receives its auth token (dc_import_log is not anon-readable).
 async function loadAll(){
   const SEL='select=raw_cluster,raw_villa_no,raw_villa_type,discipline,raw_activity_code,raw_activity_name,raw_subcontractor,revision,revision_no,normalised_status,submitted_date,response_date';
+  // Scope to the active workspace SERVER-side so an MEP session never downloads civil's
+  // ~38k rows (and vice versa). Standalone (no workspace) still loads everything.
+  let _ws=null; try{_ws=sessionStorage.getItem('kp_ws');}catch(e){}
+  const _wsF=_ws==='civil'?'&discipline=eq.civil':(_ws==='mep'?'&or=(discipline.is.null,discipline.in.(mechanical,electrical))':'');
   let all=[],offset=0;
   while(true){
-    const r=await fetch(`${SB}/rest/v1/v_latest_wir_by_sub?${SEL}&order=response_date.desc.nullslast&limit=1000&offset=${offset}`,{headers:getH()});
+    const r=await fetch(`${SB}/rest/v1/v_latest_wir_by_sub?${SEL}${_wsF}&order=response_date.desc.nullslast&limit=1000&offset=${offset}`,{headers:getH()});
     if(!r.ok) throw new Error(r.status);
     const d=await r.json();
     if(!Array.isArray(d)||!d.length) break;
@@ -479,6 +483,7 @@ function onFilterChange(){
 
 function clearFilters(){
   ['f-cluster','f-code','f-status','f-disc','f-sub','f-rev','f-villa','f-from','f-to'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  try{mepComboReset('f-code');}catch(e){}
   document.getElementById('f-datefield').value='response_date';
   applyClientFilters();
 }
@@ -626,6 +631,7 @@ init();
     }
     try { if (typeof applyClientFilters === 'function' && _loadedOk) applyClientFilters(); } catch(e) {}
   }
+  try{mepCombo('f-code');}catch(e){}
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
 })();
 </script>

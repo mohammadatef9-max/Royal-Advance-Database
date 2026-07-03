@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MEP Tracker — Ba Al Ghaiylam</title>
@@ -1003,7 +1003,7 @@ function enterWorkspace(ws) {
   document.getElementById('ws-picker').classList.remove('show');
   // Reload already-loaded discipline-scoped iframes so they re-fetch with the new scope.
   document.querySelectorAll('.content iframe').forEach(f => {
-    if (f.id && (f.id.indexOf('frame-keyplan_') === 0 || f.id === 'frame-cluster_tracker' || f.id === 'frame-dashboard') && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
+    if (f.id && (f.id.indexOf('frame-keyplan_') === 0 || f.id === 'frame-cluster_tracker' || f.id === 'frame-dashboard' || f.id === 'frame-wir_viewer') && f.src) { try { f.contentWindow.location.reload(); } catch(e) {} }
   });
   // Sidebar indicator
   const sbWs = document.getElementById('sb-ws');
@@ -1174,6 +1174,25 @@ function go(pageId) {
       hideLoader();
       document.getElementById('page-hint').textContent = '⚠ Could not load ' + page.file;
     };
+  } else if (staleFrames.has(pageId)) {
+    // Data changed while this page sat in the background — silently reload it now
+    staleFrames.delete(pageId);
+    showLoader('Refreshing ' + page.title + '…');
+    try {
+      const base = (frame.src || '').split('?')[0];
+      frame.src = (base || page.file) + '?_r=' + Date.now();
+    } catch(e) { try { frame.contentWindow.location.reload(); } catch(e2) {} }
+    frame.onload = () => {
+      hideLoader();
+      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
+      if (accessToken && currentUser) {
+        try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
+      }
+      if (activeWorkspace) {
+        try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {}
+      }
+    };
   } else {
     // Already preloaded — instant switch, no loader needed
     hideLoader();
@@ -1226,18 +1245,14 @@ function initRealtime(token) {
 
     realtimeChannel = realtimeClient
       .channel('data-updates')
-      // ── Broadcast listener: fires for ALL connected users when any uploader broadcasts ──
+      // ── Broadcast listener: fires for ALL connected users when any uploader broadcasts.
+      // (The old postgres_changes fallback was removed — it fired on the FIRST inserted
+      // chunk, mid-import, so users refreshed before the matviews were rebuilt and saw
+      // no change. The data_version heartbeat in loadBadges() is the safety net now.)
       .on('broadcast', { event: 'data-refresh' }, ({ payload }) => {
         const dt = payload?.dataType || 'wir';
         const who = payload?.uploadedBy || '';
         showUpdateBanner(dt, who);
-      })
-      // ── Postgres changes: fallback for direct DB inserts (requires table in realtime publication) ──
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'dc_import_log' }, () => {
-        showUpdateBanner('wir', null);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'clearance_import_log' }, () => {
-        showUpdateBanner('clearance', null);
       })
       .subscribe((status) => {
         console.log('[Realtime]', status);
@@ -1251,12 +1266,30 @@ function initRealtime(token) {
 let lastBannerTime = 0;
 let bannerTimeout = null;
 
+// Pages whose data changed while they were open in the background.
+// go() silently reloads a stale page the next time the user opens it.
+const staleFrames = new Set();
+function markFramesStale() {
+  document.querySelectorAll('.content iframe').forEach(f => {
+    if (f.id && f.src && f.id.indexOf('frame-') === 0) staleFrames.add(f.id.slice(6));
+  });
+}
+
+const DV_LABELS = {
+  wir: '⚡ WIR data updated', clearance: '🗂 Clearance data updated',
+  progress: '📈 Site progress updated', release: '📋 Release requests updated',
+  ncr: '⚠ NCR / SOR updated',
+};
+
 function showUpdateBanner(dataType, uploadedBy) {
+  // Whatever the user does with the banner, every open page is now stale —
+  // navigation will silently refresh them one by one.
+  markFramesStale();
   const now = Date.now();
   if (now - lastBannerTime < 5000) return; // debounce — max once per 5s
   lastBannerTime = now;
 
-  const label = dataType === 'wir' ? '⚡ WIR data updated' : '🗂 Clearance data updated';
+  const label = DV_LABELS[dataType] || '🔄 Data updated';
   const who = uploadedBy || '';
   const time = new Date().toLocaleTimeString('en-GB');
 
@@ -1266,7 +1299,7 @@ function showUpdateBanner(dataType, uploadedBy) {
   document.getElementById('update-banner').classList.add('show');
   document.body.classList.add('banner-open');
 
-  // Auto-dismiss after 30s
+  // Auto-dismiss after 30s (pages stay marked stale regardless)
   clearTimeout(bannerTimeout);
   bannerTimeout = setTimeout(dismissBanner, 30000);
 }
@@ -1281,13 +1314,17 @@ function refreshCurrentPage() {
   dismissBanner();
   const frame = document.getElementById('frame-' + currentPage);
   if (!frame) return;
+  staleFrames.delete(currentPage); // this one is being refreshed right now
 
-  // Re-send session + theme after the reload completes
+  // Re-send session + theme + workspace after the reload completes
   frame.onload = () => {
     const theme = document.documentElement.getAttribute('data-theme') || 'dark';
     try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
     if (accessToken && currentUser) {
       try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
+    }
+    if (activeWorkspace) {
+      try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {}
     }
   };
 
@@ -1346,7 +1383,31 @@ async function loadBadges() {
       else { badge3.style.display = 'none'; }
     }
   } catch(e) {}
+  // ── Data-version heartbeat: safety net that catches changes even when the Realtime
+  // broadcast was missed (socket down, uploader on an old page, direct DB edits).
+  // Statement triggers bump data_version once per import/edit; this is one tiny read.
+  try {
+    const r4 = await fetch(`${SB}/rest/v1/data_version?select=key,version`,
+      { headers:{ 'apikey': KEY, 'Authorization':'Bearer ' + accessToken } });
+    const rows = await r4.json();
+    if (Array.isArray(rows)) {
+      let changedKey = null;
+      const first = !dataVersionsSeen;
+      if (first) dataVersionsSeen = {};
+      rows.forEach(row => {
+        const prev = dataVersionsSeen[row.key];
+        dataVersionsSeen[row.key] = row.version;
+        if (first || prev === row.version) return;
+        // WIR bumps are discipline-scoped — only nag the matching workspace
+        if (row.key === 'wir_mep'   && activeWorkspace === 'civil') return;
+        if (row.key === 'wir_civil' && activeWorkspace === 'mep')   return;
+        if (!changedKey) changedKey = (row.key === 'wir_mep' || row.key === 'wir_civil') ? 'wir' : row.key;
+      });
+      if (changedKey) showUpdateBanner(changedKey, null);
+    }
+  } catch(e) {}
 }
+let dataVersionsSeen = null;
 
 // ── RESPOND TO child_ready from iframes ──
 // When an inner page finishes setting up its listener, it sends child_ready.

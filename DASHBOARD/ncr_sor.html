@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -867,11 +867,13 @@ async function submitRecord(){
   }
 }
 
+try{mepCombo('f-activity');}catch(e){}
 function resetForm(){
   selectType('NCR');
   document.getElementById('f-cluster').value='';
   document.getElementById('f-villa').innerHTML='<option value="">— Select Villa —</option>';
   document.getElementById('f-activity').value='';
+  try{mepComboReset('f-activity');}catch(e){}
   document.getElementById('f-refno').value='';
   document.getElementById('f-refno-hint').textContent='';
   document.getElementById('f-title').value='';

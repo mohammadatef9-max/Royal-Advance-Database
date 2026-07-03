@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -626,6 +626,7 @@ function onFilterChange(){
 
 function clearFilters(){
   ['f-cluster','f-code','f-status'].forEach(id=>document.getElementById(id).value='');
+  try{mepComboReset('f-code');}catch(e){}
   const vtEl=document.getElementById('f-vtype');
   if(vtEl) Array.from(vtEl.options).forEach(o=>o.selected=o.value==='');
   ['f-villa','f-ref'].forEach(id=>document.getElementById(id).value='');
@@ -875,6 +876,7 @@ init();
       }
     }
   });
+  try{mepCombo('f-code');}catch(e){}
   try { window.parent.postMessage({ type: 'child_ready' }, '*'); } catch(e) {}
 })();
 </script>

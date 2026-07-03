@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="shared.js?v=1"></script>
+<script src="shared.js?v=2"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reference Data · MEP Tracker</title>
@@ -789,6 +789,7 @@ function getH() {
 }
 
 // ── AUTH via postMessage ──
+try{['map-wir-sel','map-clr-sel','alias-canonical-sel','alias-old-sel','of-wir-sel','of-clr-sel'].forEach(function(id){mepCombo(id);});}catch(e){}
 window.addEventListener('message', e => {
   if (e.data && e.data.type === 'session') {
     window.__MEP_TOKEN__ = e.data.token;
