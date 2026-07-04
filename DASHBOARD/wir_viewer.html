@@ -403,7 +403,7 @@ async function init(){
 // Source: v_latest_wir_by_sub — the same matched WIR data the trackers use, one row per
 // villa+activity+subcontractor (latest revision). It's a view granted to anon/authenticated,
 // so it loads regardless of when the iframe receives its auth token (dc_import_log is not anon-readable).
-async function loadAll(){
+async function loadAll(silent){
   const SEL='select=raw_cluster,raw_villa_no,raw_villa_type,discipline,raw_activity_code,raw_activity_name,raw_subcontractor,revision,revision_no,normalised_status,submitted_date,response_date';
   // Scope to the active workspace SERVER-side so an MEP session never downloads civil's
   // ~38k rows (and vice versa). Standalone (no workspace) still loads everything.
@@ -418,7 +418,7 @@ async function loadAll(){
     all=all.concat(d);
     if(d.length<1000) break;
     offset+=1000;
-    showLoading(true,`Loading… ${all.length.toLocaleString()} WIRs`);
+    if(!silent) showLoading(true,`Loading… ${all.length.toLocaleString()} WIRs`);
   }
   allRows=all;
 }
@@ -616,6 +616,12 @@ init();
       }
     }
     if (e.data.type === 'workspace') { applyWorkspaceFilter(e.data.workspace); }
+    // Silent in-place refresh after a WIR import — keeps filters and scroll position.
+    if (e.data.type === 'data_updated' && e.data.domain === 'wir' && _loadedOk && !window._dvRef) {
+      window._dvRef = true;
+      const wrap = document.querySelector('.tbl-wrap'); const st = wrap ? wrap.scrollTop : 0;
+      loadAll(true).then(() => { applyClientFilters(); if (wrap) wrap.scrollTop = st; }).catch(()=>{}).finally(() => { window._dvRef = false; });
+    }
   });
   // Lock the discipline filter to the active workspace so a Civil workspace never shows MEP rows.
   function applyWorkspaceFilter(ws) {

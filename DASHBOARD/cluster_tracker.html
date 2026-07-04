@@ -1085,6 +1085,30 @@ function applyCtWorkspace(){
 
 function render(){buildHeader();buildTable();applyFilters();}
 
+// Live sync: when another user edits site progress, fetch only rows changed since the
+// last sync and patch progD in place — filters and column setup are untouched.
+let _progSince=new Date().toISOString();
+async function refreshProgressSilent(){
+  if(window._dvProgRef)return;
+  window._dvProgRef=true;
+  try{
+    const since=_progSince;
+    _progSince=new Date().toISOString();
+    const rows=await fa('progress_updates?select=villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false&updated_at=gt.'+encodeURIComponent(since));
+    if(Array.isArray(rows)&&rows.length){
+      const i2c={};Object.entries(actCI).forEach(([c,id])=>{i2c[id]=c;});
+      rows.forEach(r=>{
+        const code=i2c[r.activity_id];if(!code)return;
+        if(!progD[r.villa_id])progD[r.villa_id]={};
+        progD[r.villa_id][code]={status:r.status,start_date:r.start_date,finish_date:r.finish_date,subcontractor:r.subcontractor,activity_id:r.activity_id};
+      });
+      const sc=document.getElementById('mt')?.parentElement;const st=sc?sc.scrollTop:0;
+      render();
+      if(sc)sc.scrollTop=st;
+    }
+  }catch(e){}finally{window._dvProgRef=false;}
+}
+
 function buildHeader(){
   let h='<tr>';
   h+=`<th class="fx" style="left:0"><div class="th-fixed-label">Villa</div></th>`;
@@ -2709,6 +2733,12 @@ document.getElementById('clr-modal').addEventListener('click',function(e){if(e.t
     if (e.data.type === 'session') { window.__MEP_TOKEN__ = e.data.token; window.__MEP_USER__ = e.data.user; window.__MEP_PERMS__ = e.data.user?.permissions||[]; applyEditPerms(); }
     if (e.data.type === 'workspace') {
       try { var w = e.data.workspace||''; if (w && w !== sessionStorage.getItem('kp_ws')) { sessionStorage.setItem('kp_ws', w); location.reload(); } } catch(_e) {}
+    }
+    // Someone edited site progress — pull only the changed rows and re-render in place.
+    // (WIR/clearance imports are NOT applied live here to avoid disrupting active filtering;
+    // the shell reloads this page silently the next time it's opened.)
+    if (e.data.type === 'data_updated' && e.data.domain === 'progress') {
+      try { refreshProgressSilent(); } catch(_e) {}
     }
   });
   // Hide own topbar when running inside the main shell

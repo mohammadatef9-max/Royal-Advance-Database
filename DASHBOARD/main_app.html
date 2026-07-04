@@ -380,6 +380,7 @@ body.banner-open .shell{margin-top:40px}
 
 <!-- LOGIN SCREEN -->
 <!-- Data update notification banner -->
+<div id="dv-toast" style="position:fixed;bottom:18px;right:18px;z-index:9999;background:var(--bg-panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--text);display:none;box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:340px"></div>
 <div id="update-banner">
   <div class="ub-dot"></div>
   <div class="ub-msg" id="ub-msg">Data updated</div>
@@ -1281,27 +1282,26 @@ const DV_LABELS = {
   ncr: '⚠ NCR / SOR updated',
 };
 
+let lastWirToast = 0;
 function showUpdateBanner(dataType, uploadedBy) {
-  // Whatever the user does with the banner, every open page is now stale —
-  // navigation will silently refresh them one by one.
+  // Quiet sync model — no action-required popups:
+  //  · background pages are marked stale and reload silently on next visit
+  //  · the ACTIVE page gets a data_updated message and refreshes in place if it can
+  //  · only bulk imports (wir/clearance) show a passive, buttonless 6s toast
   markFramesStale();
-  const now = Date.now();
-  if (now - lastBannerTime < 5000) return; // debounce — max once per 5s
-  lastBannerTime = now;
-
-  const label = DV_LABELS[dataType] || '🔄 Data updated';
-  const who = uploadedBy || '';
-  const time = new Date().toLocaleTimeString('en-GB');
-
-  document.getElementById('ub-msg').textContent = label + ' — your view may be outdated';
-  document.getElementById('ub-who').textContent = who ? 'by ' + who : '';
-  document.getElementById('ub-time').textContent = time;
-  document.getElementById('update-banner').classList.add('show');
-  document.body.classList.add('banner-open');
-
-  // Auto-dismiss after 30s (pages stay marked stale regardless)
-  clearTimeout(bannerTimeout);
-  bannerTimeout = setTimeout(dismissBanner, 30000);
+  try {
+    const f = document.getElementById('frame-' + currentPage);
+    if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'data_updated', domain: dataType, uploadedBy: uploadedBy || '' }, FRAME_TGT);
+  } catch(e) {}
+  if (dataType === 'wir' || dataType === 'clearance') {
+    lastWirToast = Date.now();
+    const t = document.getElementById('dv-toast');
+    if (t) {
+      t.textContent = (DV_LABELS[dataType] || '🔄 Data updated') + (uploadedBy ? ' by ' + uploadedBy : '') + ' — views refresh automatically';
+      t.style.display = 'block';
+      clearTimeout(t._t); t._t = setTimeout(() => { t.style.display = 'none'; }, 6000);
+    }
+  }
 }
 
 function dismissBanner() {
@@ -1391,19 +1391,28 @@ async function loadBadges() {
       { headers:{ 'apikey': KEY, 'Authorization':'Bearer ' + accessToken } });
     const rows = await r4.json();
     if (Array.isArray(rows)) {
-      let changedKey = null;
+      const changed = [];
       const first = !dataVersionsSeen;
       if (first) dataVersionsSeen = {};
+      if (!window.dvActed) window.dvActed = {};
       rows.forEach(row => {
-        const prev = dataVersionsSeen[row.key];
-        dataVersionsSeen[row.key] = row.version;
-        if (first || prev === row.version) return;
-        // WIR bumps are discipline-scoped — only nag the matching workspace
-        if (row.key === 'wir_mep'   && activeWorkspace === 'civil') return;
-        if (row.key === 'wir_civil' && activeWorkspace === 'mep')   return;
-        if (!changedKey) changedKey = (row.key === 'wir_mep' || row.key === 'wir_civil') ? 'wir' : row.key;
+        const k = row.key, cur = row.version;
+        if (first) { dataVersionsSeen[k] = cur; window.dvActed[k] = cur; return; }
+        const wirKey = (k === 'wir_mep' || k === 'wir_civil');
+        const stillChanging = dataVersionsSeen[k] !== cur;
+        dataVersionsSeen[k] = cur;
+        if (window.dvActed[k] === cur) return;                 // already handled
+        // Imports bump the stamp chunk-by-chunk — wait until it holds still for a full
+        // poll cycle so we refresh ONCE at completion, not repeatedly mid-import.
+        if (wirKey && stillChanging) return;
+        if (k === 'wir_mep'   && activeWorkspace === 'civil') { window.dvActed[k] = cur; return; }
+        if (k === 'wir_civil' && activeWorkspace === 'mep')   { window.dvActed[k] = cur; return; }
+        // The uploader's completion broadcast already refreshed everyone — skip the echo
+        if (wirKey && Date.now() - lastWirToast < 90000)      { window.dvActed[k] = cur; return; }
+        window.dvActed[k] = cur;
+        changed.push(wirKey ? 'wir' : k);
       });
-      if (changedKey) showUpdateBanner(changedKey, null);
+      [...new Set(changed)].forEach(k => showUpdateBanner(k, null));
     }
   } catch(e) {}
 }

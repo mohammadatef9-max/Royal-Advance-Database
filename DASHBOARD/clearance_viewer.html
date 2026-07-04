@@ -546,8 +546,8 @@ function buildServerQuery(fc, fco){
 }
 
 // ─── FETCH: PREVIEW (first 50, no cluster/code) ────────────────────────────
-async function fetchPreview(){
-  showLoading(true,'Loading…');
+async function fetchPreview(silent){
+  if(!silent) showLoading(true,'Loading…');
   try{
     const r=await fetch(`${SB}/rest/v1/${buildServerQuery('','')}&limit=50`,{headers:getH()});
     if(!r.ok) throw new Error(r.status);
@@ -561,8 +561,8 @@ async function fetchPreview(){
 }
 
 // ─── FETCH: ALL ROWS for cluster + code combo ──────────────────────────────
-async function fetchAll(fc, fco){
-  showLoading(true,'Loading clearances…');
+async function fetchAll(fc, fco, silent){
+  if(!silent) showLoading(true,'Loading clearances…');
   try{
     let all=[],offset=0;
     while(true){
@@ -574,7 +574,7 @@ async function fetchAll(fc, fco){
       all=all.concat(batch);
       if(batch.length<1000) break;
       offset+=1000;
-      showLoading(true,`Loading… ${all.length.toLocaleString()} records`);
+      if(!silent) showLoading(true,`Loading… ${all.length.toLocaleString()} records`);
     }
     allRows=all; isPreview=false; lastCluster=fc; lastCode=fco;
     applyClientFilters();
@@ -899,6 +899,13 @@ init();
       if (e.data.token && typeof init === 'function' && !_loadedOk) {
         init();
       }
+    }
+    // Silent in-place refresh after a clearance import — keeps filters and scroll position.
+    if (e.data.type === 'data_updated' && e.data.domain === 'clearance' && _loadedOk && !window._dvRef) {
+      window._dvRef = true;
+      const wrap = document.querySelector('.tbl-wrap'); const st = wrap ? wrap.scrollTop : 0;
+      const p = isPreview ? fetchPreview(true) : fetchAll(lastCluster, lastCode, true);
+      Promise.resolve(p).then(() => { if (wrap) wrap.scrollTop = st; }).catch(()=>{}).finally(() => { window._dvRef = false; });
     }
   });
   

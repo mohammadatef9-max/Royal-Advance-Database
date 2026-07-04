@@ -115,6 +115,7 @@ body.in-shell .topbar{display:none!important}
 .disc-mech{background:var(--st-review-bg);color:var(--st-review-tx);border:1px solid var(--st-review-bd)}
 .disc-elec{background:var(--st-progress-bg);color:var(--st-progress-tx);border:1px solid var(--st-progress-bd)}
 .disc-both{background:var(--st-approved-bg);color:var(--st-approved-tx);border:1px solid var(--st-approved-bd)}
+.disc-civil{background:rgba(224,164,88,.14);color:#e0a458;border:1px solid rgba(224,164,88,.35)}
 
 /* status */
 .status-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:5px}
@@ -321,6 +322,7 @@ body.in-shell .topbar{display:none!important}
       <option value="">All Disciplines</option>
       <option value="mechanical">Mechanical</option>
       <option value="electrical">Electrical</option>
+      <option value="civil">Civil</option>
       <option value="both">Both</option>
     </select>
   </div>
@@ -501,6 +503,7 @@ body.in-shell .topbar{display:none!important}
             <option value="">— Select —</option>
             <option value="mechanical">Mechanical</option>
             <option value="electrical">Electrical</option>
+            <option value="civil">Civil</option>
             <option value="both">Both</option>
           </select>
         </div>
@@ -791,7 +794,7 @@ function renderTable(users) {
       ? `<div class="side-roles">${sides.map(s => `<span class="side-pill">${fmtRole(s)}</span>`).join('')}</div>`
       : `<span style="color:var(--text-faint);font-size:11px">None</span>`;
 
-    const discClass = disc === 'mechanical' ? 'disc-mech' : disc === 'electrical' ? 'disc-elec' : disc === 'both' ? 'disc-both' : '';
+    const discClass = disc === 'mechanical' ? 'disc-mech' : disc === 'electrical' ? 'disc-elec' : disc === 'civil' ? 'disc-civil' : disc === 'both' ? 'disc-both' : '';
     const discLabel = disc ? disc.charAt(0).toUpperCase() + disc.slice(1) : '—';
 
     return `<tr class="${active ? '' : 'inactive'}" data-id="${u.id}">

@@ -1118,6 +1118,8 @@ window.addEventListener('message',e=>{
   if(!e.data||typeof e.data!=='object')return;
   if(e.data.type==='theme'){applyTheme(e.data.theme);try{localStorage.setItem('mep_theme',e.data.theme);}catch(ex){}}
   if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;window.__MEP_PERMS__=e.data.user?.permissions||[];checkPageAccess();}
+  // Silent refresh when releases/imports change elsewhere (same path as the ↻ Refresh button)
+  if(e.data.type==='data_updated'&&['wir','clearance','release'].indexOf(e.data.domain)>=0){try{loadAll();}catch(ex){}}
 });
 if(window.self!==window.top)document.body.classList.add('in-shell');
 

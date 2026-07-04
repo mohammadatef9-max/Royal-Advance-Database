@@ -477,7 +477,25 @@ window.addEventListener('message',e=>{
   if(!e.data||typeof e.data!=='object')return;
   if(e.data.type==='theme'){applyTheme(e.data.theme);try{localStorage.setItem('mep_theme',e.data.theme);}catch(ex){}}
   if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;}
+  if(e.data.type==='data_updated'&&(e.data.domain==='wir'||e.data.domain==='clearance'))refreshDataSilent();
 });
+
+// Silent in-place refresh after an import — re-fetches and re-renders without the load overlay.
+let _dvRef=false;
+async function refreshDataSilent(){
+  if(_dvRef||!wirD.length&&!clrD.length)return;
+  _dvRef=true;
+  try{
+    const wsFilter = WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
+    const w=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline'+wsFilter);
+    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
+    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline');
+    const m={};clrActs.forEach(c=>{m[c.clearance_code]=c.discipline;});
+    wirD=w;
+    clrD=allClr.filter(r=>{const d=m[r.raw_clearance_code];return WS==='civil' ? d==='civil' : d!=='civil';});
+    renderAll();
+  }catch(e){}finally{_dvRef=false;}
+}
 if(window.self!==window.top)document.body.classList.add('in-shell');
 try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
 
