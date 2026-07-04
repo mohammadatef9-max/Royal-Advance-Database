@@ -256,6 +256,7 @@ body.edit-mode #edit-panel{display:flex}
     </div>
   </div>
   <div class="tb-div"></div>
+  <button class="tbtn" id="btn-prog" onclick="toggleProgTint()" style="display:none" title="Highlight villas whose site progress for this activity is In Progress (yellow)">⚒ In Progress</button>
   <button class="tbtn" id="btn-cmpdate" onclick="toggleCmpDate()" style="display:none" title="Show how many villas were already approved by an earlier date (numbers only, no highlighting)">📅 vs Date</button>
   <span id="cmpdate-ctrls" style="display:none;align-items:center;gap:4px">
     <input type="date" id="f-cmpdate" onchange="refreshCmpDate()" style="background:var(--bg-panel);color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 6px;font-size:11px;font-family:inherit;color-scheme:dark">
@@ -633,6 +634,7 @@ function updateStats(dm){
   document.getElementById('sv-pct').textContent=pct;
   try{updateCmpDate(dm);}catch(e){}
   try{updateNcrBlock();}catch(e){}
+  try{refreshProgTint();}catch(e){}
   var ofCount=openFrontVillas.size;
   document.getElementById('of-count').textContent=ofCount;
   document.getElementById('open-front-block').classList.toggle('visible', ofCount>0);
@@ -778,6 +780,8 @@ function onModeChange(){
   cmpDateOn=false;
   var _bcd=document.getElementById('btn-cmpdate');
   if(_bcd){_bcd.style.display='none';_bcd.classList.remove('active');}
+  var bpg=document.getElementById('btn-prog');if(bpg){bpg.style.display='none';bpg.classList.remove('active');}
+  progTintOn=false;
   var _cdc=document.getElementById('cmpdate-ctrls');if(_cdc)_cdc.style.display='none';
   var _cdb=document.getElementById('cmpdate-block');if(_cdb)_cdb.style.display='none';
   var l2=document.getElementById('cmp-leg2');if(l2)l2.style.display='none';
@@ -792,6 +796,8 @@ function onActivityChange(sel){
   if(btnCmp) btnCmp.style.display=currentActivity?'':'none';
   var btnCD=document.getElementById('btn-cmpdate');
   if(btnCD) btnCD.style.display=(currentActivity&&currentMode==='wir')?'':'none';
+  var btnPG=document.getElementById('btn-prog');
+  if(btnPG) btnPG.style.display=(currentActivity&&currentMode==='wir')?'':'none';
   if(!currentActivity){cmpDateOn=false;if(btnCD)btnCD.classList.remove('active');var _c1=document.getElementById('cmpdate-ctrls');if(_c1)_c1.style.display='none';var _c2=document.getElementById('cmpdate-block');if(_c2)_c2.style.display='none';}
   if(!currentActivity){
     compareMode=false;currentActivity2='';
@@ -894,6 +900,56 @@ function updateNcrBlock(){
   }
   var cEl=document.getElementById('ncr-count');if(cEl)cEl.textContent=n;
   blk.classList.toggle('visible',n>0);
+}
+// -- Site-progress overlay: highlights villas whose progress for the selected activity
+// is 'in_progress' (yellow). Progress data is fetched once on first toggle, then reused.
+var progTintOn=false, kpProgMap=null, _kpProgLoading=false, kpActId2Code={};
+function toggleProgTint(){
+  progTintOn=!progTintOn;
+  var b=document.getElementById('btn-prog');if(b)b.classList.toggle('active',progTintOn);
+  if(progTintOn&&!kpProgMap){loadKpProgress();return;}
+  refreshProgTint();
+}
+async function loadKpProgress(){
+  if(_kpProgLoading)return;_kpProgLoading=true;
+  try{
+    var cl=await fetchAll('clusters?select=id,code&code=eq.'+CLUSTER);
+    if(!cl.length)throw new Error('cluster not found');
+    var vs=await fetchAll('villas?select=id,villa_no&is_active=eq.true&cluster_id=eq.'+cl[0].id);
+    var v2n={};vs.forEach(function(v){v2n[v.id]=String(v.villa_no);});
+    var ids=vs.map(function(v){return v.id;});
+    var rows=[];
+    for(var i=0;i<ids.length;i+=200){
+      var chunk=await fetchAll('progress_updates?select=villa_id,activity_id,status&is_current=eq.true&is_deleted=eq.false&villa_id=in.('+ids.slice(i,i+200).join(',')+')');
+      rows=rows.concat(chunk);
+    }
+    kpProgMap={};
+    rows.forEach(function(r){
+      var vn=v2n[r.villa_id],code=kpActId2Code[r.activity_id];
+      if(!vn||!code)return;
+      if(!kpProgMap[vn])kpProgMap[vn]={};
+      kpProgMap[vn][code]=r.status;
+    });
+  }catch(e){console.warn('[keyplan] progress load failed:',e);kpProgMap={};}
+  finally{_kpProgLoading=false;refreshProgTint();}
+}
+function clearProgTint(){
+  document.querySelectorAll('#villa-layer .villa[data-prog]').forEach(function(el){
+    el.style.removeProperty('background');el.style.removeProperty('border-color');el.removeAttribute('data-prog');
+  });
+}
+function refreshProgTint(){
+  clearProgTint();
+  var b=document.getElementById('btn-prog');
+  if(!progTintOn||currentMode!=='wir'||!currentActivity||!kpProgMap){if(b)b.textContent='⚒ In Progress';return;}
+  var code=String(currentActivity).trim().split(' ')[0];
+  var n=0;
+  Object.keys(kpProgMap).forEach(function(vn){
+    if(kpProgMap[vn][code]!=='in_progress')return;
+    var el=document.querySelector('#villa-layer .villa[data-v="'+vn+'"]');
+    if(el){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
+  });
+  if(b)b.textContent='⚒ In Progress'+(n?' ('+n+')':'');
 }
 function clearCmpTint(){
   document.querySelectorAll('#villa-layer .villa[data-cmpnew]').forEach(function(el){
@@ -1229,7 +1285,7 @@ async function loadData(){
     console.log('[keyplan] Open Front links:',OPEN_FRONT_LINKS);
   }catch(e){console.warn('[keyplan] Could not load open front codes',e);}
   var _actsAndAliases=await Promise.all([
-    fetchAll('activities?select=activity_code,activity_name,discipline&is_active=eq.true'),
+    fetchAll('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true'),
     fetchAll('wir_code_aliases?select=old_code,new_code&is_active=eq.true')
   ]);
   var actsR=_actsAndAliases[0], wirAliasRows=_actsAndAliases[1];
@@ -1238,6 +1294,7 @@ async function loadData(){
   if(Array.isArray(actsR))actsR.forEach(function(a){
     var pref=(_wsN==='civil')?(a.discipline==='civil'):(a.discipline!=='civil');
     if(pref||actNameMap[a.activity_code]===undefined)actNameMap[a.activity_code]=a.activity_name;
+    if(a.id!=null)kpActId2Code[a.id]=a.activity_code;
   });
   var wirAliases={};
   if(Array.isArray(wirAliasRows))wirAliasRows.forEach(function(r){wirAliases[r.old_code.trim()]=r.new_code.trim();});

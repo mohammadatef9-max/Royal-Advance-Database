@@ -627,6 +627,8 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
           Refresh
         </button>
+        <button class="btn btn-ghost" onclick="clearPriorityTier(1)" title="Remove ALL villas from Priority 1" style="color:#f59e0b;border-color:rgba(245,158,11,.4)">✕ Clear Tier 1</button>
+        <button class="btn btn-ghost" onclick="clearPriorityTier(2)" title="Remove ALL villas from Priority 2" style="color:#3b82f6;border-color:rgba(59,130,246,.4)">✕ Clear Tier 2</button>
         <button class="btn btn-primary" onclick="openPriModal()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
           + Add Priority Villa
@@ -2028,6 +2030,25 @@ async function removePriorityVilla(id, tier){
     });
     if(!res.ok) throw new Error('HTTP '+res.status);
     toast('Priority '+tier+' removed','info');
+    await loadPriority();
+  }catch(e){ toast('Error: '+esc2(e.message),'error'); }
+}
+
+// Clear an ENTIRE priority tier in one batched PATCH (with count + confirm first)
+async function clearPriorityTier(tier){
+  tier=tier===2?2:1;
+  var count=_priList.filter(function(v){return v.tier===tier;}).length;
+  if(!count){ toast('No villas in Priority '+tier,'info'); return; }
+  if(!confirm('Remove ALL '+count+' villa(s) from Priority '+tier+'?\n\nThis clears their priority flag and note. This cannot be undone.')) return;
+  var flag = tier===1 ? 'is_priority' : 'is_priority2';
+  var body = tier===1 ? {is_priority:false,priority_note:null} : {is_priority2:false,priority2_note:null};
+  try{
+    var res=await fetch(SB+'/rest/v1/villas?'+flag+'=eq.true',{
+      method:'PATCH', headers:Object.assign({},getH(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    toast('✕ Priority '+tier+' cleared — '+count+' villa(s)','success');
     await loadPriority();
   }catch(e){ toast('Error: '+esc2(e.message),'error'); }
 }
