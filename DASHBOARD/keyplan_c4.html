@@ -270,6 +270,11 @@ body.space-down #map-viewport{cursor:grab}
       <span>Not Submitted</span>
       <span class="leg-count" id="s-ns">0</span>
     </div>
+    <div class="leg-item" id="leg-PROG" style="display:none;cursor:default">
+      <div class="ldot" style="background:#eab308"></div>
+      <span>In Progress</span>
+      <span class="leg-count" id="s-prog">0</span>
+    </div>
     <div class="stats-bar">
       <div class="stat" id="stat-total"><div class="stat-val" id="sv-total">432</div><div class="stat-label">Total</div></div>
       <div class="stat" id="stat-AP" onclick="toggleStatus('AP')"><div class="stat-val" style="color:var(--approved)" id="sv-ap">0</div><div class="stat-label" id="sl-ap">Appr</div></div>
@@ -748,6 +753,7 @@ function onModeChange(){
   var _bcd=document.getElementById('btn-cmpdate');
   if(_bcd){_bcd.style.display='none';_bcd.classList.remove('active');}
   var bpg=document.getElementById('btn-prog');if(bpg){bpg.style.display='none';bpg.classList.remove('active');}
+  var lpgM=document.getElementById('leg-PROG');if(lpgM)lpgM.style.display='none';
   progTintOn=false;
   var _cdc=document.getElementById('cmpdate-ctrls');if(_cdc)_cdc.style.display='none';
   var _cdb=document.getElementById('cmpdate-block');if(_cdb)_cdb.style.display='none';
@@ -766,7 +772,10 @@ function onActivityChange(sel){
   if(btnCD) btnCD.style.display=(currentActivity&&currentMode==='wir')?'':'none';
   var btnPG=document.getElementById('btn-prog');
   if(btnPG) btnPG.style.display=(currentActivity&&currentMode==='wir')?'':'none';
-  if(!currentActivity){cmpDateOn=false;if(btnCD)btnCD.classList.remove('active');var _c1=document.getElementById('cmpdate-ctrls');if(_c1)_c1.style.display='none';var _c2=document.getElementById('cmpdate-block');if(_c2)_c2.style.display='none';}
+  if(!currentActivity){cmpDateOn=false;if(btnCD)btnCD.classList.remove('active');
+    progTintOn=false;
+    if(btnPG)btnPG.classList.remove('active');
+    var _lpg=document.getElementById('leg-PROG');if(_lpg)_lpg.style.display='none';var _c1=document.getElementById('cmpdate-ctrls');if(_c1)_c1.style.display='none';var _c2=document.getElementById('cmpdate-block');if(_c2)_c2.style.display='none';}
   if(!currentActivity){
     compareMode=false;currentActivity2='';
     if(btnCmp)btnCmp.classList.remove('active');
@@ -909,7 +918,12 @@ function clearProgTint(){
 function refreshProgTint(){
   clearProgTint();
   var b=document.getElementById('btn-prog');
-  if(!progTintOn||currentMode!=='wir'||!currentActivity||!kpProgMap){if(b)b.textContent='⚒ In Progress';return;}
+  var leg=document.getElementById('leg-PROG');
+  if(!progTintOn||currentMode!=='wir'||!currentActivity||!kpProgMap||compareMode){
+    if(b)b.textContent='⚒ In Progress';
+    if(leg)leg.style.display='none';
+    return;
+  }
   var code=String(currentActivity).trim().split(' ')[0];
   var n=0;
   Object.keys(kpProgMap).forEach(function(vn){
@@ -918,6 +932,7 @@ function refreshProgTint(){
     if(el){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
   });
   if(b)b.textContent='⚒ In Progress'+(n?' ('+n+')':'');
+  if(leg){leg.style.display='flex';document.getElementById('s-prog').textContent=n;}
 }
 function clearCmpTint(){
   document.querySelectorAll('#villa-layer .villa[data-cmpnew]').forEach(function(el){
@@ -1128,11 +1143,11 @@ function doPrint(){
     : '');
 
   var _prevSubLabels=showSubLabels;
-  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
+  if(!showSubLabels){showSubLabels=true;renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);if(progTintOn)refreshProgTint();}
   var srcLayer = document.getElementById('villa-layer');
   var villaHtml = srcLayer ? srcLayer.innerHTML : '';
   showSubLabels=_prevSubLabels;
-  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);}
+  if(!_prevSubLabels){renderVillas(buildDataMap(currentActivity),compareMode?buildDataMapKind(currentActivity2,act2Kind):null);if(progTintOn)refreshProgTint();}
 
   var imgSrc = ''; // BG intentionally excluded from print
 
@@ -1141,6 +1156,7 @@ function doPrint(){
     '<div class="pl-item"><div class="pl-dot" style="background:'+(currentMode==='clr'?'#f59e0b':'#818cf8')+'"></div><span>'+(currentMode==='clr'?'Pending':'Under Review')+'</span></div>'+
     (currentMode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected / Not Approved</span></div>':'')+
     '<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>'+
+    (progTintOn && !compareMode && document.querySelectorAll('#villa-layer .villa[data-prog]').length>0 ? '<div class="pl-item"><div class="pl-dot" style="background:#eab308"></div><span>In Progress ('+document.querySelectorAll('#villa-layer .villa[data-prog]').length+')</span></div>' : '')+
     (openFrontVillas.size>0 ? '<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>' : '')+
     (priorityVillas.size>0 ? '<div class="pl-item"><span style="font-size:9pt;color:#f59e0b">&#9733;</span><span>Priority ('+priorityVillas.size+')</span></div>' : '')+
     (priority2Villas.size>0 ? '<div class="pl-item"><span style="font-size:9pt;color:#3b82f6">&#9733;</span><span>Priority 2 ('+priority2Villas.size+')</span></div>' : '');
