@@ -3,6 +3,7 @@
 <head>
 <script src="shared.js?v=3"></script>
 <meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QS Payment Certificates</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -145,7 +146,7 @@ body.in-shell{height:100vh}
 .act-cell.readonly{cursor:default}
 
 /* workdone columns */
-.wd-cell{font-weight:700;font-size:11px}
+.wd-cell{font-weight:700;font-size:11px;text-align:center!important;padding:6px 8px!important}
 .wd-prev{color:#93c5fd}
 .wd-cur{color:#86efac}
 .wd-date{color:var(--tx)}

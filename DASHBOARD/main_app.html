@@ -3,6 +3,7 @@
 <head>
 <script src="shared.js?v=3"></script>
 <meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MEP Tracker — Ba Al Ghaiylam</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1267,12 +1268,26 @@ function initRealtime(token) {
 let lastBannerTime = 0;
 let bannerTimeout = null;
 
-// Pages whose data changed while they were open in the background.
-// go() silently reloads a stale page the next time the user opens it.
+// Pages that already know how to patch themselves live for a given domain (see each
+// page's own 'data_updated' postMessage listener). Broadcasting to them is enough —
+// no full reload needed even while they sit in the background.
+const LIVE_DOMAINS = {
+  dashboard: ['wir', 'clearance'],
+  wir_viewer: ['wir'],
+  clearance_viewer: ['clearance'],
+  clearance_release: ['wir', 'clearance', 'release'],
+  cluster_tracker: ['progress', 'wir', 'clearance'],
+};
+
+// Pages whose data changed while they were open in the background AND that have no live
+// handler for that domain. go() silently reloads a stale page the next time it's opened.
 const staleFrames = new Set();
-function markFramesStale() {
+function markFramesStale(domain) {
   document.querySelectorAll('.content iframe').forEach(f => {
-    if (f.id && f.src && f.id.indexOf('frame-') === 0) staleFrames.add(f.id.slice(6));
+    if (!f.id || !f.src || f.id.indexOf('frame-') !== 0) return;
+    const pageId = f.id.slice(6);
+    const live = LIVE_DOMAINS[pageId] || [];
+    if (live.indexOf(domain) === -1) staleFrames.add(pageId);
   });
 }
 
@@ -1285,14 +1300,16 @@ const DV_LABELS = {
 let lastWirToast = 0;
 function showUpdateBanner(dataType, uploadedBy) {
   // Quiet sync model — no action-required popups:
-  //  · background pages are marked stale and reload silently on next visit
-  //  · the ACTIVE page gets a data_updated message and refreshes in place if it can
+  //  · every loaded page (visible or backgrounded) gets a data_updated message so pages
+  //    with a live handler for this domain patch themselves in place immediately
+  //  · pages with no live handler for this domain are marked stale and reload silently
+  //    the next time the user opens them
   //  · only bulk imports (wir/clearance) show a passive, buttonless 6s toast
-  markFramesStale();
-  try {
-    const f = document.getElementById('frame-' + currentPage);
-    if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'data_updated', domain: dataType, uploadedBy: uploadedBy || '' }, FRAME_TGT);
-  } catch(e) {}
+  markFramesStale(dataType);
+  document.querySelectorAll('.content iframe').forEach(f => {
+    if (!f.id || !f.src || f.id.indexOf('frame-') !== 0) return;
+    try { f.contentWindow.postMessage({ type: 'data_updated', domain: dataType, uploadedBy: uploadedBy || '' }, FRAME_TGT); } catch(e) {}
+  });
   if (dataType === 'wir' || dataType === 'clearance') {
     lastWirToast = Date.now();
     const t = document.getElementById('dv-toast');

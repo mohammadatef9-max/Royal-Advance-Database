@@ -1109,7 +1109,8 @@ function renderProgressSheet() {
       thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${(act.activity_weight*100).toFixed(0)}%</div></th>`;
     });
   });
-  thGroups += '<th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
+  thGroups += '<th colspan="3">Workdone %</th><th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
+  thActs += '<th class="wd-prev">PREV</th><th class="wd-cur">CURRENT</th><th class="wd-date">TO DATE</th>';
   thActs += '<th class="aed-prev">PREV</th><th class="aed-cur">CURRENT</th><th class="aed-date">TO DATE</th>';
 
   // A villa belongs to this PC only if it has work billed in this or an earlier PC
@@ -1180,6 +1181,9 @@ function renderProgressSheet() {
       <td class="left sticky col-type" style="font-size:12px;padding:6px 10px">${escH(sv.villa_type_label)}</td>
       <td class="sticky col-cluster" style="font-size:12px;font-weight:600;color:var(--tx2)">${sv.cluster_id != null ? 'C'+sv.cluster_id : '—'}</td>
       ${actCells}
+      <td class="wd-cell wd-prev">${fmtPct(prev)}</td>
+      <td class="wd-cell wd-cur">${fmtPct(current)}</td>
+      <td class="wd-cell wd-date">${fmtPct(toDate)}</td>
       <td class="rate-cell">${fmtAED(rate)}</td>
       <td class="aed-cell aed-prev">${fmtAED(prevAed)}</td>
       <td class="aed-cell aed-cur">${fmtAED(curAed)}</td>
@@ -1192,6 +1196,9 @@ function renderProgressSheet() {
     const labelSpan = 4 + scopeActivities.length; // Sr+Villa+Type+Cluster + one per activity
     rows += `<tr class="ps-total-row">
       <td class="left" colspan="${labelSpan}" style="text-align:right;font-weight:800;font-size:12px;padding:7px 12px">TOTAL (${visibleVillas.length} villa${visibleVillas.length===1?'':'s'})</td>
+      <td class="wd-cell wd-prev" style="font-weight:800">${fmtPct(totPrevAed/Math.max(totRate,1))}</td>
+      <td class="wd-cell wd-cur" style="font-weight:800">${fmtPct(totCurAed/Math.max(totRate,1))}</td>
+      <td class="wd-cell wd-date" style="font-weight:800">${fmtPct(totTodAed/Math.max(totRate,1))}</td>
       <td class="rate-cell" style="font-weight:800">${fmtAED(totRate)}</td>
       <td class="aed-cell aed-prev" style="font-weight:800">${fmtAED(totPrevAed)}</td>
       <td class="aed-cell aed-cur" style="font-weight:800">${fmtAED(totCurAed)}</td>
@@ -1366,6 +1373,7 @@ function renderPaymentSummarySingle() {
   });
 
   const typeEntries = Object.values(typeMap);
+  const totQty      = typeEntries.reduce((a,t)=>a+t.qty, 0);
   const totPrevQty  = typeEntries.reduce((a,t)=>a+t.prev, 0);
   const totCurQty   = typeEntries.reduce((a,t)=>a+t.current, 0);
   const totTodQty   = typeEntries.reduce((a,t)=>a+t.toDate, 0);
@@ -1551,9 +1559,9 @@ function renderPaymentSummarySingle() {
           <td class="center">${fmtQty(totPrevQty)}</td>
           <td class="center">${fmtQty(totCurQty)}</td>
           <td class="center bold">${fmtQty(totTodQty)}</td>
-          <td></td><td class="right">${fmtAED(totPrevAmt)}</td>
-          <td></td><td class="right">${fmtAED(totCurAmt)}</td>
-          <td></td><td class="right bold">${fmtAED(totTodAmt)}</td>
+          <td class="center">${fmtPct(totPrevQty/Math.max(totQty,1))}</td><td class="right">${fmtAED(totPrevAmt)}</td>
+          <td class="center">${fmtPct(totCurQty/Math.max(totQty,1))}</td><td class="right">${fmtAED(totCurAmt)}</td>
+          <td class="center bold">${fmtPct(totTodQty/Math.max(totQty,1))}</td><td class="right bold">${fmtAED(totTodAmt)}</td>
         </tr>
       </tbody>
     </table>
@@ -1579,9 +1587,9 @@ function renderPaymentSummarySingle() {
           <td class="center">${fmtQty(totPrevQty)}</td>
           <td class="center">${fmtQty(totCurQty)}</td>
           <td class="center bold">${fmtQty(totTodQty)}</td>
-          <td></td><td class="right">${fmtAED(totPrevAmt)}</td>
-          <td></td><td class="right">${fmtAED(totCurAmt)}</td>
-          <td></td><td class="right bold">${fmtAED(totTodAmt)}</td>
+          <td class="center">${fmtPct(totPrevQty/Math.max(totQty,1))}</td><td class="right">${fmtAED(totPrevAmt)}</td>
+          <td class="center">${fmtPct(totCurQty/Math.max(totQty,1))}</td><td class="right">${fmtAED(totCurAmt)}</td>
+          <td class="center bold">${fmtPct(totTodQty/Math.max(totQty,1))}</td><td class="right bold">${fmtAED(totTodAmt)}</td>
         </tr>
       </tbody>
     </table>
@@ -1805,8 +1813,9 @@ function renderPaymentSummaryMulti() {
     bodyRows += `<tr class="total-row">
       <td colspan="2" class="bold">SUB TOTAL</td><td></td><td class="center bold">${sQty}</td><td></td>
       <td class="right bold">${fmtAED(sContract)}</td><td></td><td></td><td></td>
-      <td></td><td class="right">${fmtAED(sec.subPrev)}</td><td></td><td class="right">${fmtAED(sec.subCur)}</td>
-      <td></td><td class="right bold">${fmtAED(sec.subTod)}</td>
+      <td class="center">${fmtPct(sec.subPrev/Math.max(sContract,1))}</td><td class="right">${fmtAED(sec.subPrev)}</td>
+      <td class="center">${fmtPct(sec.subCur/Math.max(sContract,1))}</td><td class="right">${fmtAED(sec.subCur)}</td>
+      <td class="center bold">${fmtPct(sec.subTod/Math.max(sContract,1))}</td><td class="right bold">${fmtAED(sec.subTod)}</td>
     </tr>`;
   });
   // GROSS TOTAL uses total qty_contracted (deduped across sibling scopes)
@@ -1814,8 +1823,9 @@ function renderPaymentSummaryMulti() {
   bodyRows += `<tr class="total-row" style="border-top:3px double var(--bdr2)">
     <td colspan="2" class="bold gold">GROSS TOTAL</td><td></td><td class="center bold">${grossTotQty}</td><td></td>
     <td class="right bold">${fmtAED(totSubcon)}</td><td></td><td></td><td></td>
-    <td></td><td class="right bold">${fmtAED(combPrev)}</td><td></td><td class="right bold">${fmtAED(combCur)}</td>
-    <td></td><td class="right bold gold">${fmtAED(combTod)}</td>
+    <td class="center bold">${fmtPct(combPrev/Math.max(totSubcon,1))}</td><td class="right bold">${fmtAED(combPrev)}</td>
+    <td class="center bold">${fmtPct(combCur/Math.max(totSubcon,1))}</td><td class="right bold">${fmtAED(combCur)}</td>
+    <td class="center bold gold">${fmtPct(combTod/Math.max(totSubcon,1))}</td><td class="right bold gold">${fmtAED(combTod)}</td>
   </tr>`;
 
   const sigItems = pcSigsList.map(s => `

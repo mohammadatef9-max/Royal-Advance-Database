@@ -3,6 +3,7 @@
 <head>
 <script src="shared.js?v=3"></script>
 <meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1107,6 +1108,64 @@ async function refreshProgressSilent(){
       if(sc)sc.scrollTop=st;
     }
   }catch(e){}finally{window._dvProgRef=false;}
+}
+
+// Live sync: when a WIR batch is imported elsewhere, fetch only rows added/changed since
+// the last sync and merge them into wirD using the same precedence rules as init().
+let _wirSince=new Date().toISOString();
+async function refreshWirSilent(){
+  if(window._dvWirRef)return;
+  window._dvWirRef=true;
+  try{
+    const since=_wirSince;
+    _wirSince=new Date().toISOString();
+    const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
+    const rows=await fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched&created_at=gt.'+encodeURIComponent(since)+_ctDiscF);
+    if(Array.isArray(rows)&&rows.length){
+      const ord=['approved','under_review','rejected','not_submitted'];
+      rows.forEach(r=>{
+        if(!wirD[r.villa_id])wirD[r.villa_id]={};
+        if(!wirSubD[r.villa_id])wirSubD[r.villa_id]={};
+        if(!wirMetaD[r.villa_id])wirMetaD[r.villa_id]={};
+        const code=r.raw_activity_code;
+        const st=wirD[r.villa_id];
+        const meta={revision:r.revision,revision_no:r.revision_no,submitted_date:r.submitted_date,response_date:r.response_date};
+        const existing=st[code]||'not_submitted',incoming=r.normalised_status||'not_submitted';
+        if(ord.indexOf(incoming)<ord.indexOf(existing)){st[code]=incoming;wirMetaD[r.villa_id][code]=meta;}
+        else wirMetaD[r.villa_id][code]=meta;
+        if(r.raw_subcontractor)wirSubD[r.villa_id][code]=r.raw_subcontractor;
+        const resolved=resolveWirCode(code);
+        if(resolved!==code){
+          const existingR=st[resolved]||'not_submitted';
+          if(ord.indexOf(incoming)<ord.indexOf(existingR)){
+            st[resolved]=incoming;
+            wirMetaD[r.villa_id][resolved]=meta;
+            if(r.raw_subcontractor)wirSubD[r.villa_id][resolved]=r.raw_subcontractor;
+          }
+        }
+      });
+      const sc=document.getElementById('mt')?.parentElement;const st2=sc?sc.scrollTop:0;
+      render();
+      if(sc)sc.scrollTop=st2;
+    }
+  }catch(e){}finally{window._dvWirRef=false;}
+}
+
+// Live sync: clearance status has no incremental timestamp to diff against, but the
+// summary view is small (one row per villa) so a full re-fetch is still cheap.
+async function refreshClearanceSilent(){
+  if(window._dvClrRef)return;
+  window._dvClrRef=true;
+  try{
+    const rows=await fa('v_villa_clr_summary?select=villa_id,clr_statuses');
+    if(Array.isArray(rows)){
+      clrD={};
+      rows.forEach(r=>{ clrD[r.villa_id]=r.clr_statuses||{}; });
+      const sc=document.getElementById('mt')?.parentElement;const st=sc?sc.scrollTop:0;
+      render();
+      if(sc)sc.scrollTop=st;
+    }
+  }catch(e){}finally{window._dvClrRef=false;}
 }
 
 function buildHeader(){
@@ -2734,11 +2793,17 @@ document.getElementById('clr-modal').addEventListener('click',function(e){if(e.t
     if (e.data.type === 'workspace') {
       try { var w = e.data.workspace||''; if (w && w !== sessionStorage.getItem('kp_ws')) { sessionStorage.setItem('kp_ws', w); location.reload(); } } catch(_e) {}
     }
-    // Someone edited site progress — pull only the changed rows and re-render in place.
-    // (WIR/clearance imports are NOT applied live here to avoid disrupting active filtering;
-    // the shell reloads this page silently the next time it's opened.)
+    // Someone edited site progress / imported WIRs / imported clearances — pull only the
+    // changed rows (or a cheap small-view refetch for clearance) and re-render in place.
+    // Runs the same way whether this tab is visible or sitting in the background.
     if (e.data.type === 'data_updated' && e.data.domain === 'progress') {
       try { refreshProgressSilent(); } catch(_e) {}
+    }
+    if (e.data.type === 'data_updated' && e.data.domain === 'wir') {
+      try { refreshWirSilent(); } catch(_e) {}
+    }
+    if (e.data.type === 'data_updated' && e.data.domain === 'clearance') {
+      try { refreshClearanceSilent(); } catch(_e) {}
     }
   });
   // Hide own topbar when running inside the main shell
