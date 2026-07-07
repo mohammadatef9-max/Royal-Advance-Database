@@ -989,21 +989,18 @@ function getActivityStatus(villa_id, activity_code) {
 }
 
 function calcVillaWorkdone(villa_id, villa_type_label) {
-  let prev = 0, current = 0, toDate = 0;
-  let prevAed = 0, curAed = 0, todAed = 0;
+  let prevAed = 0, curAed = 0, todAed = 0, totalPossibleAed = 0;
   const villaRate = villa_type_label ? getVillaRate(villa_type_label) : 0;
-  // Fractional: each cell contributes (group×activity weight) × the billed fraction for prev/current.
-  // This still runs for fixed-rate activities too — it drives the Progress QTY / Workdone % columns,
-  // which track physical completion independent of how that activity happens to be priced.
+  // AED-first: compute each activity's dollar contribution, then derive the Progress QTY /
+  // Workdone % fraction from AED billed ÷ AED possible for this villa. This works the same
+  // for weighted (% of contract) and fixed-rate activities without needing a separate weight
+  // for fixed-rate ones — their "weight" toward completion is simply their own dollar size.
   // Partial payments and carried/withheld balances are handled inside computeCellBilling().
   scopeActivityGroups.forEach(grp => {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     grpActs.forEach(act => {
       const { prevPct, curPct } = getActivityStatus(villa_id, act.activity_code);
       const contrib = grp.group_weight * act.activity_weight;
-      prev += contrib * prevPct;
-      current += contrib * curPct;
-      toDate += contrib * (prevPct + curPct);
       // AED: fixed-rate activities use their per-villa-type flat rate instead of a % of villaRate.
       const unitAed = act.use_fixed_rate
         ? ((scopeActivityRates[act.id] || {})[villa_type_label] || 0)
@@ -1011,9 +1008,11 @@ function calcVillaWorkdone(villa_id, villa_type_label) {
       prevAed += unitAed * prevPct;
       curAed  += unitAed * curPct;
       todAed  += unitAed * (prevPct + curPct);
+      totalPossibleAed += unitAed;
     });
   });
-  return { prev, current, toDate, prevAed, curAed, todAed };
+  const denom = totalPossibleAed > 1e-9 ? totalPossibleAed : 1;
+  return { prev: prevAed/denom, current: curAed/denom, toDate: todAed/denom, prevAed, curAed, todAed };
 }
 
 function getVillaRate(villa_type_label) {
@@ -1083,25 +1082,23 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   return computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked);
 }
 function ctxWorkdone(ctx, villa_id, villa_type_label) {
-  let prev=0, current=0, toDate=0;
-  let prevAed=0, curAed=0, todAed=0;
+  let prevAed=0, curAed=0, todAed=0, totalPossibleAed=0;
   const villaRate = villa_type_label ? (ctx.villaTypes.find(t => t.villa_type_label === villa_type_label)?.rate_aed || 0) : 0;
   ctx.activityGroups.forEach(grp => {
     ctx.activities.filter(a => a.group_id === grp.id).forEach(act => {
       const { prevPct, curPct } = ctxActStatus(ctx, villa_id, act.activity_code);
       const contrib = (grp.group_weight||0) * (act.activity_weight||0);
-      prev += contrib * prevPct;
-      current += contrib * curPct;
-      toDate += contrib * (prevPct + curPct);
       const unitAed = act.use_fixed_rate
         ? ((ctx.activityRates[act.id] || {})[villa_type_label] || 0)
         : (contrib * (parseFloat(villaRate)||0));
       prevAed += unitAed * prevPct;
       curAed  += unitAed * curPct;
       todAed  += unitAed * (prevPct + curPct);
+      totalPossibleAed += unitAed;
     });
   });
-  return { prev, current, toDate, prevAed, curAed, todAed };
+  const denom = totalPossibleAed > 1e-9 ? totalPossibleAed : 1;
+  return { prev: prevAed/denom, current: curAed/denom, toDate: todAed/denom, prevAed, curAed, todAed };
 }
 // Aggregate a scope context into per-villa-type rows + section totals
 function ctxSection(ctx) {
@@ -1143,7 +1140,8 @@ function renderProgressSheet() {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
     thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${(grp.group_weight*100).toFixed(0)}%)</th>`;
     grpActs.forEach(act => {
-      thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${(act.activity_weight*100).toFixed(0)}%</div></th>`;
+      const wLabel = act.use_fixed_rate ? 'FIXED' : (act.activity_weight*100).toFixed(0)+'%';
+      thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${wLabel}</div></th>`;
     });
   });
   thGroups += '<th colspan="3">Workdone %</th><th rowspan="2">Rate (AED)</th><th colspan="3">Amount (AED)</th>';
@@ -3178,9 +3176,12 @@ function renderCfgActs() {
     </div>`;
   list.innerHTML = hintHtml + cfgActGroups.map((grp, gi) => {
     const grpActs = cfgActivities.filter(a => a._gi === gi);
-    const actTotal = grpActs.reduce((s,a)=>s+a.activity_weight,0);
+    // Fixed-rate activities are priced independently of weight — they don't count toward
+    // the group's "weights should total 100%" check, only the % activities do.
+    const weightedActs = grpActs.filter(a => !a.use_fixed_rate);
+    const actTotal = weightedActs.reduce((s,a)=>s+a.activity_weight,0);
     const actPct   = (actTotal*100).toFixed(1);
-    const actOk    = !grpActs.length || Math.abs(actTotal-1)<0.005;
+    const actOk    = !weightedActs.length || Math.abs(actTotal-1)<0.005;
     return `<div class="ag-group">
       <div class="ag-group-hdr">
         <input type="text" value="${escH(grp.group_name)}" placeholder="Group name (e.g. High Level Drain)"
@@ -3202,6 +3203,13 @@ function renderCfgActs() {
           const ai = cfgActivities.indexOf(act);
           const isPart = !!(act.part_label && String(act.part_label).trim());
           const fixedBtn = `<button class="icon-btn${act.use_fixed_rate?' active':''}" title="${act.use_fixed_rate?'Using a fixed AED rate per villa type — click to switch back to % of contract':'Using % of contract weight — click to price this activity as a fixed AED rate per villa type instead'}" style="${act.use_fixed_rate?'color:var(--gold);border-color:var(--gold)':''}" onclick="toggleCfgFixedRate(${ai})">💲</button>`;
+          // Weight only matters (and is only shown) for % activities — fixed-rate ones are priced
+          // entirely from the rate table below, so a leftover weight % would be misleading.
+          const weightField = act.use_fixed_rate
+            ? `<span style="width:64px;text-align:right;font-size:10px;font-weight:700;color:var(--gold);white-space:nowrap">FIXED</span><span></span>`
+            : `<input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
+                     style="width:64px;text-align:right;font-size:11px" onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
+               <span style="font-size:11px;color:var(--tx2)">%</span>`;
           const rateEditor = act.use_fixed_rate ? `
             <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--bg2);border:1px dashed var(--gold);border-radius:6px;padding:6px 10px;margin:2px 0 4px">
               <span style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.03em">Fixed rate (AED) per villa type:</span>
@@ -3219,9 +3227,7 @@ function renderCfgActs() {
                      style="width:46px;font-size:11px;text-transform:uppercase" onchange="setCfgPartLabel(${ai},this.value)">
               <input type="text" value="${escH(act.activity_name)}" placeholder="Activity description"
                      style="flex:1;font-size:11px" onchange="cfgActivities[${ai}].activity_name=this.value">
-              <input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
-                     style="width:64px;text-align:right;font-size:11px" onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
-              <span style="font-size:11px;color:var(--tx2)">%</span>
+              ${weightField}
               ${fixedBtn}
               <button class="icon-btn" title="Merge parts back into one activity" onclick="unsplitCfgActivity(${ai})">↩</button>
               <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
@@ -3235,10 +3241,7 @@ function renderCfgActs() {
             <input type="text" value="${escH(act.activity_name)}" placeholder="Activity description"
                    style="flex:1;font-size:11px"
                    onchange="cfgActivities[${ai}].activity_name=this.value">
-            <input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
-                   style="width:64px;text-align:right;font-size:11px"
-                   onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
-            <span style="font-size:11px;color:var(--tx2);align-self:center">%</span>
+            ${weightField}
             ${fixedBtn}
             <button class="icon-btn" title="Split into GF / FF parts (for old split BOQs)" onclick="splitCfgActivity(${ai})">⫶</button>
             <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
@@ -3247,7 +3250,7 @@ function renderCfgActs() {
         }).join('')}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
           <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="addCfgActivity(${gi})">+ Add Activity</button>
-          ${grpActs.length ? `<span style="font-size:10px;font-weight:700;color:${actOk?'var(--green)':'var(--amber)'}">${actPct}% ${actOk?'✓':'≠ 100%'}</span>` : ''}
+          ${weightedActs.length ? `<span style="font-size:10px;font-weight:700;color:${actOk?'var(--green)':'var(--amber)'}">${actPct}% ${actOk?'✓':'≠ 100%'}</span>` : ''}
         </div>
       </div>
     </div>`;
@@ -3262,6 +3265,14 @@ function addCfgActivity(gi) {
 function toggleCfgFixedRate(ai){
   const a=cfgActivities[ai]; if(!a)return;
   a.use_fixed_rate=!a.use_fixed_rate;
+  if(a.use_fixed_rate){
+    // Weight has no effect once fixed-rate is on — stash it so flipping back restores it,
+    // and zero it so it doesn't sit there looking like it still matters (or skew the group's total).
+    a._savedWeight = a.activity_weight||0;
+    a.activity_weight = 0;
+  } else {
+    a.activity_weight = a._savedWeight!=null ? a._savedWeight : (a.activity_weight||0);
+  }
   if(!a.fixed_rates) a.fixed_rates={};
   renderCfgActs();
 }
