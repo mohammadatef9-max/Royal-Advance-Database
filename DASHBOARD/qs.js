@@ -19,6 +19,7 @@ let selectedPC = null;
 let scopeVillaTypes = [];
 let scopeActivityGroups = [];
 let scopeActivities = []; // flat, with group info
+let scopeActivityRates = {}; // { activity_id: { villa_type_label: rate_aed } } — for use_fixed_rate activities
 let scopeVillas = [];
 let pcOverrides = {};  // key: villa_id+':'+activity_code
 let billedRecords = {}; // key: villa_id+':'+activity_code → [{pc_id, pct, carry}] (one per PC that billed part of the cell)
@@ -361,6 +362,7 @@ async function saveAsTemplate() {
           activity_code: a.activity_code, activity_name: a.activity_name,
           activity_weight: a.activity_weight, base_code: a.base_code || a.activity_code,
           part_label: (a.part_label && String(a.part_label).trim()) ? String(a.part_label).trim().toUpperCase() : null,
+          use_fixed_rate: !!a.use_fixed_rate,
           sort_order: ai
         })));
       }
@@ -623,9 +625,23 @@ async function loadScopeConfig() {
   scopeActivities = groupIds.length
     ? await fa(`qs_scope_activities?group_id=in.(${groupIds.join(',')})&order=sort_order.asc`)
     : [];
+  scopeActivityRates = await loadActivityRates(scopeActivities);
   // Auto-detect villas from WIR data — no manual assignment needed
   scopeVillas = await autoDetectScopeVillas();
   updateClusterFilter();
+}
+
+// Fetch fixed per-villa-type rates for a list of activities and index them by activity_id.
+async function loadActivityRates(activities) {
+  const fixedIds = activities.filter(a => a.use_fixed_rate).map(a => a.id);
+  if (!fixedIds.length) return {};
+  const rows = await fa(`qs_scope_activity_rates?activity_id=in.(${fixedIds.join(',')})&select=activity_id,villa_type_label,rate_aed`);
+  const map = {};
+  rows.forEach(r => {
+    if (!map[r.activity_id]) map[r.activity_id] = {};
+    map[r.activity_id][r.villa_type_label] = parseFloat(r.rate_aed) || 0;
+  });
+  return map;
 }
 
 // Build the raw_subcontractor PostgREST clause for a scope's subcontractor, merging the
@@ -972,9 +988,13 @@ function getActivityStatus(villa_id, activity_code) {
   return { ...r, override, wir };
 }
 
-function calcVillaWorkdone(villa_id) {
+function calcVillaWorkdone(villa_id, villa_type_label) {
   let prev = 0, current = 0, toDate = 0;
+  let prevAed = 0, curAed = 0, todAed = 0;
+  const villaRate = villa_type_label ? getVillaRate(villa_type_label) : 0;
   // Fractional: each cell contributes (group×activity weight) × the billed fraction for prev/current.
+  // This still runs for fixed-rate activities too — it drives the Progress QTY / Workdone % columns,
+  // which track physical completion independent of how that activity happens to be priced.
   // Partial payments and carried/withheld balances are handled inside computeCellBilling().
   scopeActivityGroups.forEach(grp => {
     const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
@@ -984,9 +1004,16 @@ function calcVillaWorkdone(villa_id) {
       prev += contrib * prevPct;
       current += contrib * curPct;
       toDate += contrib * (prevPct + curPct);
+      // AED: fixed-rate activities use their per-villa-type flat rate instead of a % of villaRate.
+      const unitAed = act.use_fixed_rate
+        ? ((scopeActivityRates[act.id] || {})[villa_type_label] || 0)
+        : (contrib * villaRate);
+      prevAed += unitAed * prevPct;
+      curAed  += unitAed * curPct;
+      todAed  += unitAed * (prevPct + curPct);
     });
   });
-  return { prev, current, toDate };
+  return { prev, current, toDate, prevAed, curAed, todAed };
 }
 
 function getVillaRate(villa_type_label) {
@@ -1025,6 +1052,7 @@ async function buildScopeCtx(scope) {
   const activityGroups = await fa(`qs_scope_activity_groups?scope_id=eq.${scope.id}&order=sort_order.asc`);
   const groupIds = activityGroups.map(g => g.id);
   const activities = groupIds.length ? await fa(`qs_scope_activities?group_id=in.(${groupIds.join(',')})&order=sort_order.asc`) : [];
+  const activityRates = await loadActivityRates(activities);
   const villas = await ctxDetectVillas(scope, villaTypes, activities);
   const variations = await fa(`qs_variation_orders?scope_id=eq.${scope.id}&order=created_at.asc`);
   const wir = {}, overrides = {}, billed = {};
@@ -1045,7 +1073,7 @@ async function buildScopeCtx(scope) {
     ovRows.forEach(o => { overrides[o.villa_id+':'+o.activity_code]=o; });
     bRows.forEach(b => { const k=b.villa_id+':'+b.activity_code; (billed[k]=billed[k]||[]).push({ pc_id:b.locked_pc_id, pct:b.billed_pct==null?1:Number(b.billed_pct), carry:b.carry_remainder!==false }); });
   }
-  return { scope, villaTypes, activityGroups, activities, villas, variations, wir, overrides, billed };
+  return { scope, villaTypes, activityGroups, activities, activityRates, villas, variations, wir, overrides, billed };
 }
 function ctxActStatus(ctx, villa_id, activity_code) {
   const key = villa_id+':'+activity_code;
@@ -1054,8 +1082,10 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   const locked = selectedPC && selectedPC.status === 'locked';
   return computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked);
 }
-function ctxWorkdone(ctx, villa_id) {
+function ctxWorkdone(ctx, villa_id, villa_type_label) {
   let prev=0, current=0, toDate=0;
+  let prevAed=0, curAed=0, todAed=0;
+  const villaRate = villa_type_label ? (ctx.villaTypes.find(t => t.villa_type_label === villa_type_label)?.rate_aed || 0) : 0;
   ctx.activityGroups.forEach(grp => {
     ctx.activities.filter(a => a.group_id === grp.id).forEach(act => {
       const { prevPct, curPct } = ctxActStatus(ctx, villa_id, act.activity_code);
@@ -1063,26 +1093,33 @@ function ctxWorkdone(ctx, villa_id) {
       prev += contrib * prevPct;
       current += contrib * curPct;
       toDate += contrib * (prevPct + curPct);
+      const unitAed = act.use_fixed_rate
+        ? ((ctx.activityRates[act.id] || {})[villa_type_label] || 0)
+        : (contrib * (parseFloat(villaRate)||0));
+      prevAed += unitAed * prevPct;
+      curAed  += unitAed * curPct;
+      todAed  += unitAed * (prevPct + curPct);
     });
   });
-  return { prev, current, toDate };
+  return { prev, current, toDate, prevAed, curAed, todAed };
 }
 // Aggregate a scope context into per-villa-type rows + section totals
 function ctxSection(ctx) {
   const typeMap = {};
-  ctx.villaTypes.forEach(t => { typeMap[t.villa_type_label] = { type:t, prev:0, current:0, toDate:0, rate:parseFloat(t.rate_aed)||0, qty:parseInt(t.qty_contracted)||0, detectedQty:0 }; });
+  ctx.villaTypes.forEach(t => { typeMap[t.villa_type_label] = { type:t, prev:0, current:0, toDate:0, prevAed:0, curAed:0, todAed:0, rate:parseFloat(t.rate_aed)||0, qty:parseInt(t.qty_contracted)||0, detectedQty:0 }; });
   ctx.villas.forEach(sv => {
     const tm = typeMap[sv.villa_type_label]; if (!tm) return;
     tm.detectedQty++;
-    const w = ctxWorkdone(ctx, sv.villa_id);
+    const w = ctxWorkdone(ctx, sv.villa_id, sv.villa_type_label);
     tm.prev += w.prev; tm.current += w.current; tm.toDate += w.toDate;
+    tm.prevAed += w.prevAed; tm.curAed += w.curAed; tm.todAed += w.todAed;
   });
   const entries = Object.values(typeMap);
   // subContract uses detectedQty per scope so sibling scopes don't double-count qty_contracted
   const subContract = entries.reduce((a,t)=>a+t.detectedQty*t.rate, 0);
-  const subPrev = entries.reduce((a,t)=>a+t.prev*t.rate, 0);
-  const subCur  = entries.reduce((a,t)=>a+t.current*t.rate, 0);
-  const subTod  = entries.reduce((a,t)=>a+t.toDate*t.rate, 0);
+  const subPrev = entries.reduce((a,t)=>a+t.prevAed, 0);
+  const subCur  = entries.reduce((a,t)=>a+t.curAed, 0);
+  const subTod  = entries.reduce((a,t)=>a+t.todAed, 0);
   const approvedVOs = (ctx.variations||[]).filter(v=>v.status==='approved').reduce((a,v)=>a+(parseFloat(v.value_aed)||0),0);
   return { scope: ctx.scope, entries, subContract, subPrev, subCur, subTod, approvedVOs };
 }
@@ -1133,11 +1170,8 @@ function renderProgressSheet() {
     rows = `<tr><td colspan="100" style="text-align:center;color:var(--tx3);padding:24px;font-size:12px">No villas in Cluster ${psClusterFilter}.</td></tr>`;
   }
   visibleVillas.forEach((sv, idx) => {
-    const { prev, current, toDate } = calcVillaWorkdone(sv.villa_id);
+    const { prev, current, toDate, prevAed, curAed, todAed } = calcVillaWorkdone(sv.villa_id, sv.villa_type_label);
     const rate = getVillaRate(sv.villa_type_label);
-    const prevAed = prev * rate;
-    const curAed = current * rate;
-    const todAed = toDate * rate;
     totRate += rate; totPrevAed += prevAed; totCurAed += curAed; totTodAed += todAed;
 
     let actCells = '';
@@ -1361,15 +1395,18 @@ function renderPaymentSummarySingle() {
   // Aggregate by villa type
   const typeMap = {};
   scopeVillaTypes.forEach(t => {
-    typeMap[t.villa_type_label] = { type: t, prev:0, current:0, toDate:0, rate: parseFloat(t.rate_aed), qty: parseInt(t.qty_contracted) };
+    typeMap[t.villa_type_label] = { type: t, prev:0, current:0, toDate:0, prevAed:0, curAed:0, todAed:0, rate: parseFloat(t.rate_aed), qty: parseInt(t.qty_contracted) };
   });
   scopeVillas.forEach(sv => {
-    const { prev, current, toDate } = calcVillaWorkdone(sv.villa_id);
+    const { prev, current, toDate, prevAed, curAed, todAed } = calcVillaWorkdone(sv.villa_id, sv.villa_type_label);
     const tm = typeMap[sv.villa_type_label];
     if (!tm) return;
     tm.prev    += prev;
     tm.current += current;
     tm.toDate  += toDate;
+    tm.prevAed += prevAed;
+    tm.curAed  += curAed;
+    tm.todAed  += todAed;
   });
 
   const typeEntries = Object.values(typeMap);
@@ -1378,9 +1415,9 @@ function renderPaymentSummarySingle() {
   const totCurQty   = typeEntries.reduce((a,t)=>a+t.current, 0);
   const totTodQty   = typeEntries.reduce((a,t)=>a+t.toDate, 0);
   const totSubconAmt = typeEntries.reduce((a,t)=>a+t.qty*t.rate, 0);
-  const totPrevAmt  = typeEntries.reduce((a,t)=>a+t.prev*t.rate, 0);
-  const totCurAmt   = typeEntries.reduce((a,t)=>a+t.current*t.rate, 0);
-  const totTodAmt   = typeEntries.reduce((a,t)=>a+t.toDate*t.rate, 0);
+  const totPrevAmt  = typeEntries.reduce((a,t)=>a+t.prevAed, 0);
+  const totCurAmt   = typeEntries.reduce((a,t)=>a+t.curAed, 0);
+  const totTodAmt   = typeEntries.reduce((a,t)=>a+t.todAed, 0);
   lastGrossAed = totTodAmt; // captured for confirmLock()
 
   // Financial calculations
@@ -1457,11 +1494,11 @@ function renderPaymentSummarySingle() {
       <td class="center">${fmtQty(t.current)}</td>
       <td class="center bold">${fmtQty(t.toDate)}</td>
       <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td>
-      <td class="right">${fmtAED(t.prev*t.rate)}</td>
+      <td class="right">${fmtAED(t.prevAed)}</td>
       <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td>
-      <td class="right">${fmtAED(t.current*t.rate)}</td>
+      <td class="right">${fmtAED(t.curAed)}</td>
       <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td>
-      <td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+      <td class="right bold">${fmtAED(t.todAed)}</td>
     </tr>`).join('');
 
   // Summary table rows
@@ -1476,11 +1513,11 @@ function renderPaymentSummarySingle() {
       <td class="center">${fmtQty(t.current)}</td>
       <td class="center bold">${fmtQty(t.toDate)}</td>
       <td class="center">${fmtPct(t.prev/Math.max(t.qty,1))}</td>
-      <td class="right">${fmtAED(t.prev*t.rate)}</td>
+      <td class="right">${fmtAED(t.prevAed)}</td>
       <td class="center">${fmtPct(t.current/Math.max(t.qty,1))}</td>
-      <td class="right">${fmtAED(t.current*t.rate)}</td>
+      <td class="right">${fmtAED(t.curAed)}</td>
       <td class="center bold">${fmtPct(t.toDate/Math.max(t.qty,1))}</td>
-      <td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+      <td class="right bold">${fmtAED(t.todAed)}</td>
     </tr>`).join('');
 
   // Signature block
@@ -1803,9 +1840,9 @@ function renderPaymentSummaryMulti() {
         <td class="center"></td><td>${escH(t.type.villa_type_label)}</td><td class="center">${escH(t.type.unit||'Villa')}</td>
         <td class="center">${dq}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(dq*t.rate)}</td>
         <td class="center">${fmtQty(t.prev)}</td><td class="center">${fmtQty(t.current)}</td><td class="center bold">${fmtQty(t.toDate)}</td>
-        <td class="center">${fmtPct(t.prev/Math.max(dq,1))}</td><td class="right">${fmtAED(t.prev*t.rate)}</td>
-        <td class="center">${fmtPct(t.current/Math.max(dq,1))}</td><td class="right">${fmtAED(t.current*t.rate)}</td>
-        <td class="center bold">${fmtPct(t.toDate/Math.max(dq,1))}</td><td class="right bold">${fmtAED(t.toDate*t.rate)}</td>
+        <td class="center">${fmtPct(t.prev/Math.max(dq,1))}</td><td class="right">${fmtAED(t.prevAed)}</td>
+        <td class="center">${fmtPct(t.current/Math.max(dq,1))}</td><td class="right">${fmtAED(t.curAed)}</td>
+        <td class="center bold">${fmtPct(t.toDate/Math.max(dq,1))}</td><td class="right bold">${fmtAED(t.todAed)}</td>
       </tr>`;
     });
     const sQty = sec.entries.reduce((a,t)=>a+t.detectedQty,0);
@@ -3051,7 +3088,7 @@ async function openConfigScope() {
   // Build cfgActivities working copy with _gi = index into cfgActGroups
   cfgActivities = scopeActivities.map(a => {
     const gi = cfgActGroups.findIndex(g => g.id === a.group_id);
-    return { ...a, _gi: gi };
+    return { ...a, _gi: gi, fixed_rates: { ...(scopeActivityRates[a.id] || {}) } };
   });
   // Populate contract tab fields
   updateCfgContractField();
@@ -3164,8 +3201,19 @@ function renderCfgActs() {
         ${grpActs.map(act => {
           const ai = cfgActivities.indexOf(act);
           const isPart = !!(act.part_label && String(act.part_label).trim());
+          const fixedBtn = `<button class="icon-btn${act.use_fixed_rate?' active':''}" title="${act.use_fixed_rate?'Using a fixed AED rate per villa type — click to switch back to % of contract':'Using % of contract weight — click to price this activity as a fixed AED rate per villa type instead'}" style="${act.use_fixed_rate?'color:var(--gold);border-color:var(--gold)':''}" onclick="toggleCfgFixedRate(${ai})">💲</button>`;
+          const rateEditor = act.use_fixed_rate ? `
+            <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--bg2);border:1px dashed var(--gold);border-radius:6px;padding:6px 10px;margin:2px 0 4px">
+              <span style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.03em">Fixed rate (AED) per villa type:</span>
+              ${cfgVillaTypes.length ? cfgVillaTypes.map(vt => `
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--tx2)">
+                  ${escH(vt.villa_type_label)}
+                  <input type="number" value="${(act.fixed_rates && act.fixed_rates[vt.villa_type_label]) || ''}" placeholder="0.00" min="0" step="0.01"
+                         style="width:80px;text-align:right;font-size:11px" onchange="setCfgFixedRate(${ai},'${escH(vt.villa_type_label).replace(/'/g,"\\'")}',this.value)">
+                </label>`).join('') : `<span style="font-size:11px;color:var(--tx3)">Add villa types in the Villa Rates tab first.</span>`}
+            </div>` : '';
           if (isPart) {
-            return `<div class="ag-act-row" style="border-left:3px solid var(--accent,#4f8cff)">
+            return `<div class="ag-act-row" style="border-left:3px solid var(--accent,#4f8cff);flex-wrap:wrap">
               <span style="font-size:9px;color:var(--tx3);font-family:monospace;white-space:nowrap" title="Shared BOQ code">↳ ${escH(act.base_code||'')}</span>
               <input type="text" value="${escH(act.part_label)}" placeholder="GF" title="Part label (e.g. GF / FF)"
                      style="width:46px;font-size:11px;text-transform:uppercase" onchange="setCfgPartLabel(${ai},this.value)">
@@ -3174,11 +3222,13 @@ function renderCfgActs() {
               <input type="number" value="${(act.activity_weight*100).toFixed(1)}" min="0" max="100" step="0.1"
                      style="width:64px;text-align:right;font-size:11px" onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
               <span style="font-size:11px;color:var(--tx2)">%</span>
+              ${fixedBtn}
               <button class="icon-btn" title="Merge parts back into one activity" onclick="unsplitCfgActivity(${ai})">↩</button>
               <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
+              ${rateEditor}
             </div>`;
           }
-          return `<div class="ag-act-row">
+          return `<div class="ag-act-row" style="flex-wrap:wrap">
             <input type="text" value="${escH(act.activity_code)}" placeholder="e.g. 3060"
                    style="width:90px;font-family:monospace;font-size:11px"
                    onchange="cfgActivities[${ai}].activity_code=this.value;cfgActivities[${ai}].base_code=this.value">
@@ -3189,8 +3239,10 @@ function renderCfgActs() {
                    style="width:64px;text-align:right;font-size:11px"
                    onchange="cfgActivities[${ai}].activity_weight=+this.value/100">
             <span style="font-size:11px;color:var(--tx2);align-self:center">%</span>
+            ${fixedBtn}
             <button class="icon-btn" title="Split into GF / FF parts (for old split BOQs)" onclick="splitCfgActivity(${ai})">⫶</button>
             <button class="icon-btn del" onclick="cfgActivities.splice(${ai},1);renderCfgActs()">🗑</button>
+            ${rateEditor}
           </div>`;
         }).join('')}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
@@ -3203,8 +3255,20 @@ function renderCfgActs() {
 }
 
 function addCfgActivity(gi) {
-  cfgActivities.push({ _gi: gi, group_id: cfgActGroups[gi]?.id, activity_code:'', activity_name:'', base_code:'', activity_weight:0, sort_order: cfgActivities.filter(a=>a._gi===gi).length });
+  cfgActivities.push({ _gi: gi, group_id: cfgActGroups[gi]?.id, activity_code:'', activity_name:'', base_code:'', activity_weight:0, use_fixed_rate:false, fixed_rates:{}, sort_order: cfgActivities.filter(a=>a._gi===gi).length });
   renderCfgActs();
+}
+// ── Fixed-rate-per-villa-type toggle — for activities priced flat per villa type instead of a % of the villa's total contract rate ──
+function toggleCfgFixedRate(ai){
+  const a=cfgActivities[ai]; if(!a)return;
+  a.use_fixed_rate=!a.use_fixed_rate;
+  if(!a.fixed_rates) a.fixed_rates={};
+  renderCfgActs();
+}
+function setCfgFixedRate(ai,villaTypeLabel,val){
+  const a=cfgActivities[ai]; if(!a)return;
+  if(!a.fixed_rates) a.fixed_rates={};
+  a.fixed_rates[villaTypeLabel]=+val||0;
 }
 // ── Split an activity into weighted sub-parts (GF/FF) — for importing old split BOQs ──
 function _cfgPartCode(base,label){ return (String(base||'').trim()||'ACT')+'-'+(String(label||'').trim().toUpperCase()||'P'); }
@@ -3218,7 +3282,7 @@ function splitCfgActivity(ai){
   const base=(a.activity_code||'').trim()||('ACT'+(ai+1));
   const w=a.activity_weight||0;
   a.base_code=base; a.part_label='GF'; a.activity_weight=w/2; a.activity_code=_cfgPartCode(base,'GF');
-  cfgActivities.splice(ai+1,0,{ _gi:a._gi, group_id:a.group_id, base_code:base, part_label:'FF', activity_code:_cfgPartCode(base,'FF'), activity_name:a.activity_name||'', activity_weight:w/2, sort_order:(a.sort_order||0) });
+  cfgActivities.splice(ai+1,0,{ _gi:a._gi, group_id:a.group_id, base_code:base, part_label:'FF', activity_code:_cfgPartCode(base,'FF'), activity_name:a.activity_name||'', activity_weight:w/2, use_fixed_rate:a.use_fixed_rate||false, fixed_rates:{}, sort_order:(a.sort_order||0) });
   renderCfgActs();
 }
 function unsplitCfgActivity(ai){
@@ -3229,7 +3293,7 @@ function unsplitCfgActivity(ai){
   const name=parts[0]?.activity_name||a.activity_name||'';
   const pos=cfgActivities.indexOf(parts[0]);
   cfgActivities=cfgActivities.filter(x=>!(x._gi===gi && x.base_code===base && x.part_label));
-  cfgActivities.splice(Math.max(0,pos),0,{ _gi:gi, group_id:a.group_id, base_code:base, part_label:'', activity_code:base, activity_name:name, activity_weight:totalW, sort_order:a.sort_order||0 });
+  cfgActivities.splice(Math.max(0,pos),0,{ _gi:gi, group_id:a.group_id, base_code:base, part_label:'', activity_code:base, activity_name:name, activity_weight:totalW, use_fixed_rate:false, fixed_rates:{}, sort_order:a.sort_order||0 });
   renderCfgActs();
 }
 
@@ -3371,9 +3435,24 @@ async function saveConfigScope() {
             activity_weight: a.activity_weight,
             base_code: (a.base_code || a.activity_code),
             part_label: (a.part_label && String(a.part_label).trim()) ? String(a.part_label).trim().toUpperCase() : null,
+            use_fixed_rate: !!a.use_fixed_rate,
             sort_order: ai
           }));
-          await fp('qs_scope_activities', actRows);
+          const newActs = await fp('qs_scope_activities', actRows);
+          // Persist per-villa-type fixed rates for any activity that uses them (skipped in template-edit mode — no scope-specific villa types to attach rates to)
+          if (!_tplEditMode && Array.isArray(newActs)) {
+            const rateRows = [];
+            newActs.forEach((newAct, ai) => {
+              const src = grpActs[ai];
+              if (!src || !src.use_fixed_rate || !src.fixed_rates) return;
+              Object.entries(src.fixed_rates).forEach(([villaTypeLabel, rate]) => {
+                if (villaTypeLabel && rate != null && rate !== '') {
+                  rateRows.push({ activity_id: newAct.id, villa_type_label: villaTypeLabel, rate_aed: +rate || 0 });
+                }
+              });
+            });
+            if (rateRows.length) await fp('qs_scope_activity_rates', rateRows);
+          }
         }
       }
       audit('qs_scope_activity_groups', 'UPDATE_ACTIVITIES', sid, { scope: (selectedScope||{}).subcontractor_name, groups_count: cfgActGroups.length, activities_count: cfgActivities.length });
@@ -3390,7 +3469,7 @@ async function saveConfigScope() {
         await loadScopeConfig();
         cfgActGroups = JSON.parse(JSON.stringify(scopeActivityGroups));
         cfgActivities = scopeActivities.map(a => ({
-          ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id)
+          ...a, _gi: cfgActGroups.findIndex(g => g.id === a.group_id), fixed_rates: { ...(scopeActivityRates[a.id] || {}) }
         }));
       }
       renderCfgActs();
