@@ -21,6 +21,7 @@ let scopeActivityGroups = [];
 let scopeActivities = []; // flat, with group info
 let scopeActivityRates = {}; // { activity_id: { villa_type_label: rate_aed } } — for use_fixed_rate activities
 let scopeVillas = [];
+let manualVillaIds = new Set(); // villa_ids manually added to the primary scope (＋ Add Villa)
 let pcOverrides = {};  // key: villa_id+':'+activity_code
 let billedRecords = {}; // key: villa_id+':'+activity_code → [{pc_id, pct, carry}] (one per PC that billed part of the cell)
 let wirData = {};      // key: villa_id+':'+activity_code → {approved, response_date}
@@ -709,6 +710,15 @@ async function autoDetectScopeVillas() {
     billedIds = [...new Set(billed.map(b => b.villa_id).filter(Boolean))];
   } catch(e) {}
 
+  // Manually-assigned villas (＋ Add Villa) always join the sheet, even with no WIR raised yet —
+  // used to bill a not-yet-approved WIR at a partial % via the cell override.
+  let manualIds = [];
+  try {
+    const manual = await fa(`qs_scope_villas?scope_id=eq.${selectedScope.id}&select=villa_id`);
+    manualIds = [...new Set(manual.map(m => m.villa_id).filter(Boolean))];
+  } catch(e) {}
+  manualVillaIds = new Set(manualIds);
+
   // Count only NON-variation base scopes as ambiguous siblings — variation scopes have their own
   // distinct activity (WIR) codes, so WIR detection can tell them apart and they don't force the
   // billing-only fallback. (A base scope + its VO children still WIR-detects normally.)
@@ -719,12 +729,15 @@ async function autoDetectScopeVillas() {
   ).length;
 
   // Multiple base scopes for one sub: WIR can't distinguish them → billing-only once billed, else empty
-  if (siblings > 1) return billedIds.length ? await _villasByIds(billedIds) : [];
+  if (siblings > 1) {
+    const ids = [...new Set([...billedIds, ...manualIds])];
+    return ids.length ? await _villasByIds(ids) : [];
+  }
 
-  // Single-scope sub: union of billed villas + WIR-detected so new approvals always appear
+  // Single-scope sub: union of billed + manual + WIR-detected so new approvals always appear
   const wirVillas = await _detectWirVillas();
-  if (!billedIds.length) return wirVillas;
-  const allIds = [...new Set([...billedIds, ...wirVillas.map(v => v.villa_id)])];
+  if (!billedIds.length && !manualIds.length) return wirVillas;
+  const allIds = [...new Set([...billedIds, ...manualIds, ...wirVillas.map(v => v.villa_id)])];
   return await _villasByIds(allIds);
 }
 
@@ -784,7 +797,12 @@ async function selectPC(id, pcsCache) {
   await loadPCData();
 }
 
+// Re-entrancy token: loadPCData awaits several fetches, and a second call (PC switch, refresh)
+// can start before the first finishes. Only the newest run may write globals / render —
+// otherwise both runs push into pcSections and every scope shows up twice in the summary.
+let _pcDataRun = 0;
 async function loadPCData() {
+  const runId = ++_pcDataRun;
   showTab('progress');
   document.getElementById('ps-wrap').innerHTML = '<div class="loading-row"><span class="spin"></span></div>';
   document.getElementById('psum-inner').innerHTML = '<div class="loading-row"><span class="spin"></span></div>';
@@ -805,6 +823,7 @@ async function loadPCData() {
       <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em">${selectedPC.status.toUpperCase()}</span>
       ${canSubmit && selectedPC.status==='draft' ? '<button class="btn btn-ghost btn-sm" onclick="submitPC()">Submit</button>' : ''}
       ${canLock && selectedPC.status==='submitted' ? '<button class="btn btn-danger btn-sm" onclick="openLock()">🔒 Lock PC</button>' : ''}
+      ${(canManage||canAdmin) ? '<button class="btn btn-ghost btn-sm" onclick="openAddVilla()" title="Manually add a villa to the sheet — e.g. to bill a WIR that is not approved yet at a partial %">＋ Add Villa</button>' : ''}
       ${canAdmin ? '<button class="btn btn-danger btn-sm" onclick="openDeletePC()">🗑 Delete PC</button>' : ''}
     `;
   }
@@ -813,8 +832,39 @@ async function loadPCData() {
   const villaIds = scopeVillas.map(v => v.villa_id);
   const actCodes = scopeActivities.map(a => a.activity_code);
 
+  // ── Multi-scope: build a section context for every scope merged into this PC ──
+  // Built BEFORE the primary-data check so a PC whose primary scope has no villas of its
+  // own (e.g. one created from a VO) still shows every merged scope in the tabs + summary.
+  const pcScopeRows = await fa(`qs_pc_scopes?pc_id=eq.${selectedPC.id}&order=sort_order.asc&select=scope_id`);
+  let scopeIds = [...new Set(pcScopeRows.map(r => r.scope_id).filter(Boolean))];
+  if (!scopeIds.includes(selectedScope.id)) scopeIds = [selectedScope.id, ...scopeIds];
+  isMultiPC = scopeIds.length > 1;
+  const _sections = [];
+  if (isMultiPC) {
+    const ordered = [selectedScope.id, ...scopeIds.filter(id => id !== selectedScope.id)];
+    const scopeObjs = await fa(`qs_scopes?id=in.(${ordered.join(',')})&select=*`);
+    const byId = {}; scopeObjs.forEach(s => byId[s.id] = s);
+    for (const id of ordered) {
+      const sc = byId[id]; if (!sc) continue;
+      const ctx = await buildScopeCtx(sc);
+      _sections.push({ scope: sc, ctx });
+    }
+  }
+  if (runId !== _pcDataRun) return; // superseded by a newer call — discard this run entirely
+  pcSections = _sections;
+  progressSectionIdx = 0;
+
   if (!villaIds.length || !actCodes.length) {
-    document.getElementById('ps-wrap').innerHTML = '<div class="loading-row">No villas or activities configured for this scope.<br><small>Use ⚙ Configure to set up the scope.</small></div>';
+    // Primary scope has nothing of its own — clear primary state but still render the
+    // merged sections (summary + tabs), defaulting to the first scope that has data.
+    wirData = {}; pcOverrides = {}; billedRecords = {}; lockedBilledMissing = false;
+    pcNumById = {};
+    (allScopePCs || []).forEach(p => { pcNumById[p.id] = p.pc_number; });
+    if (selectedPC) pcNumById[selectedPC.id] = selectedPC.pc_number;
+    pcSigsList = await fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`);
+    if (runId !== _pcDataRun) return;
+    if (pcSections.length > 1) progressSectionIdx = 1;
+    renderProgressSection();
     renderPaymentSummary();
     return;
   }
@@ -884,41 +934,35 @@ async function loadPCData() {
   // PC signatories
   pcSigsList = pcSigs;
 
-  // ── Multi-scope: build a section context for every scope merged into this PC ──
-  const pcScopeRows = await fa(`qs_pc_scopes?pc_id=eq.${selectedPC.id}&order=sort_order.asc&select=scope_id`);
-  let scopeIds = pcScopeRows.map(r => r.scope_id).filter(Boolean);
-  if (!scopeIds.includes(selectedScope.id)) scopeIds = [selectedScope.id, ...scopeIds];
-  isMultiPC = scopeIds.length > 1;
-  pcSections = [];
-  progressSectionIdx = 0;
-  if (isMultiPC) {
-    const ordered = [selectedScope.id, ...scopeIds.filter(id => id !== selectedScope.id)];
-    const scopeObjs = await fa(`qs_scopes?id=in.(${ordered.join(',')})&select=*`);
-    const byId = {}; scopeObjs.forEach(s => byId[s.id] = s);
-    for (const id of ordered) {
-      const sc = byId[id]; if (!sc) continue;
-      const ctx = await buildScopeCtx(sc);
-      pcSections.push({ scope: sc, ctx });
-    }
-  }
-
+  if (runId !== _pcDataRun) return; // superseded by a newer call — don't render stale data
   renderProgressSection();
   renderPaymentSummary();
 }
 
-// Progress tab. The grid edits the primary scope (globals stay primary — safe for Config).
-// Other merged scopes auto-feed the combined Summary + locking from WIR data.
+// Progress tab. Each merged scope (base + VOs) gets its own clickable tab; the grid renders
+// and edits whichever scope's tab is active. All scopes feed the Payment Summary & locking.
+function activeProgressSec() {
+  return (isMultiPC && pcSections.length > 1 && progressSectionIdx > 0) ? pcSections[progressSectionIdx] : null;
+}
+function setProgressSection(i) {
+  progressSectionIdx = i;
+  renderProgressSection();
+}
 function renderProgressSection() {
   const host = document.getElementById('ps-section-bar');
   if (isMultiPC && pcSections.length > 1 && host) {
     host.style.display = 'flex';
     const chips = pcSections.map((s,i) => {
-      const nm = escH(s.scope.sca_ref || s.scope.scope_title || ('Scope '+s.scope.id));
-      const primaryStyle = 'background:var(--accent-soft,rgba(79,140,255,.14));color:var(--accent-text,#93b6ff);border-color:transparent';
-      return `<span style="font-size:11px;padding:2px 9px;border:1px solid var(--bdr);border-radius:20px;${i===0?primaryStyle:'color:var(--tx2)'}">${nm}${i===0?' · editing':''}</span>`;
+      const sc = s.scope;
+      const nm = escH((sc.is_variation && sc.vo_ref) ? sc.vo_ref : (sc.sca_ref || sc.scope_title || ('Scope '+sc.id)));
+      const active = i === progressSectionIdx;
+      const style = active
+        ? 'background:var(--accent-soft,rgba(79,140,255,.14));color:var(--accent-text,#93b6ff);border-color:transparent;font-weight:700'
+        : 'color:var(--tx2);cursor:pointer';
+      return `<span style="font-size:11px;padding:3px 11px;border:1px solid var(--bdr);border-radius:20px;${style}" title="${escH(sc.scope_title||'')}" onclick="setProgressSection(${i})">${nm}</span>`;
     }).join(' ');
-    host.innerHTML = `<span style="font-size:11px;color:var(--tx3);font-weight:600">MERGED SCOPES:</span> ${chips}
-      <span style="font-size:11px;color:var(--tx3);margin-left:auto">Overrides on this grid apply to the first scope. All scopes auto-feed the Payment Summary &amp; locking.</span>`;
+    host.innerHTML = `<span style="font-size:11px;color:var(--tx3);font-weight:600">SCOPES:</span> ${chips}
+      <span style="font-size:11px;color:var(--tx3);margin-left:auto">Click a scope to view / edit its sheet. All scopes feed the Payment Summary &amp; printing.</span>`;
   } else if (host) {
     host.style.display = 'none'; host.innerHTML = '';
   }
@@ -1032,15 +1076,20 @@ function ctxMatchVillaType(rawType, villaTypes) {
   }
   return villaTypes[0]?.villa_type_label || rawType || 'Unknown';
 }
-async function ctxDetectVillas(scope, villaTypes, activities) {
+async function ctxDetectVillas(scope, villaTypes, activities, extraIds) {
   const subName = scope.subcontractor_name;
-  if (!subName) return [];
-  const nameFilter = await subRawClause(subName);
-  const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
-  if (!actCodes.length) return [];
-  const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
-  const wirRows = await fa(`v_latest_wir_by_sub?${nameFilter}${actFilter}&select=villa_id`);
-  const villaIds = [...new Set(wirRows.map(r => r.villa_id).filter(Boolean))];
+  let villaIds = [];
+  if (subName) {
+    const nameFilter = await subRawClause(subName);
+    const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
+    if (actCodes.length) {
+      const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
+      const wirRows = await fa(`v_latest_wir_by_sub?${nameFilter}${actFilter}&select=villa_id`);
+      villaIds = wirRows.map(r => r.villa_id).filter(Boolean);
+    }
+  }
+  // Union in manually-assigned villas so they show even with no WIR raised yet
+  villaIds = [...new Set([...villaIds, ...(extraIds ? [...extraIds] : [])])];
   if (!villaIds.length) return [];
   const villas = await fa(`villas?id=in.(${villaIds.join(',')})&select=id,villa_no,villa_type,cluster_id&is_active=eq.true&order=cluster_id.asc,villa_no.asc`);
   return villas.map(v => ({ villa_id:v.id, villa_no:v.villa_no, villa_type_label:ctxMatchVillaType(v.villa_type, villaTypes), raw_villa_type:v.villa_type, cluster_id:v.cluster_id }));
@@ -1052,7 +1101,9 @@ async function buildScopeCtx(scope) {
   const groupIds = activityGroups.map(g => g.id);
   const activities = groupIds.length ? await fa(`qs_scope_activities?group_id=in.(${groupIds.join(',')})&order=sort_order.asc`) : [];
   const activityRates = await loadActivityRates(activities);
-  const villas = await ctxDetectVillas(scope, villaTypes, activities);
+  const manualRows = await fa(`qs_scope_villas?scope_id=eq.${scope.id}&select=villa_id`);
+  const ctxManualIds = new Set(manualRows.map(r => r.villa_id).filter(Boolean));
+  const villas = await ctxDetectVillas(scope, villaTypes, activities, ctxManualIds);
   const variations = await fa(`qs_variation_orders?scope_id=eq.${scope.id}&order=created_at.asc`);
   const wir = {}, overrides = {}, billed = {};
   const villaIds = villas.map(v => v.villa_id);
@@ -1072,7 +1123,7 @@ async function buildScopeCtx(scope) {
     ovRows.forEach(o => { overrides[o.villa_id+':'+o.activity_code]=o; });
     bRows.forEach(b => { const k=b.villa_id+':'+b.activity_code; (billed[k]=billed[k]||[]).push({ pc_id:b.locked_pc_id, pct:b.billed_pct==null?1:Number(b.billed_pct), carry:b.carry_remainder!==false }); });
   }
-  return { scope, villaTypes, activityGroups, activities, activityRates, villas, variations, wir, overrides, billed };
+  return { scope, villaTypes, activityGroups, activities, activityRates, villas, variations, wir, overrides, billed, manualVillaIds: ctxManualIds };
 }
 function ctxActStatus(ctx, villa_id, activity_code) {
   const key = villa_id+':'+activity_code;
@@ -1125,9 +1176,25 @@ function ctxSection(ctx) {
 // PROGRESS SHEET RENDER
 // ══════════════════════════════════════════════
 function renderProgressSheet() {
-  if (!scopeVillas.length || !scopeActivities.length) {
-    document.getElementById('ps-wrap').innerHTML = '<div class="loading-row">No villas or activities configured.<br><small>Use ⚙ Configure to set up the scope.</small></div>';
-    return;
+  document.getElementById('ps-wrap').innerHTML = buildProgressSheetHtml(activeProgressSec());
+}
+
+// Builds the progress grid for one scope. sec = null → the primary scope (globals path);
+// sec = {scope, ctx} → a merged scope rendered from its own context. Also used by the print
+// path to stack every merged scope's sheet into one printout.
+function buildProgressSheetHtml(sec) {
+  const shGroups = sec ? sec.ctx.activityGroups : scopeActivityGroups;
+  const shActs   = sec ? sec.ctx.activities     : scopeActivities;
+  const shVillas = sec ? sec.ctx.villas         : scopeVillas;
+  const statusOf = sec ? ((vid, code) => ctxActStatus(sec.ctx, vid, code)) : getActivityStatus;
+  const workOf   = sec ? ((vid, vt) => ctxWorkdone(sec.ctx, vid, vt)) : calcVillaWorkdone;
+  const rateOf   = sec
+    ? (label => parseFloat(sec.ctx.villaTypes.find(t => t.villa_type_label === label)?.rate_aed) || 0)
+    : getVillaRate;
+  const manualSet = sec ? (sec.ctx.manualVillaIds || new Set()) : (manualVillaIds || new Set());
+
+  if (!shVillas.length || !shActs.length) {
+    return '<div class="loading-row">No villas or activities configured.<br><small>Use ⚙ Configure to set up the scope, or ＋ Add Villa to add one manually.</small></div>';
   }
 
   const isLocked = selectedPC.status === 'locked';
@@ -1136,8 +1203,8 @@ function renderProgressSheet() {
   // Build column headers
   let thGroups = '<th class="sticky col-sr" rowspan="2">Sr.</th><th class="sticky col-villa" rowspan="2">Villa</th><th class="sticky col-type" rowspan="2">Type</th><th class="sticky col-cluster" rowspan="2">Cluster</th>';
   let thActs = ''; // Sr/Villa/Type/Cluster are rowspan=2 in thGroups — no placeholder cells needed in row 2
-  scopeActivityGroups.forEach(grp => {
-    const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+  shGroups.forEach(grp => {
+    const grpActs = shActs.filter(a => a.group_id === grp.id);
     thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${(grp.group_weight*100).toFixed(0)}%)</th>`;
     grpActs.forEach(act => {
       const wLabel = act.use_fixed_rate ? 'FIXED' : (act.activity_weight*100).toFixed(0)+'%';
@@ -1150,14 +1217,15 @@ function renderProgressSheet() {
 
   // A villa belongs to this PC only if it has work billed in this or an earlier PC
   // (or, for a draft, work that's approvable now). Villas billed only in LATER PCs are hidden.
+  // Manually-added villas are always shown so a not-yet-approved WIR can be billed by override.
   const effLocked = isLocked && !lockedBilledMissing;   // legacy locked w/o billed → behave like to-date
-  const villaInThisPc = sv => scopeActivities.some(a => {
-    const st = getActivityStatus(sv.villa_id, a.activity_code);
+  const villaInThisPc = sv => manualSet.has(sv.villa_id) || shActs.some(a => {
+    const st = statusOf(sv.villa_id, a.activity_code);
     return st.wasBilledPrev || st.isBilledNow || (!effLocked && st.isCompleteToDate && !st.billedLater);
   });
 
   // Apply cluster filter + PC relevance
-  const visibleVillas = scopeVillas.filter(v =>
+  const visibleVillas = shVillas.filter(v =>
     (psClusterFilter === 'all' || String(v.cluster_id) === String(psClusterFilter)) && villaInThisPc(v)
   );
 
@@ -1168,15 +1236,15 @@ function renderProgressSheet() {
     rows = `<tr><td colspan="100" style="text-align:center;color:var(--tx3);padding:24px;font-size:12px">No villas in Cluster ${psClusterFilter}.</td></tr>`;
   }
   visibleVillas.forEach((sv, idx) => {
-    const { prev, current, toDate, prevAed, curAed, todAed } = calcVillaWorkdone(sv.villa_id, sv.villa_type_label);
-    const rate = getVillaRate(sv.villa_type_label);
+    const { prev, current, toDate, prevAed, curAed, todAed } = workOf(sv.villa_id, sv.villa_type_label);
+    const rate = rateOf(sv.villa_type_label);
     totRate += rate; totPrevAed += prevAed; totCurAed += curAed; totTodAed += todAed;
 
     let actCells = '';
-    scopeActivityGroups.forEach(grp => {
-      const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+    shGroups.forEach(grp => {
+      const grpActs = shActs.filter(a => a.group_id === grp.id);
       grpActs.forEach(act => {
-        const st = getActivityStatus(sv.villa_id, act.activity_code);
+        const st = statusOf(sv.villa_id, act.activity_code);
         const { prevPct, curPct, withheldPct, isCompleteToDate, source } = st;
         const pP = Math.round(prevPct * 100), pC = Math.round(curPct * 100);
         let cls = 'act-cell', label = '—', tip = act.activity_name;
@@ -1225,12 +1293,10 @@ function renderProgressSheet() {
 
   // Totals row — sums Rate / Prev / Current / To Date across all visible villas
   if (visibleVillas.length) {
-    const labelSpan = 4 + scopeActivities.length; // Sr+Villa+Type+Cluster + one per activity
+    const labelSpan = 4 + shActs.length; // Sr+Villa+Type+Cluster + one per activity
     rows += `<tr class="ps-total-row">
       <td class="left" colspan="${labelSpan}" style="text-align:right;font-weight:800;font-size:12px;padding:7px 12px">TOTAL (${visibleVillas.length} villa${visibleVillas.length===1?'':'s'})</td>
-      <td class="wd-cell wd-prev" style="font-weight:800">${fmtPct(totPrevAed/Math.max(totRate,1))}</td>
-      <td class="wd-cell wd-cur" style="font-weight:800">${fmtPct(totCurAed/Math.max(totRate,1))}</td>
-      <td class="wd-cell wd-date" style="font-weight:800">${fmtPct(totTodAed/Math.max(totRate,1))}</td>
+      <td></td><td></td><td></td>
       <td class="rate-cell" style="font-weight:800">${fmtAED(totRate)}</td>
       <td class="aed-cell aed-prev" style="font-weight:800">${fmtAED(totPrevAed)}</td>
       <td class="aed-cell aed-cur" style="font-weight:800">${fmtAED(totCurAed)}</td>
@@ -1238,7 +1304,7 @@ function renderProgressSheet() {
     </tr>`;
   }
 
-  document.getElementById('ps-wrap').innerHTML = `
+  return `
     <table class="ps-table">
       <thead><tr>${thGroups}</tr><tr>${thActs}</tr></thead>
       <tbody>${rows}</tbody>
@@ -1306,13 +1372,37 @@ function _buildPrintHeader() {
   if (ph2) ph2.innerHTML = ph.innerHTML;
 }
 
+// Multi-scope PCs: temporarily stack EVERY merged scope's progress sheet (base + VOs) into
+// ps-wrap so a single print covers them all, each starting on its own page. Returns the
+// saved on-screen html to restore afterwards, or null when there's nothing to stack.
+function _stackAllSheetsForPrint() {
+  if (!(isMultiPC && pcSections.length > 1)) return null;
+  const wrap = document.getElementById('ps-wrap');
+  const saved = wrap.innerHTML;
+  // Skip scopes with nothing to show (e.g. a VO-primary whose villas all live on the base scope)
+  const printable = pcSections.filter((s, i) => i === 0
+    ? (scopeVillas.length && scopeActivities.length)
+    : (s.ctx.villas.length && s.ctx.activities.length));
+  wrap.innerHTML = printable.map((s, i) => {
+    const sc = s.scope;
+    const ref = (sc.is_variation && sc.vo_ref) ? escH(sc.vo_ref) : escH(sc.sca_ref || ('Scope ' + sc.id));
+    return `<div style="${i > 0 ? 'page-break-before:always;' : ''}">
+      <div style="font-size:12px;font-weight:800;margin:10px 0 6px">${ref}${sc.scope_title ? ' — ' + escH(sc.scope_title) : ''}</div>
+      ${buildProgressSheetHtml(pcSections.indexOf(s) === 0 ? null : s)}
+    </div>`;
+  }).join('');
+  return saved;
+}
+
 function printCertificate() {
   if (!selectedScope || !selectedPC) return;
   _buildPrintHeader();
   // Ensure the payment summary is rendered (it may not be if user never visited that tab)
   const summaryEmpty = (document.getElementById('psum-inner')?.children.length || 0) <= 1;
   if (summaryEmpty) renderPaymentSummary();
+  const saved = _stackAllSheetsForPrint();
   window.print();
+  if (saved !== null) document.getElementById('ps-wrap').innerHTML = saved;
 }
 
 function printProgressSheet() {
@@ -1320,9 +1410,11 @@ function printProgressSheet() {
   _buildPrintHeader();
   // Temporarily add a class to body so CSS can hide the summary tab
   document.body.classList.add('print-ps-only');
+  const saved = _stackAllSheetsForPrint();
   setTimeout(() => {
     window.print();
     document.body.classList.remove('print-ps-only');
+    if (saved !== null) document.getElementById('ps-wrap').innerHTML = saved;
   }, 80);
 }
 
@@ -2025,12 +2117,110 @@ function switchCfgTab(t) {
 // ══════════════════════════════════════════════
 // OVERRIDE MODAL
 // ══════════════════════════════════════════════
+// ＋ Add Villa — manually pull a villa into the active scope's sheet even though it has no
+// WIR yet, so its cells can be billed via override (e.g. partial % on a not-yet-approved WIR).
+// Adds to the scope of whichever tab is active. Typing an already-added manual villa's number
+// reveals a Remove button instead.
+let avPendingRemove = null; // {scope_id, villa_id, villa_no} when the typed villa is an existing manual one
+function openAddVilla() {
+  if (!canManage && !canAdmin) return;
+  if (!selectedPC || selectedPC.status === 'locked') return;
+  const sec = activeProgressSec();
+  const scope = sec ? sec.scope : selectedScope;
+  const scopeName = scope.sca_ref || scope.scope_title || scope.subcontractor_name;
+  document.getElementById('av-scope-info').innerHTML =
+    `<b>Scope:</b> ${escH(scopeName)}${scope.is_variation && scope.vo_ref ? ' <span style="color:var(--accent)">(' + escH(scope.vo_ref) + ')</span>' : ''}`;
+  document.getElementById('av-villa-no').value = '';
+  avOnNoInput();
+  document.getElementById('modal-add-villa').style.display = 'flex';
+  setTimeout(() => document.getElementById('av-villa-no').focus(), 60);
+}
+
+// Typing a different number invalidates any cluster pick / pending removal from the last lookup
+function avOnNoInput() {
+  document.getElementById('av-cluster-row').style.display = 'none';
+  document.getElementById('av-cluster').innerHTML = '';
+  document.getElementById('av-remove-btn').style.display = 'none';
+  document.getElementById('av-msg').className = 'form-msg';
+  avPendingRemove = null;
+}
+
+async function submitAddVilla() {
+  const msg = document.getElementById('av-msg');
+  const btn = document.getElementById('av-add-btn');
+  const sec = activeProgressSec();
+  const scope = sec ? sec.scope : selectedScope;
+  const no = parseInt(document.getElementById('av-villa-no').value);
+  if (!no) { showMsg(msg, 'err', 'Enter a villa number.'); return; }
+  try {
+    const rows = await fa(`villas?villa_no=eq.${no}&is_active=eq.true&select=id,villa_no,villa_type,cluster_id&order=cluster_id.asc`);
+    if (!rows.length) { showMsg(msg, 'err', `Villa ${no} not found.`); return; }
+    let v = rows[0];
+    if (rows.length > 1) {
+      const clusterRow = document.getElementById('av-cluster-row');
+      const sel = document.getElementById('av-cluster');
+      if (clusterRow.style.display === 'none' || !sel.options.length) {
+        sel.innerHTML = rows.map(r => `<option value="${r.cluster_id}">Cluster ${r.cluster_id} — ${escH(r.villa_type || '')}</option>`).join('');
+        clusterRow.style.display = '';
+        showMsg(msg, 'err', `Villa ${no} exists in ${rows.length} clusters — pick one, then click Add Villa again.`);
+        return;
+      }
+      v = rows.find(r => r.cluster_id === parseInt(sel.value)) || rows[0];
+    }
+    const list = sec ? sec.ctx.villas : scopeVillas;
+    const manualSet = sec ? (sec.ctx.manualVillaIds || new Set()) : manualVillaIds;
+    if (list.some(x => x.villa_id === v.id)) {
+      if (manualSet.has(v.id)) {
+        avPendingRemove = { scope_id: scope.id, villa_id: v.id, villa_no: v.villa_no };
+        document.getElementById('av-remove-btn').style.display = '';
+        showMsg(msg, 'err', `VI-${no} was added manually — you can remove it with the button below.`);
+      } else {
+        showMsg(msg, 'err', `VI-${no} is already in this sheet (detected from WIR / billing data).`);
+      }
+      return;
+    }
+    const typeLabel = sec ? ctxMatchVillaType(v.villa_type, sec.ctx.villaTypes) : matchVillaType(v.villa_type);
+    btn.disabled = true; btn.textContent = '…Adding';
+    await fp('qs_scope_villas', { scope_id: scope.id, villa_id: v.id, villa_no: v.villa_no, villa_type_label: typeLabel, assigned_by: currentUser?.full_name || '' });
+    audit('qs_scope_villas', 'ADD_MANUAL_VILLA', scope.id, { villa_no: v.villa_no, cluster: v.cluster_id, villa_type: typeLabel, scope: scope.subcontractor_name });
+    btn.disabled = false; btn.textContent = 'Add Villa';
+    closeModal('modal-add-villa');
+    await _reloadAfterVillaChange();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Add Villa';
+    showMsg(msg, 'err', 'Failed: ' + e.message);
+  }
+}
+
+async function removeManualVilla() {
+  if (!avPendingRemove) return;
+  const msg = document.getElementById('av-msg');
+  try {
+    await fdel(`qs_scope_villas?scope_id=eq.${avPendingRemove.scope_id}&villa_id=eq.${avPendingRemove.villa_id}`);
+    audit('qs_scope_villas', 'REMOVE_MANUAL_VILLA', avPendingRemove.scope_id, null, { villa_no: avPendingRemove.villa_no });
+    avPendingRemove = null;
+    closeModal('modal-add-villa');
+    await _reloadAfterVillaChange();
+  } catch(e) { showMsg(msg, 'err', 'Failed: ' + e.message); }
+}
+async function _reloadAfterVillaChange() {
+  const keepIdx = progressSectionIdx;
+  await loadScopeConfig();
+  await loadPCData();
+  if (keepIdx > 0 && keepIdx < pcSections.length) { progressSectionIdx = keepIdx; renderProgressSection(); }
+}
+
 function openOverride(villa_id, activity_code, villa_no, act_name) {
   if (!canManage && !canAdmin) return;
   ovPending = { villa_id: parseInt(villa_id), activity_code, villa_no, act_name };
   const key = villa_id + ':' + activity_code;
-  const ovExisting = pcOverrides[key];
-  const st = getActivityStatus(villa_id, activity_code);
+  // Resolve the cell from whichever scope tab is active — merged scopes carry their own
+  // WIR/override/billed maps in their ctx; the primary scope uses the globals.
+  const sec = activeProgressSec();
+  const ovExisting = sec ? sec.ctx.overrides[key] : pcOverrides[key];
+  const st = sec
+    ? { ...ctxActStatus(sec.ctx, villa_id, activity_code), wir: sec.ctx.wir[key], override: ovExisting }
+    : getActivityStatus(villa_id, activity_code);
   // Stash the cell's prior-billed share so the partial controls can show context & validate
   ovPending.prevPct = st.prevPct || 0;
   const prevTxt = st.prevPct > 1e-9 ? ` (${Math.round(st.prevPct*100)}% already billed in earlier PCs)` : '';
@@ -2107,21 +2297,27 @@ async function submitOverride() {
   }
 
   const key = ovPending.villa_id + ':' + ovPending.activity_code;
+  // Overrides are keyed (pc, villa, activity_code) — the code identifies which scope's cell
+  // this hits, so one row exists regardless of which scope tab the click came from.
+  const _sec = activeProgressSec();
+  const existing = _sec ? _sec.ctx.overrides[key] : pcOverrides[key];
   try {
     if (val === 'wir') {
       await fdel(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`);
       audit('qs_pc_overrides', 'REMOVE_OVERRIDE', selectedPC.id, null, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
       delete pcOverrides[key];
+      pcSections.forEach(s => { delete s.ctx.overrides[key]; });
     } else {
       const fields = { is_complete, override_reason: reason, payment_pct, carry_remainder };
-      const existing = pcOverrides[key];
       if (existing) {
         await fpatch(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`, fields);
       } else {
         await fp('qs_pc_overrides', { pc_id: selectedPC.id, villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, created_by: currentUser?.full_name || '', ...fields });
       }
       audit('qs_pc_overrides', existing ? 'UPDATE_OVERRIDE' : 'CREATE_OVERRIDE', selectedPC.id, { villa_no: ovPending.villa_no, activity_code: ovPending.activity_code, mode: val, payment_pct, carry_remainder, reason, pc_number: selectedPC.pc_number, scope: selectedScope.subcontractor_name });
-      pcOverrides[key] = { villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, ...fields };
+      const row = { villa_id: ovPending.villa_id, activity_code: ovPending.activity_code, ...fields };
+      pcOverrides[key] = row;
+      pcSections.forEach(s => { s.ctx.overrides[key] = row; });
     }
     closeModal('modal-override');
     renderProgressSheet();
@@ -2606,8 +2802,12 @@ function openNewPC() {
     (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
     (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
   ));
-  const voChildIds = sib.filter(s => s.is_variation && s.parent_scope_id === selectedScope.id).map(s => s.id);
-  newPcScopeIds = [...new Set([selectedScope.id, ...voChildIds])];
+  // Auto-include the whole family: the base scope plus ALL its VO children — whether the PC
+  // is being created from the base or from one of its VOs — so variations always ride on the
+  // same PC instead of ending up on separate certificates.
+  const baseId = (selectedScope.is_variation && selectedScope.parent_scope_id) ? selectedScope.parent_scope_id : selectedScope.id;
+  const famIds = sib.filter(s => s.id === baseId || (s.is_variation && s.parent_scope_id === baseId)).map(s => s.id);
+  newPcScopeIds = [...new Set([selectedScope.id, ...famIds])];
   const row = document.getElementById('npc-scopes-row');
   const list = document.getElementById('npc-scopes-list');
   if (sib.length > 1) {

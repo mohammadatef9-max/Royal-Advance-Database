@@ -922,6 +922,31 @@ textarea{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- Add Villa Modal -->
+<div class="modal-overlay" id="modal-add-villa" style="display:none">
+  <div class="modal modal-sm">
+    <div class="modal-title">＋ Add Villa to Sheet <button class="modal-close" onclick="closeModal('modal-add-villa')">✕</button></div>
+    <div class="modal-body">
+      <div class="ov-info" id="av-scope-info">—</div>
+      <div style="font-size:11px;color:var(--tx3);margin-bottom:10px">Manually adds a villa to this scope's progress sheet even if it has no WIR yet — its cells can then be billed via the cell override (e.g. a partial % on a WIR that isn't approved).</div>
+      <div class="form-row">
+        <label>Villa number</label>
+        <input id="av-villa-no" type="number" min="1" placeholder="e.g. 107" oninput="avOnNoInput()" onkeydown="if(event.key==='Enter')submitAddVilla()">
+      </div>
+      <div class="form-row" id="av-cluster-row" style="display:none">
+        <label>Cluster — this villa number exists in more than one</label>
+        <select id="av-cluster"></select>
+      </div>
+      <div class="form-msg" id="av-msg"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-villa')">Cancel</button>
+      <button class="btn btn-danger" id="av-remove-btn" style="display:none" onclick="removeManualVilla()">Remove Villa</button>
+      <button class="btn btn-primary" id="av-add-btn" onclick="submitAddVilla()">Add Villa</button>
+    </div>
+  </div>
+</div>
+
 <!-- Lock PC Modal -->
 <div class="modal-overlay" id="modal-lock" style="display:none">
   <div class="modal modal-md">
@@ -980,7 +1005,7 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 
-<script src="qs.js?v=1"></script>
+<script src="qs.js?v=3"></script>
 
 </body>
 </html>
