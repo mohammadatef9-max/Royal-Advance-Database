@@ -268,6 +268,7 @@ tr.rh{display:none}
 .tag-wir{background:var(--bg-hover);color:var(--text-muted)}
 .tag-clr{background:var(--st-approved-bg);color:var(--st-approved-tx)}
 .tag-calc{background:rgba(56,189,248,.12);color:#38bdf8}
+.tag-check{background:rgba(52,211,153,.12);color:#34d399}
 .edit-form{background:var(--bg-input);border:1px solid var(--border);border-radius:7px;padding:10px;margin-top:6px}
 .ef-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .ef-row.full{grid-template-columns:1fr}
@@ -582,6 +583,7 @@ body.in-shell header { display: none !important; }
               <option value="wir-only">WIR Status Only</option>
               <option value="clr">Clearance Status</option>
               <option value="calc">Calculated (Prereq check)</option>
+              <option value="check">Checkbox (manual tick)</option>
             </select>
           </div>
         </div>
@@ -840,6 +842,7 @@ let CT_WS=null; try{CT_WS=sessionStorage.getItem('kp_ws');}catch(e){}
 let disc = CT_WS==='civil' ? CIVIL_SHEETS[0] : 'mech';
 let COLS=defaultColsFor(disc).map(c=>({...c}));
 let villas=[],wirD={},wirSubD={},wirMetaD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
+let checkD={}; // manual checkbox columns: {col_key: {villa_id: true/false}} — shared, stored in ct_villa_checks
 let ncrActByVilla=new Map(); // villa_id -> Set of activity_codes with open NCR/SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
 let rejOnly=false;
@@ -987,13 +990,18 @@ async function init(){
     lm('Loading status data…');
     // Scope WIR to the active workspace's discipline (civil shares some codes with MEP).
     const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
-    const [wirRaw, clr, prog, alRows, wcaRows] = await Promise.all([
+    const [wirRaw, clr, prog, alRows, wcaRows, chkRows] = await Promise.all([
       fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF),
       fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
       fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
       fa('subcontractor_aliases?select=alias,canonical_name'),
       fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true'),
+      fa('ct_villa_checks?select=col_key,villa_id,checked'),
     ]);
+
+    // Index manual checkbox states
+    checkD={};
+    (chkRows||[]).forEach(r=>{if(!checkD[r.col_key])checkD[r.col_key]={};checkD[r.col_key][r.villa_id]=!!r.checked;});
 
     // Load aliases first so resolveWirCode works during WIR processing
     wirCodeAliases={};
@@ -1222,7 +1230,7 @@ function buildStats(){if(!villas.length)return;
 
   // Single pass over villas — accumulate counts for ALL columns at once
   const counts={};
-  activeCols.forEach(col=>{counts[col.key]={ap:0,rj:0,ur:0,fa:0,na:0,pe:0,rd:0,nr:0};});
+  activeCols.forEach(col=>{counts[col.key]={ap:0,rj:0,ur:0,fa:0,na:0,pe:0,rd:0,nr:0,ck:0};});
 
   visVillas.forEach(v=>{
     activeCols.forEach(col=>{
@@ -1235,6 +1243,8 @@ function buildStats(){if(!villas.length)return;
         // not_submitted is intentionally not counted in the progress bar
       } else if(col.type==='calc'){
         if(calcReady(v.id,col)==='ready')c.rd++;else c.nr++;
+      } else if(col.type==='check'){
+        if(checkD[col.key]&&checkD[col.key][v.id])c.ck++;
       } else {
         const s=colWir(v.id,col);
         if(s==='approved')c.ap++;
@@ -1276,6 +1286,16 @@ function buildStats(){if(!villas.length)return;
             ${c.nr>0?`<span class="stat-pill rj">✗${c.nr}</span>`:''}
           </div>
         </div>`;
+      } else if(col.type==='check'){
+        const pck=Math.round(c.ck/total*100);
+        cell.innerHTML=`<div class="th-stats">
+          <div class="stat-bar">
+            <div class="stat-seg ap" style="width:${pck}%"></div>
+          </div>
+          <div class="stat-counts">
+            ${c.ck>0?`<span class="stat-pill ap">✓${c.ck}</span>`:''}
+          </div>
+        </div>`;
       } else {
         const pap=Math.round(c.ap/total*100),prj=Math.round(c.rj/total*100),pur=Math.round(c.ur/total*100);
         cell.innerHTML=`<div class="th-stats">
@@ -1310,6 +1330,38 @@ function buildTable(){
   document.getElementById('tb').innerHTML=rows.join('');
 }
 
+// ── Manual checkbox columns ──
+function _chkCss(on){
+  return 'justify-content:center;min-height:30px;padding:3px;align-items:center;cursor:pointer;'+
+    (on?'background:#064e3b;border:1px solid #34d399;color:#34d399':'color:var(--text-muted)');
+}
+async function toggleCheck(e,vid,key){
+  e.stopPropagation();
+  if(!canEditProgress()){showToast('You do not have permission to edit','err');return;}
+  if(!checkD[key])checkD[key]={};
+  const on=!checkD[key][vid];
+  checkD[key][vid]=on;
+  // Optimistic in-place update — no full table rebuild
+  const div=e.currentTarget;
+  const paint=v=>{div.style.cssText=_chkCss(v);div.title='Click to '+(v?'untick':'tick');const sp=div.querySelector('span');if(sp)sp.textContent=v?'✓':'☐';};
+  paint(on);
+  clearTimeout(window._statsTimer);
+  window._statsTimer=setTimeout(()=>{if(villas.length)buildStats();},200);
+  try{
+    const who=(window.__MEP_USER__&&(window.__MEP_USER__.display_name||window.__MEP_USER__.full_name))||'';
+    const r=await fetch(`${SB}/rest/v1/ct_villa_checks?on_conflict=col_key,villa_id`,{
+      method:'POST',
+      headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=minimal'},
+      body:JSON.stringify({col_key:key,villa_id:vid,checked:on,updated_by:who,updated_at:new Date().toISOString()})
+    });
+    if(!r.ok)throw new Error('HTTP '+r.status);
+  }catch(err){
+    checkD[key][vid]=!on; // revert on failure
+    paint(!on);
+    showToast('Could not save checkbox — '+err.message,'err');
+  }
+}
+
 function mkCell(vid,col){
   const hid=!col.visible?'style="display:none"':'';
   if(col.type==='divider') return `<td class="div-col" data-col="${col.key}" ${hid}></td>`;
@@ -1322,6 +1374,10 @@ function mkCell(vid,col){
   if(col.type==='calc'){
     const s=calcReady(vid,col);
     return `<td data-col="${col.key}" ${hid}><div class="cw cro ${sc(s)}" style="justify-content:center;min-height:30px;padding:3px;align-items:center"><span style="font-size:9px;font-weight:600">${sl(s)}</span></div></td>`;
+  }
+  if(col.type==='check'){
+    const on=!!(checkD[col.key]&&checkD[col.key][vid]);
+    return `<td data-col="${col.key}" ${hid} style="text-align:center"><div class="cw cro" style="${_chkCss(on)}" onclick="toggleCheck(event,${vid},'${col.key}')" title="Click to ${on?'untick':'tick'}"><span style="font-size:14px;font-weight:700;line-height:1">${on?'✓':'☐'}</span></div></td>`;
   }
   const codes=col.actCodes||[];
   const wir=colWir(vid,col);
@@ -1382,6 +1438,7 @@ function openPop(e,key){
   if(col.type==='pair'){mkOpts(PS,'Site Progress');html+='<div class="pop-div"></div>';mkOpts(WS,'WIR Status');}
   else if(col.type==='clr')mkOpts(CS);
   else if(col.type==='calc')mkOpts([{v:'ready',l:'✅ Ready',c:'#34d399',bg:'#064e3b'},{v:'not_ready',l:'❌ Not Ready',c:'#f87171',bg:'#7f1d1d'}]);
+  else if(col.type==='check')mkOpts([{v:'checked',l:'✓ Ticked',c:'#34d399',bg:'#064e3b'},{v:'unchecked',l:'☐ Not Ticked',c:'#94a3b8',bg:'#1e293b'}]);
   else mkOpts(WS);
   document.getElementById('pop-opts').innerHTML=html;
   const th=document.getElementById('th-'+key).getBoundingClientRect();
@@ -1475,6 +1532,7 @@ function applyFilters(){
         let m=false;
         if(col.type==='clr')m=fs.has(colClr(vid,col));
         else if(col.type==='calc')m=fs.has(calcReady(vid,col));
+        else if(col.type==='check')m=fs.has((checkD[key]&&checkD[key][vid])?'checked':'unchecked');
         else if(col.type==='wir-only')m=fs.has(colWir(vid,col));
         else if(col.type==='pair')m=fs.has(colProg(vid,col))||fs.has(colWir(vid,col));
         if(!m){show=false;break;}
@@ -1734,7 +1792,7 @@ function switchMgrTab(tab){
 }
 function onNcTypeChange(){
   const t=document.getElementById('nc-type').value;
-  document.getElementById('nc-codes-row').style.display=t==='clr'||t==='calc'?'none':'block';
+  document.getElementById('nc-codes-row').style.display=(t==='clr'||t==='calc'||t==='check')?'none':'block';
   document.getElementById('nc-prereq-row').style.display=t==='calc'?'block':'none';
   document.getElementById('nc-clr-row').style.display=t==='clr'?'block':'none';
 }
@@ -1774,10 +1832,11 @@ function buildEditForm(col){
           <option value="wir-only"${col.type==='wir-only'?' selected':''}>WIR Status Only</option>
           <option value="clr"${col.type==='clr'?' selected':''}>Clearance Status</option>
           <option value="calc"${col.type==='calc'?' selected':''}>Calculated (Prereq)</option>
+          <option value="check"${col.type==='check'?' selected':''}>Checkbox (manual tick)</option>
         </select>
       </div>
     </div>
-    <div class="ef-row full" id="ef-codes-row" style="display:${col.type==='clr'||col.type==='calc'?'none':'grid'}">
+    <div class="ef-row full" id="ef-codes-row" style="display:${col.type==='clr'||col.type==='calc'||col.type==='check'?'none':'grid'}">
       <div><label class="ef-label">Activity Codes (comma-separated)</label>
         <textarea id="ef-codes" rows="2">${(col.actCodes||[]).join(', ')}</textarea>
         <div class="ef-hint">Best status wins: Approved > UR > Rejected > Not Submitted</div>
@@ -1801,7 +1860,7 @@ function buildEditForm(col){
 }
 function efTypeChange(){
   const t=document.getElementById('ef-type').value;
-  document.getElementById('ef-codes-row').style.display=t==='clr'||t==='calc'?'none':'grid';
+  document.getElementById('ef-codes-row').style.display=(t==='clr'||t==='calc'||t==='check')?'none':'grid';
   document.getElementById('ef-prereq-row').style.display=t==='calc'?'grid':'none';
   document.getElementById('ef-clr-row').style.display=t==='clr'?'grid':'none';
 }
@@ -1813,6 +1872,7 @@ function saveEdit(key){
   if(nl)col.label=nl;col.type=nt;
   if(nt==='calc'){col.prereqCodes=(document.getElementById('ef-prereqs').value||'').split(',').map(s=>s.trim()).filter(Boolean);delete col.actCodes;delete col.clrCode;}
   else if(nt==='clr'){col.clrCodes=(document.getElementById('ef-clr-code').value||'').split(',').map(s=>s.trim()).filter(Boolean);delete col.clrCode;delete col.actCodes;delete col.prereqCodes;}
+  else if(nt==='check'){delete col.actCodes;delete col.prereqCodes;delete col.clrCode;delete col.clrCodes;}
   else{col.actCodes=(document.getElementById('ef-codes').value||'').split(',').map(s=>s.trim()).filter(Boolean);delete col.prereqCodes;delete col.clrCode;delete col.clrCodes;}
   editingKey=null;buildCmList();saveLayout();
 }
@@ -1989,6 +2049,7 @@ function addColumn(){
   const newCol={key,label,type,visible:true};
   if(type==='calc'){const p=(document.getElementById('nc-prereqs').value||'').split(',').map(s=>s.trim()).filter(Boolean);if(!p.length){msg.innerHTML='<span style="color:#f87171">Enter prerequisite codes.</span>';return;}newCol.prereqCodes=p;}
   else if(type==='clr'){const c=(document.getElementById('nc-clr-code').value||'').split(',').map(s=>s.trim()).filter(Boolean);if(!c.length){msg.innerHTML='<span style="color:#f87171">Enter clearance code(s).</span>';return;}newCol.clrCodes=c;}
+  else if(type==='check'){/* manual checkbox — no codes needed */}
   else{const c=(document.getElementById('nc-codes').value||'').split(',').map(s=>s.trim()).filter(Boolean);if(!c.length){msg.innerHTML='<span style="color:#f87171">Enter activity codes.</span>';return;}newCol.actCodes=c;}
   COLS.push(newCol);
   document.getElementById('nc-label').value='';document.getElementById('nc-codes').value='';document.getElementById('nc-prereqs').value='';document.getElementById('nc-clr-code').value='';
