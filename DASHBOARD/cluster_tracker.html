@@ -851,7 +851,7 @@ function _civCols(sheet){
   return (CIVIL_SHEET_ACTS[sheet]||[]).map(([code,name])=>({
     key:('cv_'+sheet+'_'+code).toLowerCase().replace(/\W/g,'_'),
     label:_civLabel(name),
-    type:'wir-only',
+    type:'pair',
     actCodes:[code],
     visible:true
   }));
@@ -872,6 +872,7 @@ let disc = CT_WS==='civil' ? CIVIL_SHEETS[0] : 'mech';
 let COLS=defaultColsFor(disc).map(c=>({...c}));
 let villas=[],wirD={},wirSubD={},wirMetaD={},clrD={},progD={},actCI={},clrCI={},vMap={},vKeyMap={};
 let checkD={}; // manual checkbox columns: {col_key: {villa_id: true/false}} — shared, stored in ct_villa_checks
+let _wirCodeFilter='', _progIdFilter=''; // PostgREST filters limiting fetches to codes with columns (built in init)
 let ncrActByVilla=new Map(); // villa_id -> Set of activity_codes with open NCR/SOR
 let colF={},mCtx={},popKey=null,editingKey=null,dragSrc=null;
 let rejOnly=false;
@@ -992,13 +993,24 @@ async function init(){
   try{
     // ── Batch 1: structure data (clusters + villas + activities + NCR) in parallel ──
     lm('Loading structure…');
-    const [clusters, vs, acts, clrs, ncrRows] = await Promise.all([
+    // Activities scoped to the workspace so shared codes can't collide across disciplines
+    const _ctActF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
+    const _ctLayoutDiscs = CT_WS==='civil' ? CIVIL_SHEETS.join(',') : 'mech,elec';
+    const [clusters, vs, acts, clrs, ncrRows, alRows, wcaRows, layoutRows] = await Promise.all([
       fa('clusters?select=id,code'),
       fa('villas?select=id,villa_no,villa_type,cluster_id,is_priority,is_priority2'),
-      fa('activities?select=id,activity_code&is_active=eq.true'),
+      fa('activities?select=id,activity_code&is_active=eq.true'+_ctActF),
       fa('clearance_activities?select=id,clearance_code&is_active=eq.true'),
       fa('ncr_sor_records?select=villa_id,activity_code&is_active=eq.true&status=in.(open,in_progress)'),
+      fa('subcontractor_aliases?select=alias,canonical_name'),
+      fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true'),
+      fa('user_column_layouts?discipline=in.('+_ctLayoutDiscs+')&select=layout'),
     ]);
+
+    // Aliases indexed up-front — the WIR code filter below needs the old→new map
+    wirCodeAliases={};
+    if(Array.isArray(wcaRows))wcaRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
+    alRows.forEach(r=>{subAliases[r.alias]=r.canonical_name;});
     // Index open NCR villa IDs
     ncrActByVilla.clear();
     ncrRows.forEach(r=>{ if(r.villa_id){ if(!ncrActByVilla.has(r.villa_id)) ncrActByVilla.set(r.villa_id,new Set()); ncrActByVilla.get(r.villa_id).add(String(r.activity_code||'').trim()); } });
@@ -1015,27 +1027,34 @@ async function init(){
     acts.forEach(a=>actCI[a.activity_code]=a.id);
     clrs.forEach(c=>clrCI[c.clearance_code]=c.id);
 
-    // ── Batch 2: aliases + status data in parallel ──
+    // ── Only load WIR/progress rows for codes that actually have a column in this
+    // workspace (defaults + saved layouts/views), instead of the whole WIR table ──
+    const _codeSet=new Set();
+    const _harvest=cols=>{(cols||[]).forEach(c=>{(c.actCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));(c.prereqCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));});};
+    if(CT_WS==='civil')CIVIL_SHEETS.forEach(s=>_harvest(COLS_CIVIL[s]));
+    else{_harvest(COLS_MECH);_harvest(COLS_ELEC);}
+    (layoutRows||[]).forEach(r=>_harvest(Array.isArray(r.layout)?r.layout:[]));
+    // A column's code may be the NEW side of an alias — include old codes so those WIRs still count
+    Object.entries(wirCodeAliases).forEach(([oldC,newC])=>{if(_codeSet.has(newC))_codeSet.add(oldC);});
+    _codeSet.delete('');
+    _wirCodeFilter=_codeSet.size?'&raw_activity_code=in.('+[..._codeSet].map(c=>'"'+c+'"').join(',')+')':'';
+    const _progIds=[..._codeSet].map(c=>actCI[c]).filter(Boolean);
+    _progIdFilter=_progIds.length?'&activity_id=in.('+_progIds.join(',')+')':'';
+
+    // ── Batch 2: status data in parallel ──
     lm('Loading status data…');
     // Scope WIR to the active workspace's discipline (civil shares some codes with MEP).
     const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
-    const [wirRaw, clr, prog, alRows, wcaRows, chkRows] = await Promise.all([
-      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF),
+    const [wirRaw, clr, prog, chkRows] = await Promise.all([
+      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF+_wirCodeFilter),
       fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
-      fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'),
-      fa('subcontractor_aliases?select=alias,canonical_name'),
-      fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true'),
+      fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'+_progIdFilter),
       fa('ct_villa_checks?select=col_key,villa_id,checked'),
     ]);
 
     // Index manual checkbox states
     checkD={};
     (chkRows||[]).forEach(r=>{if(!checkD[r.col_key])checkD[r.col_key]={};checkD[r.col_key][r.villa_id]=!!r.checked;});
-
-    // Load aliases first so resolveWirCode works during WIR processing
-    wirCodeAliases={};
-    if(Array.isArray(wcaRows))wcaRows.forEach(r=>{wirCodeAliases[r.old_code.trim()]=r.new_code.trim();});
-    alRows.forEach(r=>{subAliases[r.alias]=r.canonical_name;});
 
     // Build wirD keyed by raw_activity_code (same as dashboard/target_list)
     wirRaw.forEach(r=>{
@@ -1132,7 +1151,7 @@ async function refreshProgressSilent(){
   try{
     const since=_progSince;
     _progSince=new Date().toISOString();
-    const rows=await fa('progress_updates?select=villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false&updated_at=gt.'+encodeURIComponent(since));
+    const rows=await fa('progress_updates?select=villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false&updated_at=gt.'+encodeURIComponent(since)+_progIdFilter);
     if(Array.isArray(rows)&&rows.length){
       const i2c={};Object.entries(actCI).forEach(([c,id])=>{i2c[id]=c;});
       rows.forEach(r=>{
@@ -1157,7 +1176,7 @@ async function refreshWirSilent(){
     const since=_wirSince;
     _wirSince=new Date().toISOString();
     const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
-    const rows=await fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched&created_at=gt.'+encodeURIComponent(since)+_ctDiscF);
+    const rows=await fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched&created_at=gt.'+encodeURIComponent(since)+_ctDiscF+_wirCodeFilter);
     if(Array.isArray(rows)&&rows.length){
       const ord=['approved','under_review','rejected','not_submitted'];
       rows.forEach(r=>{
