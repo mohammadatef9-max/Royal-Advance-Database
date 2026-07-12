@@ -854,6 +854,27 @@ async function loadPCData() {
   pcSections = _sections;
   progressSectionIdx = 0;
 
+  // ── Cross-scope billed guard: find cells already billed under any scope OUTSIDE this PC's
+  // family (base + merged VOs). Catches double-billing when a sub was renamed in the WIR data
+  // and the same work resurfaced under a new scope looking unbilled.
+  crossBilled = {};
+  try {
+    const famIds = [...new Set([selectedScope.id, ...pcSections.map(s => s.scope.id)])];
+    const allV = new Set(villaIds), allC = new Set(actCodes);
+    pcSections.forEach(s => { s.ctx.villas.forEach(v => allV.add(v.villa_id)); s.ctx.activities.forEach(a => allC.add(a.activity_code)); });
+    if (allV.size && allC.size) {
+      const xb = await fa(`qs_billed_records?scope_id=not.in.(${famIds.join(',')})&villa_id=in.(${[...allV].join(',')})&activity_code=in.(${[...allC].map(c => `"${c}"`).join(',')})&select=villa_id,activity_code,scope_id,billed_pct`);
+      xb.forEach(b => {
+        const sc = allScopes.find(s => s.id === b.scope_id);
+        crossBilled[b.villa_id + ':' + b.activity_code] = {
+          name: sc ? (sc.subcontractor_name || sc.scope_title || ('Scope ' + b.scope_id)) : ('Scope ' + b.scope_id),
+          pct: b.billed_pct == null ? 1 : Number(b.billed_pct)
+        };
+      });
+    }
+  } catch(e) {}
+  if (runId !== _pcDataRun) return;
+
   if (!villaIds.length || !actCodes.length) {
     // Primary scope has nothing of its own — clear primary state but still render the
     // merged sections (summary + tabs), defaulting to the first scope that has data.
@@ -1023,12 +1044,25 @@ function computeCellBilling(billedList, override, wirApproved, locked) {
            prevPct, curPct, todPct, withheldPct, remaining, isPartial };
 }
 
+// Cross-scope guard: {'villa:code': {name, pct}} — cells already billed under a scope OUTSIDE
+// this PC's family (e.g. the sub was renamed and rebilled under a new scope). Such cells are
+// kept out of auto-billing and flagged ⚠; an explicit cell override is the escape hatch.
+let crossBilled = {};
+function _applyCrossGuard(r, override, key) {
+  const cb = crossBilled[key];
+  if (!cb || override !== undefined || r.wasBilledPrev) return r;
+  if (r.curPct > 1e-9) {
+    return { ...r, curPct: 0, todPct: r.prevPct, isBilledNow: false, withheldPct: 0, source: 'cross-billed', crossBilled: cb };
+  }
+  return { ...r, crossBilled: cb };
+}
+
 function getActivityStatus(villa_id, activity_code) {
   const key = villa_id + ':' + activity_code;
   const override = pcOverrides[key];
   const wir = wirData[key];
   const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
-  const r = computeCellBilling(billedRecords[key], override, wir?.approved === true, locked);
+  const r = _applyCrossGuard(computeCellBilling(billedRecords[key], override, wir?.approved === true, locked), override, key);
   return { ...r, override, wir };
 }
 
@@ -1130,7 +1164,7 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   const override = ctx.overrides[key];
   const wir = ctx.wir[key];
   const locked = selectedPC && selectedPC.status === 'locked';
-  return computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked);
+  return _applyCrossGuard(computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked), override, key);
 }
 function ctxWorkdone(ctx, villa_id, villa_type_label) {
   let prevAed=0, curAed=0, todAed=0, totalPossibleAed=0;
@@ -1263,6 +1297,9 @@ function buildProgressSheetHtml(sec) {
           cls += ' override-off'; label = '⊘'; tip += ' — approved but withheld this PC';
         } else if (source === 'override-off') {
           cls += ' override-off'; label = '⊘'; tip += ' — voided / not billed this PC';
+        } else if (source === 'cross-billed') {
+          cls += ' cross-billed'; label = '⚠';
+          tip += ` — ALREADY BILLED under "${st.crossBilled ? st.crossBilled.name : 'another scope'}" — excluded from this PC; click to override if billing again is intentional`;
         } else if (isCompleteToDate) {
           cls += ' approved'; label = '✓';
         } else {
@@ -2232,10 +2269,11 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
     ovTxt = `◐ Partial — ${Math.round(Number(ovExisting.payment_pct)*100)}% paid, remainder ${ovExisting.carry_remainder!==false?'carries to next PC':'withheld'}`;
   else ovTxt = '✓ Complete (full payment)';
 
+  const crossTxt = st.crossBilled ? `<br><b style="color:#f59e0b">⚠ Already billed under "${escH(st.crossBilled.name)}"</b> (${Math.round(st.crossBilled.pct*100)}%) — excluded from this PC unless you override below.` : '';
   document.getElementById('ov-info').innerHTML = `
     <b>Villa:</b> VI-${escH(villa_no)} &nbsp;|&nbsp; <b>Activity:</b> ${escH(activity_code)} — ${escH(act_name)}<br>
     <b>WIR Status:</b> ${st.wir?.approved ? '✓ Approved' : '— Not approved'}${prevTxt}<br>
-    <b>Current Override:</b> ${ovTxt}${ovExisting?.override_reason ? ' — '+escH(ovExisting.override_reason) : ''}`;
+    <b>Current Override:</b> ${ovTxt}${ovExisting?.override_reason ? ' — '+escH(ovExisting.override_reason) : ''}${crossTxt}`;
 
   document.getElementById('ov-warn').style.display = st.wasBilledPrev ? '' : 'none';
   // Preselect the mode from the existing override

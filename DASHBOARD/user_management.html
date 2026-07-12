@@ -1015,10 +1015,18 @@ async function saveUser() {
       }
 
       // Sync phone to bot_approved_phones
+      const originalPhone = (allUsers.find(u => u.id === editingUserId) || {}).phone || '';
       if (phone) await syncBotPhone(phone, fullName, botRole, discipline);
+      loadAll();
 
-      showModalAlert('User updated successfully.', 'success');
-      setTimeout(() => { closeModal(); loadAll(); }, 800);
+      if (phone && phone !== originalPhone) {
+        // Phone is new/changed — tell them on Telegram (or hand back an invite link)
+        const result = await announceOnTelegram(phone, fullName, botRole);
+        if (result.sent) setTimeout(closeModal, 1500);
+      } else {
+        showModalAlert('User updated successfully.', 'success');
+        setTimeout(closeModal, 800);
+      }
 
     } else {
       // ── CREATE new user ──
@@ -1051,9 +1059,15 @@ async function saveUser() {
         });
         if (phone) await syncBotPhone(phone, fullName, botRole, discipline);
       }
+      loadAll();
 
-      showModalAlert('User created successfully!', 'success');
-      setTimeout(() => { closeModal(); loadAll(); }, 800);
+      if (phone) {
+        const result = await announceOnTelegram(phone, fullName, botRole);
+        if (result.sent) setTimeout(closeModal, 1500);
+      } else {
+        showModalAlert('User created successfully!', 'success');
+        setTimeout(closeModal, 800);
+      }
     }
 
   } catch(e) {
@@ -1064,6 +1078,15 @@ async function saveUser() {
       ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Save Changes`
       : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Create User`;
   }
+}
+
+// Telegram deep link — used only as a fallback when a phone hasn't verified with
+// the bot yet, so we can hand the admin a one-tap link instead of "search for the
+// bot and open a chat". Replace with the bot's real @username.
+const TELEGRAM_BOT_USERNAME = 'YOUR_BOT_USERNAME';
+
+function telegramInviteLink() {
+  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=verify`;
 }
 
 /** Upsert a phone into bot_approved_phones and keep bot_users in sync */
@@ -1081,6 +1104,46 @@ async function syncBotPhone(phone, name, role, discipline) {
     headers: getH({ 'Prefer': 'return=minimal' }),
     body: JSON.stringify({ name, role, discipline: disc })
   });
+}
+
+/**
+ * Try to DM the person on Telegram right away. Only succeeds if that phone has
+ * already verified with the bot at least once — Telegram bots can't message a
+ * chat that's never been opened. Returns {sent:true} or {sent:false, reason}
+ * so the caller can fall back to sharing an invite link instead.
+ */
+async function notifyBotPhone(phone, text) {
+  try {
+    const r = await fetch(`${SB}/functions/v1/telegram-bot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}` },
+      body: JSON.stringify({ event: 'NOTIFY', data: { text, recipients: 'phone', phone } })
+    });
+    return await r.json();
+  } catch (e) {
+    return { sent: false, reason: 'network_error' };
+  }
+}
+
+const ROLE_LABEL = { admin: 'Admin', qs: 'QS', site: 'Site' };
+
+/** After a phone is synced, tell the person on Telegram — instantly if they've
+ * already verified before, otherwise hand back an invite link to share. */
+async function announceOnTelegram(phone, name, role) {
+  const text = `✅ <b>Your MEP Tracker account is ready</b>\n\nWelcome, ${name}!\nRole: <b>${ROLE_LABEL[role] || role}</b>\n\nType /help in this chat to see your available commands.`;
+  const result = await notifyBotPhone(phone, text);
+  if (result.sent) {
+    showModalAlert(`User saved — a Telegram message was sent to ${name}.`, 'success');
+  } else {
+    const link = telegramInviteLink();
+    showModalAlert(
+      `User saved. ${name} hasn't linked Telegram yet — send them this one-tap link to activate the bot: ` +
+      `<a href="${link}" target="_blank" style="color:inherit;text-decoration:underline">${link}</a> ` +
+      `<button type="button" onclick="navigator.clipboard.writeText('${link}')" style="margin-left:6px;padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:none;color:inherit;cursor:pointer;font-size:11px">Copy</button>`,
+      'info'
+    );
+  }
+  return result;
 }
 
 function showModalAlert(msg, type) {

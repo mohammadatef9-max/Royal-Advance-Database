@@ -315,6 +315,7 @@ body.in-shell header { display: none !important; }
     <button class="dc-subtab-btn active" id="dc-tab-btn-wir" onclick="switchDCTab('wir')">📋 WIR Log (MEP)</button>
     <button class="dc-subtab-btn" id="dc-tab-btn-civ" onclick="switchDCTab('civ')">🏗️ WIR Log (Civil)</button>
     <button class="dc-subtab-btn" id="dc-tab-btn-clr" onclick="switchDCTab('clr')">🗂️ Clearance Log</button>
+    <button class="dc-subtab-btn" id="dc-tab-btn-cprog" onclick="switchDCTab('cprog')">🏘️ Civil Progress</button>
   </div>
 
   <!-- WIR sub-tab -->
@@ -496,6 +497,63 @@ body.in-shell header { display: none !important; }
       </div>
       <div class="prog-bar" style="display:block"><div class="prog-fill" id="prog-fill-civ" style="width:0%"></div></div>
       <div class="dc-log-box" id="log-civ"></div>
+    </div>
+  </div>
+
+  <!-- CIVIL PROGRESS sub-tab (Villa Wise site-progress tracker, mapped-activities only) -->
+  <div class="dc-subtab-pane" id="dc-tab-cprog">
+    <div class="card" style="padding:14px 16px">
+      <div class="sec-title">Step 1 — Drop the "BAG Tracker - Villa Wise" workbook · Only activities mapped below are imported, everything else is ignored</div>
+      <div style="display:grid;grid-template-columns:1fr;gap:12px">
+        <div class="drop-zone" id="dz-cprog" ondragover="dcCProgDragOver(event)" ondragleave="dcCProgDragLeave()" ondrop="dcCProgDrop(event)" onclick="document.getElementById('fi-cprog').click()">
+          <div class="dz-icon">🏘️</div><div class="dz-label">Civil Site Progress (Villa Wise)</div><div class="dz-sub">Reads the "BAG Tracker - Villa Wise" sheet — any filename</div>
+          <div class="dz-filename" id="fn-cprog"></div><div class="dz-count" id="fc-cprog"></div><div class="dz-error" id="fe-cprog"></div>
+          <button class="dz-clear" id="clr-cprog" style="display:none" onclick="dcCProgClear(event)">✕</button>
+        </div>
+        <input type="file" id="fi-cprog" accept=".xlsx,.xlsm,.xls" onchange="dcCProgFileInput(event)">
+      </div>
+    </div>
+
+    <div class="card" style="padding:10px 16px;margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div style="font-size:12px;color:var(--text-muted)">Activity mapping — <span id="cprog-map-summary">loading…</span></div>
+        <button class="btn-ghost" onclick="dcCProgRefresh()">↻ Refresh mapping</button>
+      </div>
+    </div>
+
+    <div class="dc-summary-bar" id="sum-cprog" style="display:none">
+      <div class="dc-stat-item"><div class="dc-stat-val accent" id="scp-villas">0</div><div class="dc-stat-lbl">Villas in Sheet</div></div>
+      <div class="dc-stat-sep"></div>
+      <div class="dc-stat-item"><div class="dc-stat-val" id="scp-mapped">0</div><div class="dc-stat-lbl">Mapped Activities</div></div>
+      <div class="dc-stat-item"><div class="dc-stat-val amber" id="scp-ignored">0</div><div class="dc-stat-lbl">Ignored (Unmapped)</div></div>
+      <div class="dc-stat-sep"></div>
+      <div class="dc-stat-item"><div class="dc-stat-val green" id="scp-ready">0</div><div class="dc-stat-lbl">Records Ready</div></div>
+      <div class="dc-stat-item"><div class="dc-stat-val amber" id="scp-novilla">0</div><div class="dc-stat-lbl">Villa Not Found</div></div>
+      <div class="bar-right">
+        <button class="btn-ghost" onclick="dcCProgClearAll()">✕ Clear</button>
+        <button class="btn btn-primary" id="btn-upload-cprog" onclick="dcStartCProgUpload()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          Push to Site Progress
+        </button>
+      </div>
+    </div>
+
+    <div class="dc-preview-section">
+      <div class="dc-preview-head">
+        <div><div class="dc-preview-title">Preview — Civil Progress</div><div class="dc-preview-sub" id="prev-sub-cprog">Drop the workbook above to begin</div></div>
+      </div>
+      <div class="dc-tbl-wrap" id="prev-tbl-cprog">
+        <div class="empty-state"><div class="empty-icon">🏘️</div><div>Drop the "BAG Tracker - Villa Wise" workbook</div><div style="font-size:11px;color:var(--text-faint);margin-top:3px">Only mapped activities are imported — everything else is ignored</div></div>
+      </div>
+    </div>
+
+    <div class="dc-upload-section" id="upload-cprog" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:600">Upload Progress</div>
+        <div style="font-size:11px;color:var(--text-dim)" id="upload-status-cprog"></div>
+      </div>
+      <div class="prog-bar" style="display:block"><div class="prog-fill" id="prog-fill-cprog" style="width:0%"></div></div>
+      <div class="dc-log-box" id="log-cprog"></div>
     </div>
   </div>
 
@@ -1316,7 +1374,7 @@ function dcBuildClrColMap(hdrRow){
 const dcState={wir:{plumbing:null,hvac:null,electrical:null,merged:[]},clr:{mep:null,civil:null,merged:[]}};
 
 function switchDCTab(tab){
-  ['wir','clr','civ'].forEach(t=>{
+  ['wir','clr','civ','cprog'].forEach(t=>{
     document.getElementById('dc-tab-'+t).classList.toggle('active',t===tab);
     document.getElementById('dc-tab-btn-'+t).classList.toggle('active',t===tab);
   });
@@ -1874,6 +1932,292 @@ async function dcStartCivilUpload(){
 
 function dcEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function dcToast(msg,type='info'){const t=document.getElementById('dc-toast');t.textContent=msg;t.className='show '+type;clearTimeout(t._t);t._t=setTimeout(()=>t.className='',3500);}
+
+// ─── CIVIL PROGRESS IMPORT (BAG Tracker - Villa Wise) ───────────────────────
+// Reads the wide villa-wise site-progress workbook. ONLY activity columns that have an
+// active row in civil_progress_map (excel_code -> wir_activity_code) are ever written —
+// everything else in the sheet is counted for visibility but ignored. Uses its own
+// villa/activity maps (not the shared vKeyMap/actCI) so it never touches other tabs' state.
+const dcCProg = { parsed:null, name:'', mapRows:[], villaMap:{}, actMap:{} };
+
+async function dcCProgLoadRefData(){
+  try{
+    const [clusters,villas,acts,mapRows]=await Promise.all([
+      sbGet('clusters?select=id,code'),
+      sbGetAll('villas?select=id,villa_no,cluster_id'),
+      sbGetAll('activities?select=id,activity_code&is_active=eq.true&discipline=eq.civil'),
+      sbGetAll('civil_progress_map?select=excel_code,excel_name,wir_activity_code&is_active=eq.true'),
+    ]);
+    const cm={};clusters.forEach(c=>cm[c.id]=c.code);
+    const vm={}; villas.forEach(v=>{const cl=cm[v.cluster_id]||'';vm[cl+'_'+v.villa_no]=v.id;});
+    const am={}; acts.forEach(a=>am[a.activity_code.trim()]=a.id);
+    dcCProg.villaMap=vm; dcCProg.actMap=am; dcCProg.mapRows=mapRows||[];
+    const el=document.getElementById('cprog-map-summary');
+    if(el)el.textContent=dcCProg.mapRows.length+' activities currently mapped · '+villas.length+' villas · '+acts.length+' civil WIR codes loaded';
+    return true;
+  }catch(e){
+    const el=document.getElementById('cprog-map-summary');
+    if(el)el.textContent='Failed to load: '+e.message;
+    return false;
+  }
+}
+function dcCProgRefresh(){dcCProgLoadRefData().then(ok=>{if(ok&&dcCProg.parsed)dcRenderCProgPreview();});}
+
+function dcCProgDragOver(e){e.preventDefault();document.getElementById('dz-cprog').classList.add('drag-over');}
+function dcCProgDragLeave(){document.getElementById('dz-cprog').classList.remove('drag-over');}
+function dcCProgDrop(e){e.preventDefault();document.getElementById('dz-cprog').classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f)dcProcessCProgFile(f);}
+function dcCProgFileInput(e){const f=e.target.files[0];if(f)dcProcessCProgFile(f);}
+function dcCProgClear(e){if(e&&e.stopPropagation)e.stopPropagation();dcCProgClearAll();}
+function dcCProgClearAll(){
+  dcCProg.parsed=null;dcCProg.name='';
+  document.getElementById('dz-cprog').classList.remove('loaded','error');
+  ['fn-cprog','fc-cprog','fe-cprog'].forEach(id=>document.getElementById(id).textContent='');
+  document.getElementById('clr-cprog').style.display='none';
+  document.getElementById('sum-cprog').style.display='none';
+  document.getElementById('fi-cprog').value='';
+  document.getElementById('prev-tbl-cprog').innerHTML='<div class="empty-state"><div class="empty-icon">🏘️</div><div>Drop the "BAG Tracker - Villa Wise" workbook</div></div>';
+}
+
+const CPROG_CODE_RE=/^[A-Z]{2}\d{3,5}$/;
+
+function dcProcessCProgFile(file){
+  document.getElementById('dz-cprog').classList.remove('loaded','error');
+  document.getElementById('fe-cprog').textContent='';
+  document.getElementById('fn-cprog').textContent='Reading…';
+  const reader=new FileReader();
+  reader.onload=function(ev){ setTimeout(function(){
+    try{
+      const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array',cellDates:true,dense:true});
+      let sn=wb.SheetNames.find(n=>/villa\s*wise/i.test(n)&&!/group|zone|cluster|package/i.test(n));
+      if(!sn) sn=wb.SheetNames.find(n=>/villa\s*wise/i.test(n));
+      if(!sn) throw new Error('No "Villa Wise" sheet found in this workbook. Sheets: '+wb.SheetNames.join(', '));
+      const raw=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,raw:true,defval:null});
+
+      // Locate the activity-code row (>=5 cells matching e.g. SB1000, FN1230)
+      let codeRowIdx=-1;
+      for(let i=0;i<Math.min(raw.length,20);i++){
+        const hits=(raw[i]||[]).filter(c=>typeof c==='string'&&CPROG_CODE_RE.test(c.trim())).length;
+        if(hits>=5){codeRowIdx=i;break;}
+      }
+      if(codeRowIdx<0) throw new Error('Could not find the activity-code header row (expected codes like SB1000, FN1230…).');
+      const codeRow=raw[codeRowIdx];
+      const nameRow=raw[codeRowIdx+1]||[];
+
+      // Locate Villa No / Cluster / Villa Type columns from the name row
+      let villaCol=-1,clusterCol=-1,typeCol=-1;
+      nameRow.forEach((h,ci)=>{
+        const t=(h||'').toString().trim().toLowerCase();
+        if(villaCol<0&&/^villa\s*no\.?$/.test(t))villaCol=ci;
+        if(clusterCol<0&&/^cluster\b/.test(t))clusterCol=ci;
+        if(typeCol<0&&/^villa\s*type$/.test(t))typeCol=ci;
+      });
+      if(villaCol<0||clusterCol<0) throw new Error('Could not find "Villa No." / "Cluster" columns near the header row.');
+
+      // Locate the Start/Finish/%Complete sub-header row (scan a few rows below the code row)
+      let subRowIdx=-1;
+      for(let i=codeRowIdx+1;i<Math.min(codeRowIdx+6,raw.length);i++){
+        const cells=(raw[i]||[]).map(c=>(c||'').toString().trim().toLowerCase());
+        if(cells.some(c=>c==='start')&&cells.some(c=>c.indexOf('complete')>=0)){subRowIdx=i;break;}
+      }
+
+      // Build the list of activity column blocks (code, name, start/finish/%complete columns)
+      const acts=[];
+      codeRow.forEach((c,ci)=>{
+        if(typeof c!=='string'||!CPROG_CODE_RE.test(c.trim()))return;
+        const code=c.trim();
+        let startCol=ci,finishCol=ci+1,pctCol=ci+2;
+        if(subRowIdx>=0){
+          const sub=raw[subRowIdx]||[];
+          const win=[0,1,2,3].map(o=>(sub[ci+o]||'').toString().trim().toLowerCase());
+          const si=win.findIndex(v=>v==='start');
+          const fi=win.findIndex(v=>v==='finish');
+          const pi=win.findIndex(v=>v.indexOf('complete')>=0);
+          if(si>=0&&fi>=0&&pi>=0){startCol=ci+si;finishCol=ci+fi;pctCol=ci+pi;}
+        }
+        acts.push({code,name:(nameRow[ci]||'').toString().trim(),startCol,finishCol,pctCol});
+      });
+      if(!acts.length) throw new Error('Found the header row but no activity code columns.');
+
+      // Data rows start at the first row below the header where the Villa No. column looks like "VI-###"
+      let dataStart=-1;
+      for(let i=codeRowIdx+1;i<raw.length;i++){
+        const v=(raw[i]&&raw[i][villaCol]||'').toString().trim();
+        if(/^VI-?\d+/i.test(v)){dataStart=i;break;}
+      }
+      if(dataStart<0) throw new Error('Could not find any villa data rows below the header.');
+
+      const villaRows=[];
+      for(let i=dataStart;i<raw.length;i++){
+        const r=raw[i]; if(!r)continue;
+        const vRaw=(r[villaCol]||'').toString().trim();
+        if(!vRaw)continue;
+        const villaNo=parseInt(vRaw.replace(/\D+/g,''));
+        if(!villaNo)continue;
+        const cRaw=(r[clusterCol]||'').toString().trim();
+        const clusterNum=parseInt(cRaw.replace(/\D+/g,''));
+        const cluster=clusterNum?('C'+clusterNum):null;
+        const villaType=typeCol>=0?(r[typeCol]||'').toString().trim():'';
+        villaRows.push({row:r,villaNo,cluster,villaType});
+      }
+      if(!villaRows.length) throw new Error('Header parsed OK but no villa rows were found.');
+
+      dcCProg.parsed={sheetName:sn,acts,villaCol,clusterCol,typeCol,villaRows};
+      dcCProg.name=file.name;
+      document.getElementById('dz-cprog').classList.add('loaded');
+      document.getElementById('fn-cprog').textContent=file.name+' ('+sn+')';
+      document.getElementById('fc-cprog').textContent=villaRows.length+' villas · '+acts.length+' activity columns';
+      document.getElementById('clr-cprog').style.display='block';
+      (dcCProg.mapRows.length?Promise.resolve(true):dcCProgLoadRefData()).then(dcRenderCProgPreview);
+      dcToast('Civil Progress: '+villaRows.length+' villas · '+acts.length+' activity columns found','ok');
+    }catch(err){
+      document.getElementById('dz-cprog').classList.add('error');
+      document.getElementById('fn-cprog').textContent=file.name;
+      document.getElementById('fe-cprog').textContent='⚠ '+err.message;
+      dcToast('Error: '+err.message,'err');
+    }
+  },0); };
+  reader.readAsArrayBuffer(file);
+}
+
+// Convert a raw %Complete cell value into a 0..1 fraction, or null if blank/unreadable.
+function cprogPct(v){
+  if(v===null||v===undefined||v==='')return null;
+  if(typeof v==='number')return v>1?v/100:v;
+  const s=v.toString().trim();
+  if(!s)return null;
+  const n=parseFloat(s.replace('%',''));
+  if(isNaN(n))return null;
+  return s.indexOf('%')>=0||n>1?n/100:n;
+}
+function cprogDate(v){
+  if(!v)return null;
+  if(v instanceof Date && !isNaN(v))return v.toISOString().slice(0,10);
+  const s=v.toString().trim();
+  if(!s)return null;
+  return parseDate(s);
+}
+
+// Build the villa/activity records to import for the CURRENT mapping. Used by both preview
+// and upload so the two always agree, and a mapping change is picked up without re-dropping
+// the file — just click "Refresh mapping" then re-preview.
+function dcCProgBuildRecords(){
+  const p=dcCProg.parsed; if(!p)return {records:[],stats:{}};
+  const mapByCode={}; dcCProg.mapRows.forEach(m=>mapByCode[m.excel_code]=m.wir_activity_code);
+  const mappedActs=p.acts.filter(a=>mapByCode[a.code]);
+  const unmappedActs=p.acts.filter(a=>!mapByCode[a.code]);
+  const records=[]; let novilla=0, blank=0;
+  const villaMisses=new Set();
+  p.villaRows.forEach(vr=>{
+    const vid=dcCProg.villaMap[(vr.cluster||'')+'_'+vr.villaNo];
+    if(!vid){novilla++;villaMisses.add((vr.cluster||'?')+' VI-'+vr.villaNo);return;}
+    mappedActs.forEach(a=>{
+      const pct=cprogPct(vr.row[a.pctCol]);
+      if(pct===null){blank++;return;}
+      const wirCode=mapByCode[a.code];
+      const aid=dcCProg.actMap[wirCode];
+      if(!aid)return; // mapped to a WIR code missing from the catalogue — skip quietly
+      const status=pct>=0.999?'completed':(pct>1e-9?'in_progress':'not_started');
+      records.push({
+        villa_id:vid, activity_id:aid, status,
+        start_date:cprogDate(vr.row[a.startCol]), finish_date:cprogDate(vr.row[a.finishCol]),
+        subcontractor:null, is_current:true, is_deleted:false, updated_at:new Date().toISOString(),
+        _villaNo:vr.villaNo,_cluster:vr.cluster,_code:a.code,_wir:wirCode,_pct:pct
+      });
+    });
+  });
+  return {records, stats:{
+    villas:p.villaRows.length, mappedActs:mappedActs.length, ignoredActs:unmappedActs.length,
+    ready:records.length, novilla, blank, villaMissSample:[...villaMisses].slice(0,6),
+    unmappedSample:unmappedActs.slice(0,25)
+  }};
+}
+
+function dcRenderCProgPreview(){
+  const p=dcCProg.parsed; if(!p)return;
+  const {records,stats}=dcCProgBuildRecords();
+  document.getElementById('sum-cprog').style.display='flex';
+  document.getElementById('scp-villas').textContent=stats.villas;
+  document.getElementById('scp-mapped').textContent=stats.mappedActs;
+  document.getElementById('scp-ignored').textContent=stats.ignoredActs;
+  document.getElementById('scp-ready').textContent=stats.ready;
+  document.getElementById('scp-novilla').textContent=stats.novilla;
+  document.getElementById('prev-sub-cprog').textContent=dcCProg.name+' · '+stats.ready+' records ready · '+stats.ignoredActs+' Excel activities ignored (not mapped)'+(stats.novilla?' · '+stats.novilla+' villas not found in DB':'');
+  const cols=[['_cluster','Cluster'],['_villaNo','Villa'],['_code','Excel Code'],['_wir','WIR Code'],['status','Status'],['start_date','Start'],['finish_date','Finish'],['_pct','%']];
+  let html='<table class="preview-table"><thead><tr>'+cols.map(c=>'<th>'+c[1]+'</th>').join('')+'</tr></thead><tbody>';
+  records.slice(0,8).forEach(r=>{html+='<tr>'+cols.map(c=>{
+    let v=r[c[0]]; if(c[0]==='_pct')v=Math.round((v||0)*100)+'%'; if(c[0]==='_villaNo')v='VI-'+v;
+    return '<td>'+dcEsc(v==null||v===''?'—':v)+'</td>';
+  }).join('')+'</tr>';});
+  html+='</tbody></table>';
+  if(!records.length) html='<div class="empty-state"><div class="empty-icon">🏘️</div><div>No records ready — map some activities first, or check villa numbers.</div></div>';
+  if(stats.villaMissSample && stats.villaMissSample.length){
+    html+='<div style="font-size:11px;color:#f59e0b;padding:8px 4px">⚠ Villas not found in database (sample): '+stats.villaMissSample.join(', ')+'</div>';
+  }
+  if(stats.unmappedSample && stats.unmappedSample.length){
+    html+='<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--text-muted)">📋 '+stats.ignoredActs+' Excel activities have no mapping yet — click to see what\'s pending</summary>'+
+      '<div style="font-size:11px;color:var(--text-dim);padding:6px 4px;max-height:220px;overflow-y:auto">'+
+      stats.unmappedSample.map(a=>dcEsc(a.code)+' — '+dcEsc(a.name)).join('<br>')+
+      (stats.ignoredActs>stats.unmappedSample.length?'<br>… and '+(stats.ignoredActs-stats.unmappedSample.length)+' more':'')+
+      '</div></details>';
+  }
+  document.getElementById('prev-tbl-cprog').innerHTML=html;
+}
+
+async function dcStartCProgUpload(){
+  if(!dcCProg.parsed){dcToast('No file loaded','err');return;}
+  const btn=document.getElementById('btn-upload-cprog');btn.disabled=true;
+  document.getElementById('upload-cprog').style.display='block';
+  document.getElementById('log-cprog').innerHTML='';
+  document.getElementById('prog-fill-cprog').style.width='0%';
+  dcAddLog('cprog','🔐 Checking authentication…','info');
+  if(!await waitForToken(5000)){dcAddLog('cprog','❌ Not authenticated. Please log in first.','err');btn.disabled=false;return;}
+
+  dcAddLog('cprog','📖 Loading latest villas + activity mapping…','info');
+  const refOk=await dcCProgLoadRefData();
+  if(!refOk){dcAddLog('cprog','❌ Could not load reference data.','err');btn.disabled=false;return;}
+
+  const {records,stats}=dcCProgBuildRecords();
+  dcAddLog('cprog','✅ '+records.length+' records ready ('+stats.mappedActs+' mapped activities, '+stats.ignoredActs+' ignored)','info');
+  if(!records.length){dcAddLog('cprog','⚠ Nothing to import.','warn');btn.disabled=false;return;}
+  if(stats.novilla>0)dcAddLog('cprog','⚠ '+stats.novilla+' villas in the sheet were not found in the database and were skipped','warn');
+
+  const actIds=[...new Set(records.map(r=>r.activity_id))];
+  const villaIds=[...new Set(records.map(r=>r.villa_id))];
+
+  dcAddLog('cprog','🗄 Archiving current values for these '+actIds.length+' mapped activities ('+villaIds.length+' villas)…','info');
+  try{
+    const CH=150;
+    for(let i=0;i<villaIds.length;i+=CH){
+      const vChunk=villaIds.slice(i,i+CH);
+      const resp=await fetch(SB+'/rest/v1/progress_updates?activity_id=in.('+actIds.join(',')+')&villa_id=in.('+vChunk.join(',')+')&is_current=eq.true&is_deleted=eq.false',{
+        method:'PATCH',headers:getH(),body:JSON.stringify({is_current:false})
+      });
+      if(!resp.ok){dcAddLog('cprog','⚠ Archive chunk failed ('+resp.status+')','warn');}
+    }
+    dcAddLog('cprog','✅ Archived previous values (scoped to only these activities + villas)','info');
+  }catch(e){dcAddLog('cprog','⚠ Archive error: '+e.message,'warn');}
+
+  const clean=records.map(({_villaNo,_cluster,_code,_wir,_pct,...rest})=>rest);
+  const CHUNK=500; let uploaded=0, failed=0;
+  for(let i=0;i<clean.length;i+=CHUNK){
+    const chunk=clean.slice(i,i+CHUNK);
+    try{
+      const res=await fetch(SB+'/rest/v1/progress_updates',{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify(chunk)});
+      if(res.ok)uploaded+=chunk.length; else {failed+=chunk.length; dcAddLog('cprog','❌ Chunk failed: '+(await res.text()).slice(0,150),'err');}
+    }catch(e){failed+=chunk.length;dcAddLog('cprog','❌ Chunk error: '+e.message,'err');}
+    document.getElementById('prog-fill-cprog').style.width=Math.round((i+chunk.length)/clean.length*100)+'%';
+    document.getElementById('upload-status-cprog').textContent=uploaded+'/'+clean.length+' records';
+  }
+  document.getElementById('prog-fill-cprog').style.width='100%';
+  dcAddLog('cprog',(failed>0?'⚠ Completed with errors — ':'✅ Done — ')+uploaded+' pushed'+(failed?', '+failed+' failed':''),failed>0?'warn':'ok');
+  dcToast(failed>0?'Completed with errors':'Civil progress pushed: '+uploaded+' records',failed>0?'err':'ok');
+  if(uploaded>0){
+    try{window.parent.postMessage({type:'data_updated',dataType:'progress',uploadedBy:window.__MEP_USER__?.full_name||'',rows:uploaded},'*');}catch(e){}
+  }
+  btn.disabled=false;
+}
+
+dcCProgLoadRefData();
 
 </script>
 <script>

@@ -264,6 +264,10 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
       WIR Code Aliases
     </button>
+    <button class="tab-btn" id="tab-civprog" onclick="switchTab('civprog')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M6 21V8l6-4 6 4v13"/><path d="M10 21v-5h4v5"/></svg>
+      Civil Progress Map <span class="tab-badge" id="badge-civprog" style="background:var(--warn-soft,rgba(245,158,11,.16));color:#f59e0b">—</span>
+    </button>
     <button class="tab-btn" id="tab-priority" onclick="switchTab('priority')" style="color:#f59e0b">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       Priority <span class="tab-badge" id="badge-priority">—</span>
@@ -536,6 +540,48 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
         </thead>
         <tbody id="wiralias-tbody"></tbody>
       </table>
+  </div>
+
+  <!-- ══ CIVIL PROGRESS MAP TAB ══ -->
+  <div class="tab-content" id="content-civprog" style="flex-direction:column;overflow-y:auto;min-height:0">
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Civil Progress Map</div>
+        <div style="font-size:11px;color:var(--text-dim)">Matches each "BAG Tracker - Villa Wise" Excel activity to a civil WIR code. Only <b>Mapped</b> rows are pushed by the Civil Progress importer — everything else is skipped.</div>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:14px;font-size:11px">
+          <span style="color:var(--approved,#6ee2a3)">● <b id="cp-count-mapped">0</b> Mapped</span>
+          <span style="color:#f59e0b">● <b id="cp-count-pending">0</b> Pending</span>
+          <span style="color:var(--text-dim)">● <b id="cp-count-na">0</b> N/A</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input id="cp-search" type="text" placeholder="Search code or name…" oninput="renderCivProgMap()"
+          style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px;width:220px">
+        <select id="cp-status-filter" onchange="renderCivProgMap()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px">
+          <option value="pending" selected>Pending only</option>
+          <option value="all">All statuses</option>
+          <option value="mapped">Mapped only</option>
+          <option value="not_applicable">N/A only</option>
+        </select>
+        <select id="cp-group-filter" onchange="renderCivProgMap()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-input);color:var(--text);font-size:12px">
+          <option value="">All groups</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadCivProgMap()" style="margin-left:auto">↻ Refresh</button>
+      </div>
+    </div>
+    <table style="border-collapse:collapse;width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:90px">Excel Code</th>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Excel Activity</th>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:150px">Group</th>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:90px">Status</th>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:260px">WIR Code (Civil)</th>
+          <th style="background:var(--bg-panel);border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);width:180px">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="civprog-tbody"></tbody>
+    </table>
   </div>
 
   <!-- ══ MAINTENANCE TAB ══ -->
@@ -837,7 +883,7 @@ function switchTab(tab) {
     loadPriority();
   }
   currentTab = tab;
-  ['wir','clr','map','alias','subs','wiralias','maint','openfront','priority'].forEach(t => {
+  ['wir','clr','map','alias','subs','wiralias','civprog','maint','openfront','priority'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t === tab);
     document.getElementById('content-'+t)?.classList.toggle('active', t === tab);
   });
@@ -860,6 +906,7 @@ function switchTab(tab) {
   if(tab==='maint') loadMaintCounts();
   if(tab==='subs') loadSubsTab();
   if(tab==='wiralias') loadWirAliasTab();
+  if(tab==='civprog') loadCivProgMap();
 }
 
 // ── TOAST ──
@@ -1863,6 +1910,129 @@ async function sbFetch(path){
   try{const r=await fetch(SB+'/rest/v1/'+path,{headers:getH()});return r.json();}catch(e){return [];}
 }
 function esc2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+
+// ══ CIVIL PROGRESS MAP TAB ══
+// Maps each "BAG Tracker - Villa Wise" Excel activity code to a civil WIR activity code.
+// The Civil Progress importer (csv_import_tool.html) reads this table live and only pushes
+// rows with status='mapped' — everything else (pending / not_applicable) is skipped.
+var civProgMapAll = [];
+var civProgWirActs = []; // civil activities catalogue, for the WIR-code <select>
+
+async function loadCivProgMap(){
+  const tb = document.getElementById('civprog-tbody');
+  if(tb) tb.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</td></tr>';
+  const [mapRows, wirRows] = await Promise.all([
+    fetchAll('civil_progress_map?select=id,excel_code,excel_name,excel_group,status,wir_activity_code,suggested_wir_code,notes&order=excel_group,excel_code'),
+    fetchAll('activities?select=activity_code,activity_name&discipline=eq.civil&is_active=eq.true&order=activity_code.asc'),
+  ]);
+  civProgMapAll = Array.isArray(mapRows) ? mapRows : [];
+  civProgWirActs = Array.isArray(wirRows) ? wirRows : [];
+
+  // Populate the group filter dropdown once
+  const gf = document.getElementById('cp-group-filter');
+  if(gf && gf.options.length <= 1){
+    const groups = [...new Set(civProgMapAll.map(r => r.excel_group).filter(Boolean))].sort();
+    gf.innerHTML = '<option value="">All groups</option>' + groups.map(g => `<option value="${esc2(g)}">${esc2(g)}</option>`).join('');
+  }
+  renderCivProgMap();
+}
+
+function civProgWirOptions(selected){
+  let html = '<option value="">— not set —</option>';
+  html += civProgWirActs.map(a => `<option value="${esc2(a.activity_code)}"${a.activity_code===selected?' selected':''}>${esc2(a.activity_code)} — ${esc2(a.activity_name)}</option>`).join('');
+  return html;
+}
+
+function renderCivProgMap(){
+  const tb = document.getElementById('civprog-tbody');
+  if(!tb) return;
+  const q = (document.getElementById('cp-search')?.value || '').toLowerCase().trim();
+  const statusF = document.getElementById('cp-status-filter')?.value || 'all';
+  const groupF = document.getElementById('cp-group-filter')?.value || '';
+
+  const mappedN = civProgMapAll.filter(r => r.status === 'mapped').length;
+  const pendingN = civProgMapAll.filter(r => r.status === 'pending').length;
+  const naN = civProgMapAll.filter(r => r.status === 'not_applicable').length;
+  document.getElementById('cp-count-mapped').textContent = mappedN;
+  document.getElementById('cp-count-pending').textContent = pendingN;
+  document.getElementById('cp-count-na').textContent = naN;
+  const badge = document.getElementById('badge-civprog');
+  if(badge) badge.textContent = pendingN;
+
+  let rows = civProgMapAll;
+  if(statusF !== 'all') rows = rows.filter(r => r.status === statusF);
+  if(groupF) rows = rows.filter(r => r.excel_group === groupF);
+  if(q) rows = rows.filter(r => r.excel_code.toLowerCase().includes(q) || (r.excel_name||'').toLowerCase().includes(q));
+
+  if(!rows.length){
+    tb.innerHTML = '<tr><td colspan="6" style="padding:24px;text-align:center;color:var(--text-dim)">No activities match this filter</td></tr>';
+    return;
+  }
+
+  const statusPill = s => {
+    if(s==='mapped') return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:var(--approved-bg,#0f3d24);color:var(--approved,#6ee2a3)">Mapped</span>';
+    if(s==='not_applicable') return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:var(--bg-panel);color:var(--text-dim)">N/A</span>';
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(245,158,11,.16);color:#f59e0b">Pending</span>';
+  };
+
+  tb.innerHTML = rows.map(r => {
+    const isPending = r.status === 'pending';
+    const selCode = r.status === 'mapped' ? r.wir_activity_code : (r.suggested_wir_code || '');
+    const suggestNote = (isPending && r.suggested_wir_code) ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px">suggested — confirm or change</div>` : '';
+    return `
+    <tr data-id="${r.id}">
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;font-family:var(--mono,monospace);font-size:11px;font-weight:600">${esc2(r.excel_code)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">${esc2(r.excel_name)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;color:var(--text-muted);font-size:11px">${esc2(r.excel_group||'—')}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">${statusPill(r.status)}</td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px">
+        <select onchange="civProgSelChange(${r.id},this.value)" ${r.status==='not_applicable'?'disabled':''}
+          style="width:100%;padding:5px 6px;border:1px solid var(--border);border-radius:5px;background:var(--bg-input);color:var(--text);font-size:11px">
+          ${civProgWirOptions(selCode)}
+        </select>
+        ${suggestNote}
+      </td>
+      <td style="border:1px solid var(--border-subtle);padding:7px 12px;white-space:nowrap">
+        ${r.status!=='not_applicable' ? `<button onclick="civProgMarkNA(${r.id})" style="padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg-panel);color:var(--text-muted);font-size:10px;cursor:pointer;margin-right:4px">Mark N/A</button>` : ''}
+        ${r.status!=='pending' ? `<button onclick="civProgResetPending(${r.id})" style="padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--bg-panel);color:var(--text-muted);font-size:10px;cursor:pointer">↺ Reset</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// Picking a WIR code from the dropdown immediately confirms the mapping (status → mapped).
+async function civProgSelChange(id, code){
+  const r = civProgMapAll.find(x => x.id === id);
+  if(!r) return;
+  if(!code){
+    // Cleared back to "— not set —": drop to pending with no code, keep any suggestion
+    await civProgSave(id, { status:'pending', wir_activity_code:null });
+    toast('Cleared — back to pending','info');
+    return;
+  }
+  await civProgSave(id, { status:'mapped', wir_activity_code:code });
+  toast('Mapped '+r.excel_code+' → '+code,'success');
+}
+
+async function civProgMarkNA(id){
+  await civProgSave(id, { status:'not_applicable', wir_activity_code:null });
+  toast('Marked as not applicable','info');
+}
+
+async function civProgResetPending(id){
+  await civProgSave(id, { status:'pending', wir_activity_code:null });
+  toast('Reset to pending','info');
+}
+
+async function civProgSave(id, fields){
+  const res = await fetch(SB+'/rest/v1/civil_progress_map?id=eq.'+id, {
+    method:'PATCH', headers:getH(), body:JSON.stringify({...fields, updated_at:new Date().toISOString()})
+  });
+  if(!res.ok){ toast('Save failed: '+(await res.text()),'error'); return; }
+  const r = civProgMapAll.find(x => x.id === id);
+  if(r) Object.assign(r, fields);
+  renderCivProgMap();
+}
 
 /* ══ PRIORITY TAB ══ */
 var _priList = []; // one entry per villa+tier: [{id, villa_no, cluster_name, note, tier}]
