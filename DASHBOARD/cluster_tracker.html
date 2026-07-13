@@ -951,13 +951,12 @@ async function saveLayout(){ /* no-op: only saveDefaultLayout() (super admin) wr
 // Super admin: persist the CURRENT columns as the global default for everyone (this discipline)
 async function saveDefaultLayout(){
   if(!isSuperAdminCT()){alert('Only a super admin can change the default view.');return;}
-  const json=JSON.stringify(COLS);
   try{
     const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(DEFAULT_LAYOUT_KEY)}&discipline=eq.${disc}`);
     if(existing.length){
-      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:json})});
+      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:COLS})});
     }else{
-      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:json})});
+      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:COLS})});
     }
     closeMgr();render();
     alert('Default '+discLabelFor(disc)+' view saved — everyone will see it on their next refresh.');
@@ -975,7 +974,9 @@ async function loadLayout(d){
     const key=getLayoutKey();
     const rows=await fa(`user_column_layouts?select=layout&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${d}`);
     if(!rows.length)return false;
-    const saved=JSON.parse(rows[0].layout);
+    // layout may be a native jsonb array or (legacy double-encoded) a JSON string
+    const raw=rows[0].layout;
+    const saved=typeof raw==='string'?JSON.parse(raw):raw;
     // Apply saved layout: use saved order/visibility/labels/codes but merge in any new default cols
     const defaults=defaultColsFor(d);
     const savedKeys=new Set(saved.map(c=>c.key));
@@ -1030,10 +1031,16 @@ async function init(){
     // ── Only load WIR/progress rows for codes that actually have a column in this
     // workspace (defaults + saved layouts/views), instead of the whole WIR table ──
     const _codeSet=new Set();
-    const _harvest=cols=>{(cols||[]).forEach(c=>{(c.actCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));(c.prereqCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));});};
+    const _harvest=cols=>{
+      // Saved layouts have historically been written both as a native jsonb array
+      // and (due to a double-JSON.stringify bug) as a jsonb string containing the
+      // array's JSON text — handle both so custom columns aren't silently dropped.
+      if(typeof cols==='string'){ try{cols=JSON.parse(cols);}catch(e){cols=[];} }
+      (Array.isArray(cols)?cols:[]).forEach(c=>{(c.actCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));(c.prereqCodes||[]).forEach(x=>_codeSet.add(String(x).trim()));});
+    };
     if(CT_WS==='civil')CIVIL_SHEETS.forEach(s=>_harvest(COLS_CIVIL[s]));
     else{_harvest(COLS_MECH);_harvest(COLS_ELEC);}
-    (layoutRows||[]).forEach(r=>_harvest(Array.isArray(r.layout)?r.layout:[]));
+    (layoutRows||[]).forEach(r=>_harvest(r.layout));
     // A column's code may be the NEW side of an alias — include old codes so those WIRs still count
     Object.entries(wirCodeAliases).forEach(([oldC,newC])=>{if(_codeSet.has(newC))_codeSet.add(oldC);});
     _codeSet.delete('');
@@ -1711,7 +1718,10 @@ async function loadViewsFromDB(){
   const key=svDbKey();
   try{
     const rows=await fa(`user_column_layouts?select=layout&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
-    if(rows.length) return JSON.parse(rows[0].layout)||[];
+    if(rows.length){
+      const raw=rows[0].layout;
+      return (typeof raw==='string'?JSON.parse(raw):raw)||[];
+    }
   }catch(e){console.warn('[Views] DB load failed:',e);}
   // Fall back: migrate any views saved under the old localStorage key
   try{
@@ -1726,11 +1736,10 @@ async function persistViewsToDB(views){
   _viewsCache=views;
   try{
     const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(key)}&discipline=eq.${disc}`);
-    const json=JSON.stringify(views);
     if(existing.length){
-      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:json})});
+      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:views})});
     }else{
-      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:key,discipline:disc,layout:json})});
+      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:key,discipline:disc,layout:views})});
     }
   }catch(e){
     console.warn('[Views] DB persist failed:',e);
