@@ -997,15 +997,17 @@ async function init(){
     // Activities scoped to the workspace so shared codes can't collide across disciplines
     const _ctActF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
     const _ctLayoutDiscs = CT_WS==='civil' ? CIVIL_SHEETS.join(',') : 'mech,elec';
+    // &order= on every paginated fetch (see note in Batch 2) — villas alone is 2000+
+    // rows / 3 pages, so unordered offset paging could skip villas too.
     const [clusters, vs, acts, clrs, ncrRows, alRows, wcaRows, layoutRows] = await Promise.all([
-      fa('clusters?select=id,code'),
-      fa('villas?select=id,villa_no,villa_type,cluster_id,is_priority,is_priority2'),
-      fa('activities?select=id,activity_code&is_active=eq.true'+_ctActF),
-      fa('clearance_activities?select=id,clearance_code&is_active=eq.true'),
-      fa('ncr_sor_records?select=villa_id,activity_code&is_active=eq.true&status=in.(open,in_progress)'),
-      fa('subcontractor_aliases?select=alias,canonical_name'),
-      fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true'),
-      fa('user_column_layouts?discipline=in.('+_ctLayoutDiscs+')&select=layout'),
+      fa('clusters?select=id,code&order=id'),
+      fa('villas?select=id,villa_no,villa_type,cluster_id,is_priority,is_priority2&order=id'),
+      fa('activities?select=id,activity_code&is_active=eq.true'+_ctActF+'&order=id'),
+      fa('clearance_activities?select=id,clearance_code&is_active=eq.true&order=id'),
+      fa('ncr_sor_records?select=id,villa_id,activity_code&is_active=eq.true&status=in.(open,in_progress)&order=id'),
+      fa('subcontractor_aliases?select=alias,canonical_name&order=alias'),
+      fa('wir_code_aliases?select=old_code,new_code&is_active=eq.true&order=old_code'),
+      fa('user_column_layouts?discipline=in.('+_ctLayoutDiscs+')&select=id,layout&order=id'),
     ]);
 
     // Aliases indexed up-front — the WIR code filter below needs the old→new map
@@ -1052,11 +1054,16 @@ async function init(){
     lm('Loading status data…');
     // Scope WIR to the active workspace's discipline (civil shares some codes with MEP).
     const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
+    // NOTE: every fetch below MUST carry a stable, unique &order=. fa() pages with
+    // limit/offset; without a deterministic sort, Postgres can return each page in a
+    // different (often parallel-scan) order, so offset pagination silently skips rows.
+    // On the 21k-row WIR set (~22 pages) that dropped most of the data — columns showed
+    // far fewer approvals than exist. Order by a unique key so paging is exhaustive.
     const [wirRaw, clr, prog, chkRows] = await Promise.all([
-      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF+_wirCodeFilter),
-      fa('v_villa_clr_summary?select=villa_id,clr_statuses'),
-      fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'+_progIdFilter),
-      fa('ct_villa_checks?select=col_key,villa_id,checked'),
+      fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched'+_ctDiscF+_wirCodeFilter+'&order=villa_id,raw_activity_code,raw_subcontractor'),
+      fa('v_villa_clr_summary?select=villa_id,clr_statuses&order=villa_id'),
+      fa('progress_updates?select=id,villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false'+_progIdFilter+'&order=id'),
+      fa('ct_villa_checks?select=col_key,villa_id,checked&order=col_key,villa_id'),
     ]);
 
     // Index manual checkbox states
@@ -1158,7 +1165,7 @@ async function refreshProgressSilent(){
   try{
     const since=_progSince;
     _progSince=new Date().toISOString();
-    const rows=await fa('progress_updates?select=villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false&updated_at=gt.'+encodeURIComponent(since)+_progIdFilter);
+    const rows=await fa('progress_updates?select=villa_id,activity_id,status,start_date,finish_date,subcontractor&is_current=eq.true&is_deleted=eq.false&updated_at=gt.'+encodeURIComponent(since)+_progIdFilter+'&order=villa_id,activity_id');
     if(Array.isArray(rows)&&rows.length){
       const i2c={};Object.entries(actCI).forEach(([c,id])=>{i2c[id]=c;});
       rows.forEach(r=>{
@@ -1183,7 +1190,7 @@ async function refreshWirSilent(){
     const since=_wirSince;
     _wirSince=new Date().toISOString();
     const _ctDiscF = CT_WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
-    const rows=await fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched&created_at=gt.'+encodeURIComponent(since)+_ctDiscF+_wirCodeFilter);
+    const rows=await fa('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor,revision,revision_no,submitted_date,response_date&match_status=eq.matched&created_at=gt.'+encodeURIComponent(since)+_ctDiscF+_wirCodeFilter+'&order=villa_id,raw_activity_code,raw_subcontractor');
     if(Array.isArray(rows)&&rows.length){
       const ord=['approved','under_review','rejected','not_submitted'];
       rows.forEach(r=>{
@@ -1220,7 +1227,7 @@ async function refreshClearanceSilent(){
   if(window._dvClrRef)return;
   window._dvClrRef=true;
   try{
-    const rows=await fa('v_villa_clr_summary?select=villa_id,clr_statuses');
+    const rows=await fa('v_villa_clr_summary?select=villa_id,clr_statuses&order=villa_id');
     if(Array.isArray(rows)){
       clrD={};
       rows.forEach(r=>{ clrD[r.villa_id]=r.clr_statuses||{}; });
@@ -2732,7 +2739,7 @@ async function loadClrReleaseData(){
   const allWirCodes=[...new Set(Object.values(prereqs).flat().map(e=>e.wir_code))];
   const wirStatusMap={};// villa_id → {code→status}
   if(allWirCodes.length){
-    const rows=await fa(`v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status&match_status=eq.matched&raw_activity_code=in.(${allWirCodes.join(',')})`);
+    const rows=await fa(`v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status&match_status=eq.matched&raw_activity_code=in.(${allWirCodes.join(',')})&order=villa_id,raw_activity_code`);
     rows.forEach(r=>{if(!wirStatusMap[r.villa_id])wirStatusMap[r.villa_id]={};wirStatusMap[r.villa_id][r.raw_activity_code]=r.normalised_status;});
   }
   clrReleaseData.wirStatus=wirStatusMap;
