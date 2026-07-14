@@ -948,16 +948,26 @@ function isSuperAdminCT(){
 // reloads the super-admin default, so non-admins always revert to the default view.
 async function saveLayout(){ /* no-op: only saveDefaultLayout() (super admin) writes to the DB */ }
 
+// Write the CURRENT columns to the global default layout row (this discipline).
+// Throws on any non-OK response so callers can surface silent write failures —
+// previously the fetch result was ignored, so an RLS/network rejection looked like
+// a successful save and the columns silently reverted to the old default on reload.
+async function persistDefaultLayout(){
+  const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(DEFAULT_LAYOUT_KEY)}&discipline=eq.${disc}`);
+  let r;
+  if(existing.length){
+    r=await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({layout:COLS})});
+  }else{
+    r=await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:COLS})});
+  }
+  if(!r.ok){const t=await r.text().catch(()=>'');throw new Error('HTTP '+r.status+(t?' — '+t:''));}
+}
+
 // Super admin: persist the CURRENT columns as the global default for everyone (this discipline)
 async function saveDefaultLayout(){
   if(!isSuperAdminCT()){alert('Only a super admin can change the default view.');return;}
   try{
-    const existing=await fa(`user_column_layouts?select=id&user_key=eq.${encodeURIComponent(DEFAULT_LAYOUT_KEY)}&discipline=eq.${disc}`);
-    if(existing.length){
-      await fetch(`${SB}/rest/v1/user_column_layouts?id=eq.${existing[0].id}`,{method:'PATCH',headers:getH(),body:JSON.stringify({layout:COLS})});
-    }else{
-      await fetch(`${SB}/rest/v1/user_column_layouts`,{method:'POST',headers:{...getH(),'Prefer':'return=minimal'},body:JSON.stringify({user_key:DEFAULT_LAYOUT_KEY,discipline:disc,layout:COLS})});
-    }
+    await persistDefaultLayout();
     closeMgr();render();
     alert('Default '+discLabelFor(disc)+' view saved — everyone will see it on their next refresh.');
   }catch(e){alert('Failed to save default: '+e.message);}
@@ -1682,7 +1692,18 @@ function clearAll(){
 let activeMgrTab='cols';
 function openMgr(tab){switchMgrTab(tab||'cols');document.getElementById('cmgr').classList.add('open');buildCmList();const sd=document.getElementById('btn-save-default');if(sd)sd.style.display=isSuperAdminCT()?'inline-flex':'none';}
 function closeMgr(){document.getElementById('cmgr').classList.remove('open');editingKey=null;}
-function applyMgr(){closeMgr();render();}
+async function applyMgr(){
+  closeMgr();render();
+  // Super admins ARE editing the shared default view — persist their add/delete/reorder/hide
+  // so it survives a refresh. Previously Apply only touched the session, so column edits
+  // silently reverted to the old saved default on the next reload (that's why deleted columns
+  // "came back" and new ones vanished). Non-super-admins stay session-only by design and use
+  // saved Views for personal setups.
+  if(isSuperAdminCT()){
+    try{await persistDefaultLayout();}
+    catch(e){alert('Columns applied, but saving them as the default failed: '+e.message+'\n\nYour changes may revert on refresh — try again or check your connection.');}
+  }
+}
 // ── SAVED VIEWS PANEL ────────────────────────────────────
 function toggleViewsPanel(e){
   e.stopPropagation();
