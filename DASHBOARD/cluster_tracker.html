@@ -1962,7 +1962,18 @@ function saveEdit(key){
   editingKey=null;buildCmList();saveLayout();
 }
 function toggleVisCm(key,el){const col=COLS.find(c=>c.key===key);if(!col)return;col.visible=!col.visible;el.classList.toggle('on',col.visible);el.textContent=col.visible?'✓':'';}
-function delCol(key){if(!confirm('Delete this column?'))return;COLS=COLS.filter(c=>c.key!==key);buildCmList();saveLayout();}
+async function delCol(key){
+  if(!confirm('Delete this column? For a super admin this removes it from the saved default for everyone.'))return;
+  COLS=COLS.filter(c=>c.key!==key);
+  buildCmList();render();
+  // Persist the deletion immediately for super admins so it's GONE for good — previously
+  // delCol only removed it from the session (saveLayout was a no-op), so the column
+  // reappeared from the saved default on the next reload / hide-all+unhide-all.
+  if(isSuperAdminCT()){
+    try{await persistDefaultLayout();}
+    catch(e){alert('Column removed on screen, but saving the deletion failed: '+e.message+'\n\nIt may reappear on refresh — try deleting it again.');}
+  }
+}
 function unhideAllCols(){COLS.forEach(c=>{if(c.type!=='divider')c.visible=true;});buildCmList();render();saveLayout();}
 function hideAllCols(){COLS.forEach(c=>{if(c.type!=='divider')c.visible=false;});buildCmList();render();saveLayout();}
 function toggleAllCols(){
