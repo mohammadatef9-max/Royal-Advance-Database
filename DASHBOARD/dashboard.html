@@ -228,15 +228,34 @@ async function init(){
     document.getElementById('tb-crumb').textContent=WS_LABEL[WS]||'MEP';
     const wsFilter = WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
     msg('Loading WIR data…');
-    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline'+wsFilter);
+    // &order= on every multi-page fetch: fetchAll pages with limit/offset, and without a
+    // stable unique sort Postgres can return pages in different orders, silently skipping
+    // rows (same bug class fixed in cluster_tracker — HAM-27).
+    wirD=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,raw_villa_type,normalised_status,discipline'+wsFilter+'&order=id');
     msg('Loading clearance data…');
-    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
-    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline');
+    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status&order=id');
+    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline&order=id');
     const clrDiscMap={};clrActs.forEach(c=>clrDiscMap[c.clearance_code]=c.discipline);
     clrD=allClr.filter(r=>{
       const d=clrDiscMap[r.raw_clearance_code];
       return WS==='civil' ? d==='civil' : d!=='civil';
     });
+    // Villa-type lookup from the villas table — raw_villa_type is blank on ~65% of WIR
+    // rows (civil import doesn't carry it), so the copy-villas popup needs this fallback.
+    msg('Loading villa types…');
+    try{
+      const [vRows,cRows]=await Promise.all([
+        fetchAll('villas?select=villa_no,villa_type,cluster_id&order=id'),
+        fetchAll('clusters?select=id,code&order=id')
+      ]);
+      const cMap={};cRows.forEach(c=>{cMap[c.id]=c.code;});
+      window._villaTypeMap={};
+      vRows.forEach(v=>{
+        const code=String(cMap[v.cluster_id]||''),t=v.villa_type||'';
+        window._villaTypeMap[code+'_'+v.villa_no]=t;                       // 'C3_42'
+        window._villaTypeMap[code.replace(/^C/i,'')+'_'+v.villa_no]=t;    // '3_42'
+      });
+    }catch(e){window._villaTypeMap={};}
     msg('Rendering…');renderAll();hideLoad();
   }catch(e){msg('Error: '+e.message);}
 }
@@ -430,7 +449,7 @@ function buildTable(rows){
     const key=`${r.raw_cluster||'—'}||${code}||${r.raw_subcontractor||'—'}`;
     if(!g[key])g[key]={cluster:r.raw_cluster||'—',code,name:r.raw_activity_name||'—',sub:r.raw_subcontractor||'—',villas:[],villaTypes:{},ap:0,rj:0,ur:0,ns:0,total:0};
     const x=g[key];x.total++;
-    if(r.raw_villa_no&&!x.villas.includes(r.raw_villa_no)){x.villas.push(r.raw_villa_no);x.villaTypes[r.raw_villa_no]=r.raw_villa_type||'';}
+    if(r.raw_villa_no&&!x.villas.includes(r.raw_villa_no)){x.villas.push(r.raw_villa_no);x.villaTypes[r.raw_villa_no]=r.raw_villa_type||(window._villaTypeMap&&window._villaTypeMap[(r.raw_cluster||'')+'_'+r.raw_villa_no])||'';}
     const s=r.normalised_status;
     if(s===APK())x.ap++;else if(s===RJK())x.rj++;else if(s===URK())x.ur++;else x.ns++;
   });
@@ -488,9 +507,9 @@ async function refreshDataSilent(){
   _dvRef=true;
   try{
     const wsFilter = WS==='civil' ? '&discipline=eq.civil' : '&or=(discipline.is.null,discipline.in.(mechanical,electrical))';
-    const w=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,normalised_status,discipline'+wsFilter);
-    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status');
-    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline');
+    const w=await fetchAll('v_latest_wir_status?select=raw_cluster,raw_villa_no,raw_activity_code,raw_activity_name,raw_subcontractor,raw_villa_type,normalised_status,discipline'+wsFilter+'&order=id');
+    const allClr=await fetchAll('v_latest_clearance_status?select=raw_cluster,raw_villa_no,raw_clearance_code,raw_activity_name,normalised_status&order=id');
+    const clrActs=await fetchAll('clearance_activities?select=clearance_code,discipline&order=id');
     const m={};clrActs.forEach(c=>{m[c.clearance_code]=c.discipline;});
     wirD=w;
     clrD=allClr.filter(r=>{const d=m[r.raw_clearance_code];return WS==='civil' ? d==='civil' : d!=='civil';});

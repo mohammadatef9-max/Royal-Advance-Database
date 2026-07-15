@@ -927,13 +927,12 @@ function refreshProgTint(){
   var n=0;
   Object.keys(kpProgMap).forEach(function(vn){
     var pst=kpProgMap[vn][code];
-    // "Completed" site progress still counts as In Progress until the WIR reaches a final
-    // outcome — an approved (AP) or rejected (RJ) WIR shows its own status color instead,
-    // so the yellow tint never masks a real approval or rejection.
+    // Site progress (in_progress OR completed) shows the yellow tint ONLY while the WIR
+    // is Not Submitted. Once a WIR exists, its own status color wins — approved green,
+    // rejected red, under-review blue — so the tint never masks a real WIR state.
     if(pst!=='in_progress'&&pst!=='completed')return;
     var el=document.querySelector('#villa-layer .villa[data-v="'+vn+'"]');
-    var vst=el&&el.getAttribute('data-s');
-    if(el&&vst!=='AP'&&vst!=='RJ'){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
+    if(el&&el.getAttribute('data-s')==='NS'){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
   });
   if(b)b.textContent='⚒ In Progress'+(n?' ('+n+')':'');
   if(leg){leg.style.display='flex';document.getElementById('s-prog').textContent=n;}
