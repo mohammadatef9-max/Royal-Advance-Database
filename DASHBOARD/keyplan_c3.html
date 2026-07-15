@@ -926,9 +926,12 @@ function refreshProgTint(){
   var code=String(currentActivity).trim().split(' ')[0];
   var n=0;
   Object.keys(kpProgMap).forEach(function(vn){
-    if(kpProgMap[vn][code]!=='in_progress')return;
+    var pst=kpProgMap[vn][code];
+    // "Completed" site progress still counts as In Progress until the WIR is actually
+    // approved — an approved WIR (data-s="AP") shows its own status color instead.
+    if(pst!=='in_progress'&&pst!=='completed')return;
     var el=document.querySelector('#villa-layer .villa[data-v="'+vn+'"]');
-    if(el){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
+    if(el&&el.getAttribute('data-s')!=='AP'){el.style.setProperty('background','#eab308','important');el.style.setProperty('border-color','#ca8a04','important');el.setAttribute('data-prog','1');n++;}
   });
   if(b)b.textContent='⚒ In Progress'+(n?' ('+n+')':'');
   if(leg){leg.style.display='flex';document.getElementById('s-prog').textContent=n;}
