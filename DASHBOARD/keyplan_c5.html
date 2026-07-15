@@ -70,7 +70,7 @@ body.in-shell #app{height:100vh}
 #sub-list .leg-item span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:148px}
 #map-wrap{flex:1;overflow:hidden;background:var(--map-bg);position:relative}
 #map-viewport{position:absolute;inset:0;overflow:hidden;background:var(--map-bg)}
-#map-container{position:absolute;left:0;top:0;display:inline-block;width:1320px;transform-origin:0 0;will-change:transform}
+#map-container{position:absolute;left:0;top:0;display:inline-block;width:1320px;height:1207px;transform-origin:0 0;will-change:transform}
 body.panning,body.panning *{cursor:grabbing !important}
 body.space-down #map-viewport{cursor:grab}
 #map-img{display:block;width:1320px;height:auto}
@@ -386,7 +386,7 @@ body.edit-mode #edit-panel{display:flex}
     <div id="map-container">
 
         <svg id="grid-overlay" preserveAspectRatio="none"></svg>
-    <div id="marquee"></div>    <img id="map-img" loading="lazy" src="keyplan_c5_ref.png" style="width:1320px;height:auto;display:block" alt="C5 Keyplan reference">
+    <div id="marquee"></div>
       <div id="villa-layer"></div>
     </div>
     </div>
