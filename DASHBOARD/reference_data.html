@@ -481,34 +481,90 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
   <!-- ══ SUB-CONTRACTORS TAB ══ -->
   <div class="tab-content" id="content-subs" style="flex-direction:column;min-height:0">
     <!-- Header -->
-    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
-      <div style="font-size:13px;font-weight:600;color:var(--text)">Sub-Contractor Aliases</div>
-      <div style="font-size:11px;color:var(--text-dim)">Merge duplicate spellings into a single canonical name. Raw data stays untouched.</div>
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap">
+      <div style="font-size:13px;font-weight:600;color:var(--text)">Sub-Contractors</div>
+      <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <button id="subs-view-btn-dir" class="btn" onclick="switchSubsView('dir')" style="padding:4px 12px;font-size:11px;border:none;border-radius:0;background:var(--accent-soft);color:var(--accent-text);font-weight:600">📇 Directory</button>
+        <button id="subs-view-btn-merge" class="btn" onclick="switchSubsView('merge')" style="padding:4px 12px;font-size:11px;border:none;border-radius:0;background:transparent;color:var(--text-dim)">🔗 Merge duplicates</button>
+      </div>
+      <div id="subs-header-hint" style="font-size:11px;color:var(--text-dim)">Click a sub-contractor to view and edit their profile.</div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <input id="subs-search" type="text" placeholder="🔍 Search…" oninput="buildSubsList()"
+        <input id="subs-search" type="text" placeholder="🔍 Search…" oninput="buildSubsList();buildSubsDir()"
           style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px;width:180px">
         <button class="btn btn-ghost" onclick="loadSubsTab()">↻ Refresh</button>
       </div>
     </div>
-    <div style="padding:5px 18px;font-size:11px;color:var(--text-dim);flex-shrink:0;border-bottom:1px solid var(--border)">
-      ☐ Tick the duplicates, pick a canonical name below, then click Merge.
+
+    <!-- ── DIRECTORY VIEW ── -->
+    <div id="subs-view-dir" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <div id="subs-dir-list" style="flex:1;overflow-y:auto;min-height:0"></div>
     </div>
-    <!-- Scrollable list of all raw subcontractors -->
-    <div id="subs-list" style="flex:1;overflow-y:auto;min-height:0"></div>
-    <!-- Merge bar (shows when items selected) -->
-    <div id="subs-merge-bar" style="display:none;padding:10px 18px;border-top:1px solid var(--accent);background:var(--accent-soft);flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-size:12px;font-weight:600;color:var(--accent-text)"><span id="subs-sel-count">0</span> selected — merge into:</span>
-      <input id="subs-canon-input" type="text" placeholder="Canonical name" list="subs-canon-datalist"
-        style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px">
-      <datalist id="subs-canon-datalist"></datalist>
-      <button class="btn btn-primary" onclick="mergeSubs()">🔗 Merge</button>
-      <button class="btn btn-ghost" onclick="clearSubsSel()">✕ Clear</button>
-      <span id="subs-merge-msg" style="font-size:11px"></span>
+
+    <!-- ── MERGE VIEW (original UI) ── -->
+    <div id="subs-view-merge" style="flex:1;display:none;flex-direction:column;min-height:0">
+      <div style="padding:5px 18px;font-size:11px;color:var(--text-dim);flex-shrink:0;border-bottom:1px solid var(--border)">
+        ☐ Tick the duplicates, pick a canonical name below, then click Merge. Raw data stays untouched.
+      </div>
+      <!-- Scrollable list of all raw subcontractors -->
+      <div id="subs-list" style="flex:1;overflow-y:auto;min-height:0"></div>
+      <!-- Merge bar (shows when items selected) -->
+      <div id="subs-merge-bar" style="display:none;padding:10px 18px;border-top:1px solid var(--accent);background:var(--accent-soft);flex-shrink:0;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:600;color:var(--accent-text)"><span id="subs-sel-count">0</span> selected — merge into:</span>
+        <input id="subs-canon-input" type="text" placeholder="Canonical name" list="subs-canon-datalist"
+          style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--accent);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px">
+        <datalist id="subs-canon-datalist"></datalist>
+        <button class="btn btn-primary" onclick="mergeSubs()">🔗 Merge</button>
+        <button class="btn btn-ghost" onclick="clearSubsSel()">✕ Clear</button>
+        <span id="subs-merge-msg" style="font-size:11px"></span>
+      </div>
+      <!-- Current aliases list -->
+      <div style="padding:10px 18px;border-top:1px solid var(--border);flex-shrink:0">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Current aliases (<span id="subs-alias-count">0</span>)</div>
+        <div id="subs-aliases-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);font-size:11px"></div>
+      </div>
     </div>
-    <!-- Current aliases list -->
-    <div style="padding:10px 18px;border-top:1px solid var(--border);flex-shrink:0">
-      <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Current aliases (<span id="subs-alias-count">0</span>)</div>
-      <div id="subs-aliases-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg-elev);font-size:11px"></div>
+
+    <!-- ── SUB-CONTRACTOR PROFILE MODAL ── -->
+    <div id="sub-profile-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;align-items:center;justify-content:center;padding:20px">
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;width:min(860px,96vw);max-height:92vh;display:flex;flex-direction:column;overflow:hidden">
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <div style="font-size:15px;font-weight:700;color:var(--text)" id="sp-name">—</div>
+          <span id="sp-alias-chips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+          <button onclick="closeSubProfile()" style="margin-left:auto;background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:2px 8px">✕</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px">
+          <!-- Stats row -->
+          <div id="sp-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px"></div>
+          <!-- QS section -->
+          <div id="sp-qs" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-elev)"></div>
+          <!-- Info form -->
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-elev)">
+            <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:10px">Company info</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:10px">
+              <label style="font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:4px">Contact person
+                <input id="sp-contact" type="text" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px"></label>
+              <label style="font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:4px">Phone
+                <input id="sp-phone" type="text" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px"></label>
+              <label style="font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:4px">Email
+                <input id="sp-email" type="text" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px"></label>
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">Trades / activities they handle</div>
+            <div id="sp-trades" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px"></div>
+            <div style="display:flex;gap:6px;margin-bottom:10px">
+              <input id="sp-trade-input" type="text" placeholder="e.g. Drainage, HVAC, Precast…" onkeydown="if(event.key==='Enter'){event.preventDefault();spAddTrade();}"
+                style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px">
+              <button class="btn btn-ghost" onclick="spAddTrade()">+ Add</button>
+            </div>
+            <label style="font-size:11px;color:var(--text-dim);display:flex;flex-direction:column;gap:4px">Notes
+              <textarea id="sp-notes" rows="3" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg-panel);color:var(--text);font-size:12px;resize:vertical"></textarea></label>
+          </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <span id="sp-msg" style="font-size:11px;color:var(--text-dim)"></span>
+          <button class="btn btn-ghost" style="margin-left:auto" onclick="closeSubProfile()">Close</button>
+          <button class="btn btn-primary" onclick="saveSubProfile()">💾 Save profile</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1718,9 +1774,11 @@ var subsSel       = new Set();
 async function loadSubsTab() {
   const list = document.getElementById('subs-list');
   if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</div>';
+  const dirList = document.getElementById('subs-dir-list');
+  if (dirList) dirList.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</div>';
   const [aliasRows, subRows] = await Promise.all([
     sbFetch('subcontractor_aliases?select=alias,canonical_name&order=alias'),
-    sbFetch('subcontractors?select=name&order=name.asc')
+    sbFetch('subcontractors?select=*&order=name.asc')
   ]);
   subAliasExact = {}; subAliasMap = {};
   (Array.isArray(aliasRows) ? aliasRows : []).forEach(r => {
@@ -1729,15 +1787,30 @@ async function loadSubsTab() {
       subAliasMap[r.alias.trim().toLowerCase()] = r.canonical_name.trim();
     }
   });
+  // Full profile rows keyed by name (case-insensitive lookup helper below)
+  subProfiles = {};
+  (Array.isArray(subRows) ? subRows : []).forEach(r => { if (r.name) subProfiles[r.name.trim()] = r; });
   // All raw names from subcontractors table; also add alias keys AND canonical values so
   // user-chosen canonical names (not in the raw WIR data) still appear in the list.
   const nameSet = new Set();
-  (Array.isArray(subRows) ? subRows : []).forEach(r => { if (r.name) nameSet.add(r.name.trim()); });
+  Object.keys(subProfiles).forEach(n => nameSet.add(n));
   Object.keys(subAliasExact).forEach(a => nameSet.add(a));
   Object.values(subAliasExact).forEach(c => nameSet.add(c));
   subRawNames = [...nameSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   subsSel = new Set();
+  // Which subs have a QS scope set up (for the directory badge). QS tables are
+  // permission-gated — a failed fetch just means no badges, profiles still work.
+  subQsNames = new Set();
+  try {
+    const scopes = await sbFetch('qs_scopes?select=subcontractor_name&is_template=eq.false');
+    (Array.isArray(scopes) ? scopes : []).forEach(s => {
+      if (!s.subcontractor_name) return;
+      const n = s.subcontractor_name.trim();
+      subQsNames.add((subAliasExact[n] || n).toLowerCase());
+    });
+  } catch(e) { /* no QS access — skip badges */ }
   buildSubsList();
+  buildSubsDir();
 }
 
 function buildSubsList() {
@@ -1833,6 +1906,204 @@ async function deleteSubAlias(alias) {
   toast('Alias removed', 'ok');
 }
 
+// ══ SUB-CONTRACTOR DIRECTORY + PROFILE ══
+var subProfiles = {};        // name → subcontractors row
+var subQsNames = new Set();  // lowercased canonical names that have a QS scope
+var subsView = 'dir';
+var spCurrent = null;        // canonical name open in the profile modal
+var spTrades = [];
+
+function switchSubsView(v){
+  subsView = v;
+  const dir = document.getElementById('subs-view-dir'), mrg = document.getElementById('subs-view-merge');
+  if (dir) dir.style.display = v==='dir' ? 'flex' : 'none';
+  if (mrg) mrg.style.display = v==='merge' ? 'flex' : 'none';
+  const bd = document.getElementById('subs-view-btn-dir'), bm = document.getElementById('subs-view-btn-merge');
+  if (bd){ bd.style.background = v==='dir' ? 'var(--accent-soft)' : 'transparent'; bd.style.color = v==='dir' ? 'var(--accent-text)' : 'var(--text-dim)'; bd.style.fontWeight = v==='dir' ? '600' : '400'; }
+  if (bm){ bm.style.background = v==='merge' ? 'var(--accent-soft)' : 'transparent'; bm.style.color = v==='merge' ? 'var(--accent-text)' : 'var(--text-dim)'; bm.style.fontWeight = v==='merge' ? '600' : '400'; }
+  const hint = document.getElementById('subs-header-hint');
+  if (hint) hint.textContent = v==='dir' ? 'Click a sub-contractor to view and edit their profile.' : 'Merge duplicate spellings into a single canonical name. Raw data stays untouched.';
+}
+
+// Effective (post-alias) sub-contractor names — what the directory lists.
+function effectiveSubNames(){
+  const set = new Set();
+  subRawNames.forEach(n => set.add(subAliasExact[n] || n));
+  return [...set].sort((a,b)=>a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+function subProfileFor(name){
+  if (subProfiles[name]) return subProfiles[name];
+  const lc = name.toLowerCase();
+  for (const k in subProfiles) if (k.toLowerCase()===lc) return subProfiles[k];
+  return null;
+}
+function subAliasesFor(name){
+  return Object.entries(subAliasExact).filter(([,c])=>c===name).map(([a])=>a);
+}
+
+function buildSubsDir(){
+  const el = document.getElementById('subs-dir-list');
+  if (!el) return;
+  const q = (document.getElementById('subs-search')?.value || '').toLowerCase();
+  const names = effectiveSubNames().filter(n => !q || n.toLowerCase().includes(q));
+  if (!names.length){ el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim);font-size:12px">No sub-contractors found.</div>'; return; }
+  el.innerHTML = names.map(n => {
+    const p = subProfileFor(n);
+    const aliases = subAliasesFor(n);
+    const trades = (p && Array.isArray(p.trades)) ? p.trades : [];
+    const hasQs = subQsNames.has(n.toLowerCase());
+    return `<div onclick="openSubProfile(decodeURIComponent('${encodeURIComponent(n)}'))"
+      style="display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s"
+      onmouseover="this.style.background='var(--bg-elev)'" onmouseout="this.style.background=''">
+      <div style="min-width:0;flex:1;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12.5px;font-weight:600;color:var(--text)">${esc2(n)}</span>
+        ${trades.map(t=>`<span style="font-size:10px;background:var(--accent-soft);color:var(--accent-text);padding:1px 7px;border-radius:8px">${esc2(t)}</span>`).join('')}
+      </div>
+      ${p && p.contact_person ? `<span style="font-size:11px;color:var(--text-dim)">👤 ${esc2(p.contact_person)}</span>` : ''}
+      ${aliases.length ? `<span style="font-size:10px;color:var(--text-dim);border:1px solid var(--border);padding:1px 7px;border-radius:8px">${aliases.length} alias${aliases.length!==1?'es':''}</span>` : ''}
+      ${hasQs ? `<span style="font-size:10px;color:var(--approved,#6ee2a3);border:1px solid var(--approved,#6ee2a3);padding:1px 7px;border-radius:8px">QS ✓</span>` : ''}
+      <span style="color:var(--text-dim);font-size:14px">›</span>
+    </div>`;
+  }).join('');
+}
+
+function openSubProfile(name){
+  spCurrent = name;
+  const p = subProfileFor(name);
+  document.getElementById('sp-name').textContent = name;
+  document.getElementById('sp-alias-chips').innerHTML = subAliasesFor(name)
+    .map(a=>`<span style="font-size:10px;color:var(--text-dim);border:1px solid var(--border);padding:1px 7px;border-radius:8px" title="Merged alias">${esc2(a)}</span>`).join('');
+  document.getElementById('sp-contact').value = p?.contact_person || '';
+  document.getElementById('sp-phone').value   = p?.phone || '';
+  document.getElementById('sp-email').value   = p?.email || '';
+  document.getElementById('sp-notes').value   = p?.notes || '';
+  spTrades = (p && Array.isArray(p.trades)) ? p.trades.slice() : [];
+  renderSpTrades();
+  document.getElementById('sp-msg').textContent = '';
+  document.getElementById('sp-stats').innerHTML = '<div style="grid-column:1/-1;color:var(--text-dim);font-size:11px;padding:6px 0">Loading WIR stats…</div>';
+  document.getElementById('sp-qs').innerHTML = '<span style="font-size:11px;color:var(--text-dim)">Loading QS contract data…</span>';
+  document.getElementById('sub-profile-modal').style.display = 'flex';
+  loadSubStats(name);
+}
+function closeSubProfile(){ document.getElementById('sub-profile-modal').style.display='none'; spCurrent=null; }
+
+function spAddTrade(){
+  const inp = document.getElementById('sp-trade-input');
+  const v = (inp.value||'').trim();
+  if (!v) return;
+  if (!spTrades.some(t=>t.toLowerCase()===v.toLowerCase())) spTrades.push(v);
+  inp.value=''; renderSpTrades();
+}
+function spDelTrade(i){ spTrades.splice(i,1); renderSpTrades(); }
+function renderSpTrades(){
+  document.getElementById('sp-trades').innerHTML = spTrades.length
+    ? spTrades.map((t,i)=>`<span style="font-size:11px;background:var(--accent-soft);color:var(--accent-text);padding:2px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:5px">${esc2(t)}<span onclick="spDelTrade(${i})" style="cursor:pointer;font-weight:700">✕</span></span>`).join('')
+    : '<span style="font-size:11px;color:var(--text-dim)">No trades tagged yet.</span>';
+}
+
+function spInList(names){
+  return 'in.(' + encodeURIComponent(names.map(n=>'"'+n.replace(/"/g,'\\"')+'"').join(',')) + ')';
+}
+function fmtAed(v){ return 'AED ' + Math.round(Number(v)||0).toLocaleString('en-US'); }
+
+async function loadSubStats(name){
+  const names = [name, ...subAliasesFor(name)];
+  // ── WIR stats (latest revision per villa+activity+sub, incl. merged aliases) ──
+  try {
+    const rows = await fetchAll(`v_latest_wir_by_sub?select=villa_id,normalised_status,discipline&raw_subcontractor=${spInList(names)}&order=villa_id,activity_id,raw_subcontractor`);
+    if (spCurrent !== name) return; // modal changed while loading
+    const villas = new Set(); const cnt = {approved:0, under_review:0, rejected:0};
+    let mep=0, civil=0;
+    rows.forEach(r=>{
+      if (r.villa_id) villas.add(r.villa_id);
+      if (cnt[r.normalised_status] !== undefined) cnt[r.normalised_status]++;
+      if (r.discipline==='civil') civil++; else mep++;
+    });
+    const card = (label, val, color) => `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg-elev)">
+      <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px">${label}</div>
+      <div style="font-size:19px;font-weight:700;color:${color||'var(--text)'}">${val}</div></div>`;
+    document.getElementById('sp-stats').innerHTML =
+      card('Villas entered', villas.size) +
+      card('Total WIRs', rows.length) +
+      card('Approved', cnt.approved, 'var(--approved,#6ee2a3)') +
+      card('Under review', cnt.under_review, '#93b6ff') +
+      card('Rejected', cnt.rejected, 'var(--rejected,#ff8a99)') +
+      card('MEP / Civil', mep + ' / ' + civil);
+  } catch(e){
+    document.getElementById('sp-stats').innerHTML = '<div style="grid-column:1/-1;color:var(--rejected,#ff8a99);font-size:11px">WIR stats failed to load: '+esc2(e.message)+'</div>';
+  }
+  // ── QS contract section (skipped when no scope / no permission) ──
+  const qsEl = document.getElementById('sp-qs');
+  try {
+    const scopes = await sbFetch(`qs_scopes?select=id,scope_title,display_name,contract_value_aed,is_variation&is_template=eq.false&subcontractor_name=${spInList(names)}`);
+    if (spCurrent !== name) return;
+    if (!Array.isArray(scopes) || !scopes.length){
+      qsEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">QS contract</div><span style="font-size:11px;color:var(--text-dim)">No QS scope set up for this sub-contractor yet — skipped.</span>';
+      return;
+    }
+    const ids = scopes.map(s=>s.id);
+    const [pcScopeRows, scopePCs] = await Promise.all([
+      sbFetch(`qs_pc_scopes?select=pc_id,scope_id,gross_aed&scope_id=in.(${ids.join(',')})`),
+      sbFetch(`qs_payment_certificates?select=id,scope_id,gross_aed,status&scope_id=in.(${ids.join(',')})`)
+    ]);
+    const psRows = Array.isArray(pcScopeRows)?pcScopeRows:[], pcs = Array.isArray(scopePCs)?scopePCs:[];
+    // Statuses for multi-scope PCs referenced only via qs_pc_scopes
+    const extraIds = [...new Set(psRows.map(r=>r.pc_id))].filter(id=>!pcs.some(p=>p.id===id));
+    let extraPCs = [];
+    if (extraIds.length) extraPCs = await sbFetch(`qs_payment_certificates?select=id,status&id=in.(${extraIds.join(',')})`) || [];
+    const statusById = {}; pcs.forEach(p=>statusById[p.id]=p.status); (extraPCs||[]).forEach(p=>statusById[p.id]=p.status);
+    const multiPcIds = new Set(psRows.map(r=>r.pc_id));
+    // Billed = per-scope locked snapshots (multi-scope PCs) + whole-PC gross for legacy locked PCs
+    let billed = 0;
+    psRows.forEach(r=>{ if (statusById[r.pc_id]==='locked') billed += Number(r.gross_aed)||0; });
+    pcs.forEach(p=>{ if (p.status==='locked' && !multiPcIds.has(p.id)) billed += Number(p.gross_aed)||0; });
+    const allPcIds = new Set([...pcs.map(p=>p.id), ...psRows.map(r=>r.pc_id)]);
+    let locked=0, pending=0;
+    allPcIds.forEach(id=>{ if (statusById[id]==='locked') locked++; else pending++; });
+    const contract = scopes.reduce((s,x)=>s+(Number(x.contract_value_aed)||0), 0);
+    const remaining = contract - billed;
+    const voCount = scopes.filter(s=>s.is_variation).length;
+    const stat = (label, val, color) => `<div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.4px">${label}</div><div style="font-size:15px;font-weight:700;color:${color||'var(--text)'}">${val}</div></div>`;
+    qsEl.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px">QS contract — ${scopes.length} scope${scopes.length!==1?'s':''}${voCount?` (${voCount} VO)`:''}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+        ${stat('Contract value', fmtAed(contract))}
+        ${stat('Billed to date (gross)', fmtAed(billed), 'var(--approved,#6ee2a3)')}
+        ${stat('Remaining', fmtAed(remaining), remaining<0?'var(--rejected,#ff8a99)':'#93b6ff')}
+        ${stat('PCs locked / pending', locked + ' / ' + pending)}
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:8px">Billed = gross of locked payment certificates (per-scope snapshots for combined PCs). Draft/submitted PCs are not counted.</div>`;
+  } catch(e){
+    qsEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">QS contract</div><span style="font-size:11px;color:var(--text-dim)">QS data unavailable (needs QS access) — skipped.</span>';
+  }
+}
+
+async function saveSubProfile(){
+  if (!spCurrent) return;
+  const msg = document.getElementById('sp-msg');
+  msg.textContent = 'Saving…';
+  const body = {
+    name: spCurrent,
+    contact_person: document.getElementById('sp-contact').value.trim() || null,
+    phone: document.getElementById('sp-phone').value.trim() || null,
+    email: document.getElementById('sp-email').value.trim() || null,
+    trades: spTrades,
+    notes: document.getElementById('sp-notes').value.trim() || null,
+    is_active: true,
+    updated_at: new Date().toISOString()
+  };
+  const res = await fetch(`${SB}/rest/v1/subcontractors?on_conflict=name`, {
+    method: 'POST',
+    headers: { ...getH(), 'Prefer': 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok){ msg.innerHTML = '<span style="color:var(--rejected)">Save failed: '+esc2(await res.text())+'</span>'; return; }
+  const saved = await res.json();
+  if (Array.isArray(saved) && saved[0]) subProfiles[spCurrent] = saved[0];
+  msg.innerHTML = '<span style="color:var(--approved)">✅ Saved</span>';
+  toast('Profile saved', 'ok');
+  buildSubsDir();
+  setTimeout(()=>{ if(msg.textContent.includes('Saved')) msg.textContent=''; }, 2500);
+}
 
 // ══ WIR CODE ALIASES TAB ══
 var wirAliasData = [];
