@@ -535,6 +535,8 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
         <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:16px">
           <!-- Stats row -->
           <div id="sp-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px"></div>
+          <!-- Detected villas by type/cluster -->
+          <div id="sp-villas" style="display:flex;flex-direction:column;gap:10px"></div>
           <!-- QS section -->
           <div id="sp-qs" style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-elev)"></div>
           <!-- Info form -->
@@ -1981,7 +1983,9 @@ function openSubProfile(name){
   renderSpTrades();
   document.getElementById('sp-msg').textContent = '';
   document.getElementById('sp-stats').innerHTML = '<div style="grid-column:1/-1;color:var(--text-dim);font-size:11px;padding:6px 0">Loading WIR stats…</div>';
+  document.getElementById('sp-villas').innerHTML = '';
   document.getElementById('sp-qs').innerHTML = '<span style="font-size:11px;color:var(--text-dim)">Loading QS contract data…</span>';
+  spVillaGroups = {};
   document.getElementById('sub-profile-modal').style.display = 'flex';
   loadSubStats(name);
 }
@@ -2003,6 +2007,50 @@ function renderSpTrades(){
 
 function spInList(names){
   return 'in.(' + encodeURIComponent(names.map(n=>'"'+n.replace(/"/g,'\\"')+'"').join(',')) + ')';
+}
+
+// ── Detected villas by type/cluster (mirrors the QS "Detected Villas" tab, but sub-wide) ──
+var spVillaGroups = {};
+var spVillaLookup = null; // cached villas+clusters lookup (anon-readable, loaded once)
+async function spGetVillaLookup(){
+  if (spVillaLookup) return spVillaLookup;
+  const [vs, cls] = await Promise.all([
+    fetchAll('villas?select=id,villa_no,villa_type,cluster_id&order=id'),
+    sbFetch('clusters?select=id,code')
+  ]);
+  const cMap = {}; (Array.isArray(cls)?cls:[]).forEach(c=>cMap[c.id]=c.code);
+  const byId = {};
+  (Array.isArray(vs)?vs:[]).forEach(v=>{ byId[v.id]={no:v.villa_no, type:v.villa_type||'', cluster:cMap[v.cluster_id]||'?'}; });
+  spVillaLookup = { byId };
+  return spVillaLookup;
+}
+// Same rule as qs.js matchVillaType: first number in the type string = bedroom count
+function spBeds(t){ const m=(t||'').match(/(\d+)/); return m?parseInt(m[1]):0; }
+
+function renderSpVillas(typeInfo){ // typeInfo: {beds: {label, qty}} from QS villa types, or null before QS loads
+  const el = document.getElementById('sp-villas'); if (!el) return;
+  const groups = Object.values(spVillaGroups||{}).sort((a,b)=>(a.beds||99)-(b.beds||99));
+  if (!groups.length){ el.innerHTML=''; return; }
+  el.innerHTML = groups.map(g=>{
+    const ti = typeInfo ? typeInfo[g.beds] : null;
+    const label = (ti && ti.label) || (g.beds ? g.beds+' Bedroom Villa' : 'Other');
+    const qtyHtml = (ti && ti.qty!=null)
+      ? ` <span style="color:var(--text-dim)">Contracted QTY: <b style="color:var(--text)">${ti.qty}</b></span>
+          <span style="color:var(--text-dim)">Balance: <b style="color:#f59e0b">${ti.qty - g.villas.length}</b></span>` : '';
+    const byCl = {};
+    g.villas.forEach(v=>{ (byCl[v.cluster]=byCl[v.cluster]||[]).push(v); });
+    const clHtml = Object.keys(byCl).sort().map(c=>{
+      const vlist = byCl[c].slice().sort((a,b)=>a.no-b.no);
+      const clLabel = /^C\d+$/i.test(c) ? 'Cluster '+c.replace(/^C/i,'') : c;
+      return `<div style="margin-top:7px"><div style="font-size:10px;color:var(--text-dim);margin-bottom:3px">${esc2(clLabel)} · ${vlist.length}</div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">${vlist.map(v=>`<span style="font-size:10px;font-family:var(--mono,monospace);border:1px solid var(--border);background:var(--bg-panel);color:var(--text);padding:1px 6px;border-radius:4px">VI-${v.no}</span>`).join('')}</div></div>`;
+    }).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 14px;background:var(--bg-elev)">
+      <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:12px">
+        <b style="color:var(--text)">${esc2(label)}</b>
+        <span style="color:var(--text-dim)">Detected: <b style="color:var(--approved,#6ee2a3)">${g.villas.length}</b></span>${qtyHtml}
+      </div>${clHtml}</div>`;
+  }).join('');
 }
 function fmtAed(v){ return 'AED ' + Math.round(Number(v)||0).toLocaleString('en-US'); }
 
@@ -2029,6 +2077,17 @@ async function loadSubStats(name){
       card('Under review', cnt.under_review, '#93b6ff') +
       card('Rejected', cnt.rejected, 'var(--rejected,#ff8a99)') +
       card('MEP / Civil', mep + ' / ' + civil);
+    // Detected villas grouped by type + cluster (chips), like the QS "Detected Villas" tab
+    const lk = await spGetVillaLookup();
+    if (spCurrent !== name) return;
+    spVillaGroups = {};
+    villas.forEach(id=>{
+      const v = lk.byId[id]; if (!v) return;
+      const beds = spBeds(v.type);
+      if (!spVillaGroups[beds]) spVillaGroups[beds] = { beds, villas: [] };
+      spVillaGroups[beds].villas.push(v);
+    });
+    renderSpVillas(null);
   } catch(e){
     document.getElementById('sp-stats').innerHTML = '<div style="grid-column:1/-1;color:var(--rejected,#ff8a99);font-size:11px">WIR stats failed to load: '+esc2(e.message)+'</div>';
   }
@@ -2042,9 +2101,10 @@ async function loadSubStats(name){
       return;
     }
     const ids = scopes.map(s=>s.id);
-    const [pcScopeRows, scopePCs] = await Promise.all([
+    const [pcScopeRows, scopePCs, vtRows] = await Promise.all([
       sbFetch(`qs_pc_scopes?select=pc_id,scope_id,gross_aed&scope_id=in.(${ids.join(',')})`),
-      sbFetch(`qs_payment_certificates?select=id,scope_id,gross_aed,status&scope_id=in.(${ids.join(',')})`)
+      sbFetch(`qs_payment_certificates?select=id,scope_id,gross_aed,status&scope_id=in.(${ids.join(',')})`),
+      sbFetch(`qs_scope_villa_types?select=villa_type_label,qty_contracted&scope_id=in.(${ids.join(',')})`)
     ]);
     const psRows = Array.isArray(pcScopeRows)?pcScopeRows:[], pcs = Array.isArray(scopePCs)?scopePCs:[];
     // Statuses for multi-scope PCs referenced only via qs_pc_scopes
@@ -2072,6 +2132,14 @@ async function loadSubStats(name){
         ${stat('PCs locked / pending', locked + ' / ' + pending)}
       </div>
       <div style="font-size:10px;color:var(--text-dim);margin-top:8px">Billed = gross of locked payment certificates (per-scope snapshots for combined PCs). Draft/submitted PCs are not counted.</div>`;
+    // Contracted QTY per villa type — qty_contracted is the sub-wide total repeated on
+    // sibling scopes (same rule as qs.js renderPaymentSummaryMulti), so dedupe by label.
+    const typeInfo = {};
+    (Array.isArray(vtRows)?vtRows:[]).forEach(r=>{
+      const beds = spBeds(r.villa_type_label);
+      if (!typeInfo[beds]) typeInfo[beds] = { label: r.villa_type_label, qty: parseInt(r.qty_contracted)||0 };
+    });
+    if (Object.keys(typeInfo).length) renderSpVillas(typeInfo);
   } catch(e){
     qsEl.innerHTML = '<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">QS contract</div><span style="font-size:11px;color:var(--text-dim)">QS data unavailable (needs QS access) — skipped.</span>';
   }
