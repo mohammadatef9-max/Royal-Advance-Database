@@ -2212,6 +2212,10 @@ async function dcStartCProgUpload(){
   dcAddLog('cprog',(failed>0?'⚠ Completed with errors — ':'✅ Done — ')+uploaded+' pushed'+(failed?', '+failed+' failed':''),failed>0?'warn':'ok');
   dcToast(failed>0?'Completed with errors':'Civil progress pushed: '+uploaded+' records',failed>0?'err':'ok');
   if(uploaded>0){
+    // Re-assert the "approved WIR ⇒ progress completed" rule: the Excel can carry a
+    // stale <100% for cells whose WIR is already approved, which would otherwise
+    // downgrade them to in_progress until the next WIR import runs the sync.
+    try{const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'});const n=await r.json();if(r.ok&&n>0)dcAddLog('cprog','✅ WIR sync — '+n+' approved-WIR activities re-marked completed','info');}catch(e){}
     try{window.parent.postMessage({type:'data_updated',dataType:'progress',uploadedBy:window.__MEP_USER__?.full_name||'',rows:uploaded},'*');}catch(e){}
   }
   btn.disabled=false;
