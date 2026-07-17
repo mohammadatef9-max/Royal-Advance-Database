@@ -948,6 +948,15 @@ function isSuperAdminCT(){
 // reloads the super-admin default, so non-admins always revert to the default view.
 async function saveLayout(){ /* no-op: only saveDefaultLayout() (super admin) writes to the DB */ }
 
+// Snapshot of the SAVED shared default (as last loaded from / written to the DB).
+// applyView() merges against this — not the hardcoded built-ins — so applying a view
+// can't resurrect columns deleted from the default or drop custom ones added to it.
+let DEFAULT_COLS=null;
+// True while a personal saved View is applied: the session is showing a view, NOT the
+// shared default, so super-admin auto-persist (Apply / delete column) must stay
+// session-only or the personal view would silently become everyone's default.
+let _viewApplied=false;
+
 // Write the CURRENT columns to the global default layout row (this discipline).
 // Throws on any non-OK response so callers can surface silent write failures —
 // previously the fetch result was ignored, so an RLS/network rejection looked like
@@ -963,11 +972,16 @@ async function persistDefaultLayout(){
   if(!r.ok){const t=await r.text().catch(()=>'');throw new Error('HTTP '+r.status+(t?' — '+t:''));}
 }
 
-// Super admin: persist the CURRENT columns as the global default for everyone (this discipline)
+// Super admin: persist the CURRENT columns as the global default for everyone (this discipline).
+// This is the ONLY path that can promote an applied personal View to the shared default —
+// it's explicit, so it also clears the view-applied session flag.
 async function saveDefaultLayout(){
   if(!isSuperAdminCT()){alert('Only a super admin can change the default view.');return;}
+  if(_viewApplied&&!confirm('A saved View is currently applied. Save THESE columns as the shared default for ALL users?'))return;
   try{
     await persistDefaultLayout();
+    DEFAULT_COLS=COLS.map(c=>({...c}));
+    _viewApplied=false;
     closeMgr();render();
     alert('Default '+discLabelFor(disc)+' view saved — everyone will see it on their next refresh.');
   }catch(e){alert('Failed to save default: '+e.message);}
@@ -976,7 +990,7 @@ async function saveDefaultLayout(){
 // Reset the live view back to the current global default (or the built-in defaults if none set)
 async function resetToDefault(){
   const ok=await loadLayout(disc);
-  if(!ok){COLS=defaultColsFor(disc).map(c=>({...c}));}
+  if(!ok){COLS=defaultColsFor(disc).map(c=>({...c}));DEFAULT_COLS=COLS.map(c=>({...c}));_viewApplied=false;}
   buildCmList();render();
 }
 async function loadLayout(d){
@@ -995,6 +1009,8 @@ async function loadLayout(d){
       const def=defaults.find(c=>c.key===sc.key);
       return def?{...def,...sc}:sc; // merge saved overrides onto defaults
     });
+    DEFAULT_COLS=COLS.map(c=>({...c}));
+    _viewApplied=false;
     return true;
   }catch(e){console.warn('Layout load failed:',e);return false;}
 }
@@ -1695,12 +1711,12 @@ function closeMgr(){document.getElementById('cmgr').classList.remove('open');edi
 async function applyMgr(){
   closeMgr();render();
   // Super admins ARE editing the shared default view — persist their add/delete/reorder/hide
-  // so it survives a refresh. Previously Apply only touched the session, so column edits
-  // silently reverted to the old saved default on the next reload (that's why deleted columns
-  // "came back" and new ones vanished). Non-super-admins stay session-only by design and use
-  // saved Views for personal setups.
-  if(isSuperAdminCT()){
-    try{await persistDefaultLayout();}
+  // so it survives a refresh. EXCEPT while a personal View is applied: then the session shows
+  // the view, not the default, and persisting would silently overwrite everyone's default
+  // with the view. In that case Apply stays session-only; ★ Save as Default is the explicit
+  // way to promote the current layout. Non-super-admins are always session-only.
+  if(isSuperAdminCT()&&!_viewApplied){
+    try{await persistDefaultLayout();DEFAULT_COLS=COLS.map(c=>({...c}));}
     catch(e){alert('Columns applied, but saving them as the default failed: '+e.message+'\n\nYour changes may revert on refresh — try again or check your connection.');}
   }
 }
@@ -1804,14 +1820,18 @@ function applyView(name){
   if(!view)return;
   try{
     const saved=JSON.parse(view.cols);
-    const defaults=defaultColsFor(disc);
+    // Merge against the SAVED shared default, not the hardcoded built-ins: using the
+    // built-ins here resurrected columns long deleted from the default (unhide-all then
+    // revealed them) and dropped custom columns that only exist in the saved default.
+    const base=(DEFAULT_COLS&&DEFAULT_COLS.length)?DEFAULT_COLS:defaultColsFor(disc);
     COLS=saved.map(sc=>{
-      const def=defaults.find(c=>c.key===sc.key);
+      const def=base.find(c=>c.key===sc.key);
       return def?{...def,...sc}:sc;
     });
-    defaults.forEach(def=>{
+    base.forEach(def=>{
       if(!COLS.some(c=>c.key===def.key))COLS.push({...def,visible:false});
     });
+    _viewApplied=true; // session-only: never auto-persisted to the shared default
   }catch(e){alert('Failed to apply view: '+e.message);return;}
   closeMgr();
   render();
@@ -1963,14 +1983,17 @@ function saveEdit(key){
 }
 function toggleVisCm(key,el){const col=COLS.find(c=>c.key===key);if(!col)return;col.visible=!col.visible;el.classList.toggle('on',col.visible);el.textContent=col.visible?'✓':'';}
 async function delCol(key){
-  if(!confirm('Delete this column? For a super admin this removes it from the saved default for everyone.'))return;
+  const inView=_viewApplied;
+  if(!confirm(inView
+    ?'Remove this column from your current view? (A saved View is applied, so this only affects your session — the shared default is untouched.)'
+    :'Delete this column? For a super admin this removes it from the saved default for everyone.'))return;
   COLS=COLS.filter(c=>c.key!==key);
   buildCmList();render();
-  // Persist the deletion immediately for super admins so it's GONE for good — previously
-  // delCol only removed it from the session (saveLayout was a no-op), so the column
-  // reappeared from the saved default on the next reload / hide-all+unhide-all.
-  if(isSuperAdminCT()){
-    try{await persistDefaultLayout();}
+  // Persist the deletion immediately for super admins so it's GONE for good — but NOT
+  // while a personal View is applied (the session shows the view, not the default;
+  // persisting would overwrite everyone's default with this view's columns).
+  if(isSuperAdminCT()&&!_viewApplied){
+    try{await persistDefaultLayout();DEFAULT_COLS=COLS.map(c=>({...c}));}
     catch(e){alert('Column removed on screen, but saving the deletion failed: '+e.message+'\n\nIt may reappear on refresh — try deleting it again.');}
   }
 }
