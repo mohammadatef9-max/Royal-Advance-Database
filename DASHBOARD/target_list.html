@@ -578,9 +578,15 @@ body.in-shell header { display: none !important; }
   <div class="cmft">
     <button class="btn btn-blue" onclick="applyMgr()">✓ Apply &amp; Save</button>
     <button class="btn" onclick="closeCM()">Cancel</button>
+    <button class="btn btn-green" onclick="saveAsTemplate()" title="Save the current columns as a named template to pick when creating a new week">💾 Save as Template</button>
     <button class="btn btn-red" id="btn-rst-cols" onclick="rstCols()" style="margin-left:auto">↺ Reset to Defaults</button>
   </div>
 </div>
+<style>
+/* Master-sheet mixed tick: checked in some (not all) weeks containing the villa */
+.tk.mix{border-color:var(--st-progress-tx,#f4c95a)}
+.tk.mix .tkb{color:var(--st-progress-tx,#f4c95a);font-weight:800}
+</style>
 
 <!-- Add Villas modal -->
 <div class="mbd" id="avbd">
@@ -623,7 +629,14 @@ body.in-shell header { display: none !important; }
       <div class="fr"><label>Week Name</label><input type="text" id="nwnm" placeholder="e.g. 2nd Fix - 30 Apr 2026"></div>
       <div class="fr"><label>Target Date</label><input type="date" id="nwdt"></div>
       <div class="fr"><label>Discipline</label>
-        <select id="nwdc"><option value="mechanical">Mechanical</option><option value="electrical">Electrical</option></select>
+        <select id="nwdc" onchange="fillTplSelect()"><option value="mechanical">Mechanical</option><option value="electrical">Electrical</option></select>
+      </div>
+      <div class="fr"><label>Columns Template</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="nwtpl" style="flex:1"><option value="">Default (full column set)</option></select>
+          <button type="button" class="btn" onclick="delTemplate()" title="Delete the selected template" style="padding:5px 9px">🗑</button>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">e.g. "1st Fix", "Shaft Closing" — create templates from the Columns manager (💾 Save as Template).</div>
       </div>
       <div id="nwal"></div>
     </div>
@@ -714,6 +727,14 @@ var weeks=[],actWk=null,tVillas=[],actDisc=null,wirCodeAliases={};
 var wirD={},wirSD={},progD={},progSubD={},clrD2={},flagsD={};
 var colF={},popKey=null,editKey=null,dragSrc=null;
 
+// ── Master sheet + per-week column templates ──
+var MASTER='__MASTER__';       // sentinel actWk value while the master sheet is open
+var masterDisc=null;           // 'mechanical'|'electrical' when master sheet active
+var vidWeeks={};               // master: villa_id -> [week_name, ...] containing it
+var mFlagCnt={};               // master: villa_id -> {col_key: how many of its weeks are checked}
+var actTpl=null;               // template name of the active week (null = global layout)
+var tplList={mechanical:[],electrical:[]}; // cached template names per discipline
+
 // Sub-contractor label visibility — simple global toggle
 var subsHidden=false;
 // Site progress row visibility — simple global toggle
@@ -786,7 +807,7 @@ function init(){
   Promise.all([
     dbGet('activities?select=id,activity_code&is_active=eq.true'),
     dbGet('clearance_activities?select=id,clearance_code&is_active=eq.true'),
-    dbGetAll('villas?select=id,villa_no,villa_type,clusters(code)&is_active=eq.true'),
+    dbGetAll('villas?select=id,villa_no,villa_type,clusters(code)&is_active=eq.true&order=id'),
   ]).then(function(results){
     var acts=results[0],clrs=results[1],vs=results[2];
     acts.forEach(function(a){actCI[a.activity_code]=a.id;});
@@ -827,9 +848,62 @@ function applyLayout(saved){
 }
 
 function getLayoutKey(disc){
-  // Returns the Supabase user_key and discipline tag for a given discipline
+  // Returns the Supabase user_key and discipline tag for a given discipline.
+  // When the active week uses a named columns template, the layout lives under the
+  // template key — so editing columns on a templated week updates that template
+  // (i.e. every week sharing it), not the discipline-wide default.
   var d=disc||actDisc||'mechanical';
-  return {user_key:'tgt_global_'+d, disc_tag:'target_list_'+d};
+  var key=actTpl?('tgt_tpl_'+d+':'+actTpl):('tgt_global_'+d);
+  return {user_key:key, disc_tag:'target_list_'+d};
+}
+
+function tplKey(d,name){return 'tgt_tpl_'+d+':'+name;}
+function loadTplList(d){
+  return dbGet('user_column_layouts?select=user_key&discipline=eq.target_list_'+d+'&user_key=like.'+encodeURIComponent('tgt_tpl_'+d+':*')).then(function(rows){
+    tplList[d]=(rows||[]).map(function(r){return r.user_key.slice(('tgt_tpl_'+d+':').length);}).sort();
+    return tplList[d];
+  }).catch(function(){return tplList[d]||[];});
+}
+function fillTplSelect(){
+  var d=document.getElementById('nwdc').value;
+  loadTplList(d).then(function(list){
+    var sel=document.getElementById('nwtpl');
+    if(!sel)return;
+    sel.innerHTML='<option value="">Default (full column set)</option>'
+      +list.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n.replace(/</g,'&lt;')+'</option>';}).join('');
+  });
+}
+function saveAsTemplate(){
+  if(!canManageTargets()){alert('No permission to manage templates.');return;}
+  var name=prompt('Template name (e.g. "1st Fix", "Shaft Closing"):',actTpl||'');
+  if(!name)return;
+  name=name.trim();
+  if(!name)return;
+  if(name.indexOf(':')>=0){alert('Template names cannot contain ":".');return;}
+  var d=actDisc||'mechanical';
+  var slim=COLS.map(function(c){var o={key:c.key,type:c.type,label:c.label,visible:c.visible!==false};if(c.ac)o.ac=c.ac;if(c.cc)o.cc=c.cc;if(c.ccs)o.ccs=c.ccs;return o;});
+  fetch(SB+'/rest/v1/user_column_layouts?on_conflict=user_key,discipline',{
+    method:'POST',headers:hdr({'Prefer':'resolution=merge-duplicates,return=minimal'}),
+    body:JSON.stringify({user_key:tplKey(d,name),discipline:'target_list_'+d,layout:slim,updated_at:new Date().toISOString()})
+  }).then(function(r){
+    if(!r.ok)return r.text().then(function(t){throw new Error(t);});
+    alert('Template "'+name+'" saved ('+d+'). Pick it in the New Week dialog.');
+    loadTplList(d);
+  }).catch(function(e){alert('Template save failed: '+e.message);});
+}
+function delTemplate(){
+  if(!canManageTargets()){alert('No permission to manage templates.');return;}
+  var sel=document.getElementById('nwtpl');
+  var name=sel&&sel.value;
+  if(!name){alert('Select a template to delete first.');return;}
+  var d=document.getElementById('nwdc').value;
+  if(!confirm('Delete template "'+name+'" ('+d+')?\n\nWeeks already using it will fall back to the default column set.'))return;
+  fetch(SB+'/rest/v1/user_column_layouts?user_key=eq.'+encodeURIComponent(tplKey(d,name))+'&discipline=eq.target_list_'+d,{
+    method:'DELETE',headers:hdr()
+  }).then(function(r){
+    if(!r.ok)return r.text().then(function(t){throw new Error(t);});
+    fillTplSelect();
+  }).catch(function(e){alert('Delete failed: '+e.message);});
 }
 
 function saveLayout(disc){
@@ -851,7 +925,7 @@ function saveLayout(disc){
     body:JSON.stringify({
       user_key:lk.user_key,
       discipline:lk.disc_tag,
-      layout:layoutStr,
+      layout:d, // native jsonb array — NOT the pre-stringified copy (double-encoding stored a jsonb string; readers tolerate both, writers shouldn't produce it)
       updated_at:new Date().toISOString()
     })
   }).then(function(r){
@@ -891,10 +965,13 @@ function loadLayoutDB(disc){
 }
 
 function loadWeeks(){
-  return dbGetAll('weekly_targets?select=week_name,target_date,discipline&is_active=eq.true&order=target_date.desc').then(function(rows){
+  // order=id.asc so per-week dedupe picks the week-CREATION row (lowest id — it carries
+  // template_name); the sidebar's newest-first ordering is applied afterwards in JS.
+  return dbGetAll('weekly_targets?select=week_name,target_date,discipline,template_name&is_active=eq.true&order=id.asc').then(function(rows){
     var seen={};weeks=[];
     rows.forEach(function(r){if(!seen[r.week_name]){seen[r.week_name]=1;weeks.push(Object.assign({},r,{count:0}));}});
-    return dbGetAll('weekly_targets?select=week_name,villa_id&is_active=eq.true');
+    weeks.sort(function(a,b){return String(b.target_date||'').localeCompare(String(a.target_date||''));});
+    return dbGetAll('weekly_targets?select=week_name,villa_id&is_active=eq.true&order=id.asc');
   }).then(function(all){
     var cm={};all.forEach(function(r){if(r.villa_id)cm[r.week_name]=(cm[r.week_name]||0)+1;});
     weeks.forEach(function(w){w.count=cm[w.week_name]||0;});
@@ -905,30 +982,42 @@ function loadWeeks(){
 
 function buildSB(){
   var el=document.getElementById('wlist');
-  if(!weeks.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:11px">No weeks yet.<br>Click + New.</div>';return;}
   var activeDisc=window._discTab||'all';
+  // Master sheet entries — always pinned at the very top (per discipline)
+  var mm=[];
+  if(activeDisc==='all'||activeDisc==='mechanical')mm.push({d:'mechanical',c:'var(--accent-text,#93b6ff)'});
+  if(activeDisc==='all'||activeDisc==='electrical')mm.push({d:'electrical',c:'var(--progress,#f4c95a)'});
+  var mh=mm.map(function(m){
+    var wkCnt=weeks.filter(function(w){return (w.discipline||'mechanical')===m.d;}).length;
+    return '<div class="wi'+(actWk===MASTER&&masterDisc===m.d?' on':'')+'" onclick="selMaster(\''+m.d+'\')" style="border-left:3px solid '+m.c+'">'
+      +'<div class="wn">&#9733; Master &mdash; '+(m.d==='mechanical'?'Mechanical':'Electrical')+'</div>'
+      +'<div class="wm" style="color:'+m.c+';font-weight:600">every villa across '+wkCnt+' week'+(wkCnt!==1?'s':'')+'</div>'
+      +'</div>';
+  }).join('');
+  if(!weeks.length){el.innerHTML=mh+'<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:11px">No weeks yet.<br>Click + New.</div>';return;}
   var toShow=activeDisc==='all'?weeks:weeks.filter(function(w){return w.discipline===activeDisc;});
-  if(!toShow.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:11px">No weeks found.</div>';return;}
-  el.innerHTML=toShow.map(function(w){
+  if(!toShow.length){el.innerHTML=mh+'<div style="padding:14px;text-align:center;color:var(--text-muted);font-size:11px">No weeks found.</div>';return;}
+  el.innerHTML=mh+toShow.map(function(w){
     var esc=w.week_name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     var dc=w.discipline==='electrical'?'color:var(--progress,#f4c95a)':'color:var(--accent-text,#93b6ff)';return '<div class="wi'+(actWk===w.week_name?' on':'')+'"" onclick="selWeek(\''+esc+'\')">'
       +'<div class="wn">'+w.week_name+'</div>'
-      +'<div class="wm">'+(w.target_date||'')+(w.discipline?'<span style="'+dc+';font-weight:600"> &middot; '+w.discipline+'</span>':'')+'</div>'
+      +'<div class="wm">'+(w.target_date||'')+(w.discipline?'<span style="'+dc+';font-weight:600"> &middot; '+w.discipline+'</span>':'')+(w.template_name?'<span style="color:var(--text-muted)"> &middot; '+w.template_name+'</span>':'')+'</div>'
       +'<div class="wc">'+w.count+' villas</div></div>';
   }).join('');
 }
 
 function selWeek(nm){
-  actWk=nm;
-  // Reload column layout if discipline changed
+  actWk=nm;masterDisc=null;vidWeeks={};mFlagCnt={};
+  // Reload column layout if the discipline OR the week's columns template changed
   var wk=weeks.find(function(w){return w.week_name===nm;})||{};
   var newDisc=wk.discipline||'mechanical';
-  if(newDisc!==actDisc){
-    actDisc=newDisc;
+  var newTpl=wk.template_name||null;
+  if(newDisc!==actDisc||newTpl!==actTpl){
+    actDisc=newDisc;actTpl=newTpl;
     loadLayoutDB(actDisc).then(function(){render();});
   }
   buildSB();
-  var el=document.getElementById('tb-week-name');if(el)el.textContent='· '+nm;
+  var el=document.getElementById('tb-week-name');if(el)el.textContent='· '+nm+(newTpl?' ('+newTpl+')':'');
   document.getElementById('bav').style.display='';
   document.getElementById('bdw').style.display='';
   document.getElementById('mn').setAttribute('data-week',nm);
@@ -938,11 +1027,54 @@ function selWeek(nm){
     return loadVillaData(tVillas);
   }).then(function(){
     flagsD={};
-    return dbGetAll('target_villa_flags?select=villa_id,col_key,checked&week_name=eq.'+encodeURIComponent(nm));
+    return dbGetAll('target_villa_flags?select=villa_id,col_key,checked&week_name=eq.'+encodeURIComponent(nm)+'&order=id');
   }).then(function(flags){
     flags.forEach(function(f){if(!flagsD[f.villa_id])flagsD[f.villa_id]={};flagsD[f.villa_id][f.col_key]=f.checked;});
     buildSum();render();setS2('');
   }).then(function(){ if(typeof applyTargetPermissions==='function') applyTargetPermissions(); }).catch(function(e){setS2('Error: '+e.message);console.error('selWeek error:',e);});
+}
+
+// ── MASTER SHEET: every villa across every week of one discipline ──
+// Ticks show the aggregate across all weeks containing the villa (✓ = all, – = some);
+// toggling writes the flag to EVERY week containing that villa.
+function selMaster(d){
+  actWk=MASTER;masterDisc=d;actTpl=null;
+  var relWeeks=weeks.filter(function(w){return (w.discipline||'mechanical')===d;}).map(function(w){return w.week_name;});
+  if(d!==actDisc){actDisc=d;loadLayoutDB(d).then(function(){render();});}
+  else{loadLayoutDB(d).then(function(){render();});} // always reload: leaving a templated week must restore the global layout
+  buildSB();
+  var el=document.getElementById('tb-week-name');if(el)el.textContent='· ★ Master — '+(d==='mechanical'?'Mechanical':'Electrical');
+  document.getElementById('bav').style.display='none';
+  document.getElementById('bdw').style.display='none';
+  document.getElementById('mn').setAttribute('data-week','Master '+d);
+  vidWeeks={};mFlagCnt={};flagsD={};tVillas=[];
+  if(!relWeeks.length){buildSum();render();setS2('');return;}
+  setS2('Loading master...');
+  var wkIn='week_name=in.('+encodeURIComponent(relWeeks.map(function(n){return '"'+n.replace(/"/g,'\\"')+'"';}).join(','))+')';
+  dbGetAll('weekly_targets?select=villa_id,week_name&is_active=eq.true&villa_id=not.is.null&'+wkIn+'&order=id').then(function(rows){
+    rows.forEach(function(r){
+      if(!vidWeeks[r.villa_id])vidWeeks[r.villa_id]=[];
+      if(vidWeeks[r.villa_id].indexOf(r.week_name)<0)vidWeeks[r.villa_id].push(r.week_name);
+    });
+    tVillas=Object.keys(vidWeeks).map(Number);
+    return loadVillaData(tVillas);
+  }).then(function(){
+    return dbGetAll('target_villa_flags?select=villa_id,col_key,checked&'+wkIn+'&order=id');
+  }).then(function(flags){
+    flags.forEach(function(f){
+      if(!f.checked)return;
+      if(!mFlagCnt[f.villa_id])mFlagCnt[f.villa_id]={};
+      mFlagCnt[f.villa_id][f.col_key]=(mFlagCnt[f.villa_id][f.col_key]||0)+1;
+    });
+    Object.keys(mFlagCnt).forEach(function(vid){
+      flagsD[vid]={};
+      Object.keys(mFlagCnt[vid]).forEach(function(k){
+        flagsD[vid][k]=(mFlagCnt[vid][k]>=(vidWeeks[vid]||[]).length);
+      });
+    });
+    buildSum();render();setS2('');
+  }).then(function(){ if(typeof applyTargetPermissions==='function') applyTargetPermissions(); })
+  .catch(function(e){setS2('Error: '+e.message);console.error('selMaster error:',e);});
 }
 
 function loadVillaData(vids){
@@ -950,14 +1082,16 @@ function loadVillaData(vids){
   if(!vids.length)return Promise.resolve();
   var ids=vids.join(',');
   setS2('Loading WIR...');
-  return dbGetAll('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor&match_status=eq.matched&villa_id=in.('+ids+')').then(function(wirs){
+  // &order=id on all paginated fetches — unordered limit/offset pagination can skip rows
+  // (HAM-27 bug class); the master sheet easily exceeds one page here.
+  return dbGetAll('v_latest_wir_status?select=villa_id,raw_activity_code,normalised_status,raw_subcontractor&match_status=eq.matched&villa_id=in.('+ids+')&order=id').then(function(wirs){
     wirs.forEach(function(r){
       if(!wirD[r.villa_id])wirD[r.villa_id]={};
       wirD[r.villa_id][r.raw_activity_code]=r.normalised_status;
       if(r.raw_subcontractor){if(!wirSD[r.villa_id])wirSD[r.villa_id]={};wirSD[r.villa_id][r.raw_activity_code]=r.raw_subcontractor;}
     });
     setS2('Loading progress...');
-    return dbGetAll('progress_updates?select=villa_id,activity_id,status,subcontractor&is_current=eq.true&is_deleted=eq.false&villa_id=in.('+ids+')');
+    return dbGetAll('progress_updates?select=villa_id,activity_id,status,subcontractor&is_current=eq.true&is_deleted=eq.false&villa_id=in.('+ids+')&order=id');
   }).then(function(prog){
     var i2c={};Object.keys(actCI).forEach(function(c){i2c[actCI[c]]=c;});
     prog.forEach(function(r){
@@ -969,7 +1103,7 @@ function loadVillaData(vids){
     var hasClr=COLS.some(function(c){return c.type==='clr';}); // load for ALL clr cols, visible or hidden
     if(!hasClr){setS2('');return;}
     setS2('Loading clearances...');
-    return dbGetAll('v_latest_clearance_status?select=villa_id,clearance_activity_id,normalised_status&match_status=eq.matched&villa_id=in.('+ids+')').then(function(cr){
+    return dbGetAll('v_latest_clearance_status?select=villa_id,clearance_activity_id,normalised_status&match_status=eq.matched&villa_id=in.('+ids+')&order=id').then(function(cr){
       cr.forEach(function(r){
         var code=clrIC[r.clearance_activity_id];
         if(!code)return;
@@ -984,7 +1118,7 @@ function loadVillaData(vids){
   });
 }
 
-function openNW(){document.getElementById('nwal').innerHTML='';document.getElementById('nwnm').value='';document.getElementById('nwbd').classList.add('on');setTimeout(function(){document.getElementById('nwnm').focus();},50);}
+function openNW(){document.getElementById('nwal').innerHTML='';document.getElementById('nwnm').value='';fillTplSelect();document.getElementById('nwbd').classList.add('on');setTimeout(function(){document.getElementById('nwnm').focus();},50);}
 function clsNW(){document.getElementById('nwbd').classList.remove('on');}
 function crWeek(){
   if(!canManageTargets()){alert('No permission to create weeks.');return;}
@@ -994,7 +1128,8 @@ function crWeek(){
   var al=document.getElementById('nwal');
   if(!nm){al.innerHTML='<div class="al ale">Enter a week name.</div>';return;}
   if(weeks.find(function(w){return w.week_name===nm;})){al.innerHTML='<div class="al ale">Week already exists.</div>';return;}
-  dbPost('weekly_targets',{week_name:nm,target_date:dt||null,discipline:dc,villa_id:null,is_active:true}).then(function(){
+  var tpl=(document.getElementById('nwtpl')||{}).value||null;
+  dbPost('weekly_targets',{week_name:nm,target_date:dt||null,discipline:dc,villa_id:null,is_active:true,template_name:tpl}).then(function(){
     clsNW();return loadWeeks();
   }).then(function(){selWeek(nm);}).catch(function(e){al.innerHTML='<div class="al ale">Error: '+e.message+'</div>';});
 }
@@ -1054,7 +1189,7 @@ function svVillas(){
   var al=document.getElementById('aval');
   if(!toAdd.length){al.innerHTML='<div class="al ale">No new valid villas to add.</div>';return;}
   var wk=weeks.find(function(w){return w.week_name===actWk;})||{};
-  var rows=toAdd.map(function(v){return{week_name:actWk,target_date:wk.target_date||null,discipline:wk.discipline||'mechanical',villa_id:v.id,villa_no:String(v.villa_no),cluster:v.cluster,villa_type:v.villa_type,is_active:true};});
+  var rows=toAdd.map(function(v){return{week_name:actWk,target_date:wk.target_date||null,discipline:wk.discipline||'mechanical',villa_id:v.id,villa_no:String(v.villa_no),cluster:v.cluster,villa_type:v.villa_type,is_active:true,template_name:wk.template_name||null};});
   dbPost('weekly_targets',rows).then(function(){
     al.innerHTML='<div class="al als">&#10003; Added '+rows.length+' villas.</div>';
     setTimeout(function(){clsAV();loadWeeks().then(function(){selWeek(actWk);});},700);
@@ -1063,6 +1198,7 @@ function svVillas(){
 
 function rmVilla(vid){
   if(!canManageTargets()){alert('No permission to modify targets.');return;}
+  if(actWk===MASTER){alert('The master sheet spans all weeks — open the specific week to remove a villa from it.');return;}
   if(!actWk||!confirm('Remove this villa from the target list?'))return;
   dbDel('weekly_targets?week_name=eq.'+encodeURIComponent(actWk)+'&villa_id=eq.'+vid).then(function(){
     return loadWeeks();
@@ -1070,6 +1206,25 @@ function rmVilla(vid){
 }
 
 function togFlag(vid,key,el){
+  if(actWk===MASTER){
+    // Master sheet: propagate the tick to EVERY week (this discipline) containing the villa.
+    // If it's on in all weeks \u2192 turn all off; otherwise (none or some) \u2192 turn all on.
+    var wks=vidWeeks[vid]||[];
+    if(!wks.length)return;
+    var cnt=(mFlagCnt[vid]&&mFlagCnt[vid][key])||0;
+    var val=!(cnt>=wks.length);
+    if(!mFlagCnt[vid])mFlagCnt[vid]={};
+    mFlagCnt[vid][key]=val?wks.length:0;
+    if(!flagsD[vid])flagsD[vid]={};
+    flagsD[vid][key]=val;
+    el.classList.toggle('on',val);
+    el.classList.remove('mix');
+    el.querySelector('.tkb').textContent=val?'\u2713':'';
+    var now=new Date().toISOString();
+    var rows=wks.map(function(w){return {week_name:w,villa_id:vid,col_key:key,checked:val,updated_at:now};});
+    dbUpsert('target_villa_flags',rows).catch(function(e){console.warn('master flag save error:',e);});
+    return;
+  }
   var cur=!!(flagsD[vid]&&flagsD[vid][key]);
   var val=!cur;
   if(!flagsD[vid])flagsD[vid]={};
@@ -1192,7 +1347,12 @@ function buildTbl(){
       if(col.type==='div'){r+='<td class="dc"></td>';return;}
       if(col.type==='tick'){
         var tk=!!(flagsD[vid]&&flagsD[vid][col.key]);
-        r+='<td class="td-tk"><div class="tk'+(tk?' on':'')+'" onclick="togFlag('+vid+',\''+col.key+'\',this)"><div class="tkb">'+(tk?'\u2713':'')+'</div></div></td>';
+        var mix='';
+        if(actWk===MASTER&&!tk){
+          var mc=(mFlagCnt[vid]&&mFlagCnt[vid][col.key])||0;
+          if(mc>0)mix=' mix'; // checked in some (not all) of this villa's weeks
+        }
+        r+='<td class="td-tk"><div class="tk'+(tk?' on':'')+mix+'" onclick="togFlag('+vid+',\''+col.key+'\',this)" '+(mix?'title="Ticked in some weeks only \u2014 click to tick in ALL"':'')+'><div class="tkb">'+(tk?'\u2713':(mix?'\u2013':''))+'</div></div></td>';
         return;
       }
       if(col.type==='clr'){
@@ -1748,16 +1908,17 @@ function canManageTargets() {
 
 function applyTargetPermissions() {
   const canWrite = canManageTargets();
+  const inMaster = (actWk === MASTER); // master spans all weeks — no per-week add/remove/delete
   // New week button
   const newWkBtn = document.querySelector('button[onclick="openNW()"]');
   if (newWkBtn) newWkBtn.style.display = canWrite ? '' : 'none';
   // Delete week button
   const delWkBtn = document.getElementById('bdw');
-  if (delWkBtn) delWkBtn.style.display = canWrite ? '' : 'none';
+  if (delWkBtn) delWkBtn.style.display = (canWrite && !inMaster) ? '' : 'none';
   // Remove villa (x) buttons
-  document.querySelectorAll('button.vx').forEach(b => b.style.display = canWrite ? '' : 'none');
+  document.querySelectorAll('button.vx').forEach(b => b.style.display = (canWrite && !inMaster) ? '' : 'none');
   // Add Villas button
-  document.querySelectorAll('button[onclick="openAV()"], button[onclick*="avbd"]').forEach(b => b.style.display = canWrite ? '' : 'none');
+  document.querySelectorAll('button[onclick="openAV()"], button[onclick*="avbd"]').forEach(b => b.style.display = (canWrite && !inMaster) ? '' : 'none');
   // Column editor + reset — only manage_targets can edit columns
   const colBtn = document.getElementById('btn-edit-cols');
   if (colBtn) colBtn.style.display = canWrite ? '' : 'none';
