@@ -159,7 +159,10 @@ input,select,textarea{font:inherit;color:inherit}
 .tw::-webkit-scrollbar{width:10px;height:10px}
 .tw::-webkit-scrollbar-track{background:var(--bg)}
 .tw::-webkit-scrollbar-thumb{background:var(--border-strong);border:2px solid var(--bg);border-radius:5px}
-table{border-collapse:collapse;width:max-content;min-width:100%}
+table{border-collapse:collapse;width:max-content}
+/* No min-width:100% — with few visible columns (e.g. a small template) the surplus width
+   used to get distributed into the columns, stretching the villa column and leaving the
+   88px cells floating inside huge cells. Natural width + horizontal scroll when wide. */
 thead{position:sticky;top:0;z-index:50}
 thead th{background:var(--bg-elev);border:1px solid var(--border-strong);padding:0;vertical-align:bottom}
 thead th.vc{min-width:200px;width:200px;background:var(--bg-panel);
@@ -586,6 +589,10 @@ body.in-shell header { display: none !important; }
 /* Master-sheet mixed tick: checked in some (not all) weeks containing the villa */
 .tk.mix{border-color:var(--st-progress-tx,#f4c95a)}
 .tk.mix .tkb{color:var(--st-progress-tx,#f4c95a);font-weight:800}
+/* Per-target villa priority badges (weekly_targets.priority — not the global system) */
+.prio{font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;letter-spacing:.03em}
+.prio.p1{background:rgba(244,190,60,.18);color:#f4be3c;border:1px solid #b98f2a}
+.prio.p2{background:rgba(79,140,255,.16);color:#7ba4ff;border:1px solid #3a6ad4}
 </style>
 
 <!-- Add Villas modal -->
@@ -603,6 +610,15 @@ body.in-shell header { display: none !important; }
           <option>C1</option><option>C2</option><option>C3</option>
           <option>C4</option><option>C5</option><option>C6</option><option>C7</option>
         </select>
+      </div>
+      <div class="fr">
+        <label>Target priority (this week only — separate from the global priority list)</label>
+        <select id="avpr" onchange="pvAV()">
+          <option value="">No priority</option>
+          <option value="1">⭐ Priority 1</option>
+          <option value="2">★ Priority 2</option>
+        </select>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Add your Priority 1 batch first, then reopen and add the Priority 2 batch. Re-adding an existing villa with a priority selected updates its priority.</div>
       </div>
       <div class="fr">
         <label>Villa numbers (comma / space / newline separated)</label>
@@ -734,6 +750,7 @@ var vidWeeks={};               // master: villa_id -> [week_name, ...] containin
 var mFlagCnt={};               // master: villa_id -> {col_key: how many of its weeks are checked}
 var actTpl=null;               // template name of the active week (null = global layout)
 var tplList={mechanical:[],electrical:[]}; // cached template names per discipline
+var tPrio={};                  // villa_id -> 1|2 target priority for the active week (master: best across weeks)
 
 // Sub-contractor label visibility — simple global toggle
 var subsHidden=false;
@@ -1022,8 +1039,9 @@ function selWeek(nm){
   document.getElementById('bdw').style.display='';
   document.getElementById('mn').setAttribute('data-week',nm);
   setS2('Loading...');
-  dbGetAll('weekly_targets?select=villa_id&week_name=eq.'+encodeURIComponent(nm)+'&is_active=eq.true&villa_id=not.is.null&order=id').then(function(rows){
+  dbGetAll('weekly_targets?select=villa_id,priority&week_name=eq.'+encodeURIComponent(nm)+'&is_active=eq.true&villa_id=not.is.null&order=id').then(function(rows){
     tVillas=rows.map(function(r){return r.villa_id;});
+    tPrio={};rows.forEach(function(r){if(r.priority)tPrio[r.villa_id]=r.priority;});
     return loadVillaData(tVillas);
   }).then(function(){
     flagsD={};
@@ -1047,14 +1065,15 @@ function selMaster(d){
   document.getElementById('bav').style.display='none';
   document.getElementById('bdw').style.display='none';
   document.getElementById('mn').setAttribute('data-week','Master '+d);
-  vidWeeks={};mFlagCnt={};flagsD={};tVillas=[];
+  vidWeeks={};mFlagCnt={};flagsD={};tVillas=[];tPrio={};
   if(!relWeeks.length){buildSum();render();setS2('');return;}
   setS2('Loading master...');
   var wkIn='week_name=in.('+encodeURIComponent(relWeeks.map(function(n){return '"'+n.replace(/"/g,'\\"')+'"';}).join(','))+')';
-  dbGetAll('weekly_targets?select=villa_id,week_name&is_active=eq.true&villa_id=not.is.null&'+wkIn+'&order=id').then(function(rows){
+  dbGetAll('weekly_targets?select=villa_id,week_name,priority&is_active=eq.true&villa_id=not.is.null&'+wkIn+'&order=id').then(function(rows){
     rows.forEach(function(r){
       if(!vidWeeks[r.villa_id])vidWeeks[r.villa_id]=[];
       if(vidWeeks[r.villa_id].indexOf(r.week_name)<0)vidWeeks[r.villa_id].push(r.week_name);
+      if(r.priority&&(!tPrio[r.villa_id]||r.priority<tPrio[r.villa_id]))tPrio[r.villa_id]=r.priority; // best (P1 beats P2) across weeks
     });
     tVillas=Object.keys(vidWeeks).map(Number);
     return loadVillaData(tVillas);
@@ -1148,11 +1167,13 @@ function delWeek(){
 }
 
 function openAV(){
+  if(actWk===MASTER)return; // master spans all weeks — add villas in a specific week
   document.getElementById('avin').value='';
   document.getElementById('avpv').style.display='none';
   document.getElementById('avpv').innerHTML='';
   document.getElementById('aval').innerHTML='';
   document.getElementById('avcl').value='';
+  var pr=document.getElementById('avpr');if(pr)pr.value='';
   document.getElementById('avbd').classList.add('on');
   setTimeout(function(){document.getElementById('avin').focus();},50);
 }
@@ -1169,11 +1190,16 @@ function pvAV(){
   var pv=document.getElementById('avpv');
   if(!nums.length){pv.style.display='none';return;}
   var ex={};tVillas.forEach(function(id){ex[id]=1;});
+  var pr=(document.getElementById('avpr')||{}).value||'';
+  var prLbl=pr==='1'?'P1 ⭐':pr==='2'?'P2 ★':'';
   var html=nums.map(function(n){
     var v=resVilla(n,cf);
     if(!v)return '<div class="pvr"><span style="color:var(--st-rejected-tx)">&#10007; Villa '+n+(cf?' in '+cf:'')+'&nbsp;&mdash;&nbsp;not found</span></div>';
-    if(ex[v.id])return '<div class="pvr"><span style="color:var(--st-progress-tx)">&#9888; Villa '+n+'&nbsp;&mdash;&nbsp;already in list</span></div>';
-    return '<div class="pvr"><span style="color:var(--st-approved-tx)">&#10003; Villa '+n+'</span><span style="color:var(--text-muted);margin-left:8px">'+v.cluster+' &middot; '+v.villa_type+'</span></div>';
+    if(ex[v.id]){
+      if(pr)return '<div class="pvr"><span style="color:var(--st-progress-tx)">&#9888; Villa '+n+'&nbsp;&mdash;&nbsp;already in list, priority will be set to '+prLbl+'</span></div>';
+      return '<div class="pvr"><span style="color:var(--st-progress-tx)">&#9888; Villa '+n+'&nbsp;&mdash;&nbsp;already in list</span></div>';
+    }
+    return '<div class="pvr"><span style="color:var(--st-approved-tx)">&#10003; Villa '+n+(prLbl?' <b>'+prLbl+'</b>':'')+'</span><span style="color:var(--text-muted);margin-left:8px">'+v.cluster+' &middot; '+v.villa_type+'</span></div>';
   }).join('');
   pv.innerHTML=html;pv.style.display='block';
 }
@@ -1182,16 +1208,26 @@ function svVillas(){
   if(!canManageTargets()){alert('No permission to modify targets.');return;}
   var raw=document.getElementById('avin').value;
   var cf=document.getElementById('avcl').value;
+  var pr=parseInt((document.getElementById('avpr')||{}).value,10)||null;
   var parts=raw.split(/[\s,\n]+/);
   var nums=[];parts.forEach(function(p){var n=parseInt(p,10);if(!isNaN(n)&&n>0&&nums.indexOf(n)<0)nums.push(n);});
   var ex={};tVillas.forEach(function(id){ex[id]=1;});
-  var toAdd=nums.map(function(n){return resVilla(n,cf);}).filter(function(v){return v&&!ex[v.id];});
+  var resolved=nums.map(function(n){return resVilla(n,cf);}).filter(Boolean);
+  var toAdd=resolved.filter(function(v){return !ex[v.id];});
+  var toUpd=pr?resolved.filter(function(v){return ex[v.id];}):[]; // re-added with a priority chosen → update it
   var al=document.getElementById('aval');
-  if(!toAdd.length){al.innerHTML='<div class="al ale">No new valid villas to add.</div>';return;}
+  if(!toAdd.length&&!toUpd.length){al.innerHTML='<div class="al ale">No new valid villas to add.</div>';return;}
   var wk=weeks.find(function(w){return w.week_name===actWk;})||{};
-  var rows=toAdd.map(function(v){return{week_name:actWk,target_date:wk.target_date||null,discipline:wk.discipline||'mechanical',villa_id:v.id,villa_no:String(v.villa_no),cluster:v.cluster,villa_type:v.villa_type,is_active:true,template_name:wk.template_name||null};});
-  dbPost('weekly_targets',rows).then(function(){
-    al.innerHTML='<div class="al als">&#10003; Added '+rows.length+' villas.</div>';
+  var rows=toAdd.map(function(v){return{week_name:actWk,target_date:wk.target_date||null,discipline:wk.discipline||'mechanical',villa_id:v.id,villa_no:String(v.villa_no),cluster:v.cluster,villa_type:v.villa_type,is_active:true,template_name:wk.template_name||null,priority:pr};});
+  var p=rows.length?dbPost('weekly_targets',rows):Promise.resolve();
+  p.then(function(){
+    if(!toUpd.length)return;
+    return fetch(SB+'/rest/v1/weekly_targets?week_name=eq.'+encodeURIComponent(actWk)+'&villa_id=in.('+toUpd.map(function(v){return v.id;}).join(',')+')',{
+      method:'PATCH',headers:hdr({'Prefer':'return=minimal'}),body:JSON.stringify({priority:pr})
+    }).then(function(r){if(!r.ok)return r.text().then(function(t){throw new Error(t);});});
+  }).then(function(){
+    var bits=[];if(rows.length)bits.push('added '+rows.length);if(toUpd.length)bits.push('updated priority on '+toUpd.length);
+    al.innerHTML='<div class="al als">&#10003; '+bits.join(', ')+' villa'+((rows.length+toUpd.length)!==1?'s':'')+'.</div>';
     setTimeout(function(){clsAV();loadWeeks().then(function(){selWeek(actWk);});},700);
   }).catch(function(e){al.innerHTML='<div class="al ale">Error: '+e.message+'</div>';});
 }
@@ -1248,10 +1284,14 @@ function buildSum(){
   var clPills=Object.keys(clCounts).sort().map(function(cl){
     return '<div class="sc"><div class="sv" style="color:var(--accent-text)">'+clCounts[cl]+'</div><div class="sl">'+cl+'</div></div>';
   }).join('');
+  var p1=0,p2=0;tVillas.forEach(function(v){if(tPrio[v]===1)p1++;else if(tPrio[v]===2)p2++;});
+  var prPills=(p1?'<div class="sc"><div class="sv" style="color:#f4be3c">'+p1+'</div><div class="sl">P1 ⭐</div></div>':'')
+    +(p2?'<div class="sc"><div class="sv" style="color:#7ba4ff">'+p2+'</div><div class="sl">P2 ★</div></div>':'');
   document.getElementById('sr').innerHTML=
     '<div class="sc t"><div class="sv">'+t+'</div><div class="sl">Total</div></div>'
     +'<div class="sr-div"></div>'
     +clPills
+    +(prPills?'<div class="sr-div"></div>'+prPills:'')
     +'<div class="sr-div"></div>'
     +'<div class="sc a"><div class="sv">'+aa+'</div><div class="sl">All Approved</div></div>'
     +'<div class="sc u"><div class="sv">'+hp+'</div><div class="sl">Pending</div></div>'
@@ -1338,7 +1378,7 @@ function buildTbl(){
     var r='<tr data-vid="'+vid+'" data-cluster="'+v.cluster+'">'
       +'<td class="vc"><div class="vc2">'
       +'<button class="vx" onclick="rmVilla('+vid+')" title="Remove">&#215;</button>'
-      +'<div class="vn">'+v.villa_no+'</div>'
+      +'<div class="vn">'+v.villa_no+(tPrio[vid]===1?' <span class="prio p1">P1 ⭐</span>':tPrio[vid]===2?' <span class="prio p2">P2 ★</span>':'')+'</div>'
       +'<div style="display:flex;align-items:center;gap:4px;margin-top:1px">'
       +'<span class="cl-pill">'+v.cluster+'</span>'
       +(v.villa_type?'<span class="vt">'+v.villa_type+'</span>':'')
