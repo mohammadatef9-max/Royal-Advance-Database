@@ -2561,7 +2561,44 @@ function doCopy(mode){
     document.getElementById('copy-overlay')?.remove();
   });
 }
+// Print options dialog — paper size + columns per page, remembered per paper.
+const PRINT_DEF_COLS={A3:17,A4:10};
 function printTracker(){
+  if(document.getElementById('print-opts'))return;
+  const paper=localStorage.getItem('ct_print_paper')||'A3';
+  const cols=parseInt(localStorage.getItem('ct_print_cols_'+paper))||PRINT_DEF_COLS[paper];
+  const ov=document.createElement('div');
+  ov.id='print-opts';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:900;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML=`<div class="modal-box">
+    <h3>🖨 Print Tracker</h3>
+    <div class="mr"><label>Paper Size</label>
+      <select id="po-paper">
+        <option value="A3"${paper==='A3'?' selected':''}>A3 landscape</option>
+        <option value="A4"${paper==='A4'?' selected':''}>A4 landscape</option>
+      </select></div>
+    <div class="mr"><label>Activity Columns Per Page</label>
+      <input id="po-cols" type="number" min="4" max="30" value="${cols}">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">Parts wider than the paper are scaled down to fit — more columns = smaller cells.</div></div>
+    <div class="mb">
+      <button class="b-save" onclick="startPrint()">Print</button>
+      <button class="b-cancel" onclick="document.getElementById('print-opts').remove()">Cancel</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click',e=>{if(e.target===ov)ov.remove();});
+  document.body.appendChild(ov);
+  document.getElementById('po-paper').onchange=function(){
+    document.getElementById('po-cols').value=parseInt(localStorage.getItem('ct_print_cols_'+this.value))||PRINT_DEF_COLS[this.value];
+  };
+}
+function startPrint(){
+  const paper=document.getElementById('po-paper').value;
+  const maxCols=Math.max(4,Math.min(30,parseInt(document.getElementById('po-cols').value)||PRINT_DEF_COLS[paper]));
+  try{localStorage.setItem('ct_print_paper',paper);localStorage.setItem('ct_print_cols_'+paper,maxCols);}catch(e){}
+  document.getElementById('print-opts').remove();
+  doPrintTracker(paper,maxCols);
+}
+function doPrintTracker(paper,maxCols){
   const cl=document.getElementById('fcl').value||'All Clusters';
   const discLabel=discLabelFor(disc);
   const now=new Date();
@@ -2594,15 +2631,13 @@ function printTracker(){
     if(hdRows[0].cells[i].style.display==='none')continue;
     colIdx.push(i);
   }
-  // Width budget (pt): A4 landscape 297mm minus 8mm page margins and 8mm body
-  // padding each side ≈ 751pt printable; fixed trio ≈ 110pt.
-  const BUDGET=751-110;
-  const chunks=[];let cur=[],curW=0;
+  // Chunk by column count (user's choice); dividers don't count. Parts wider
+  // than the paper are scaled down to fit by the print window's zoom pass.
+  const chunks=[];let cur=[],n=0;
   colIdx.forEach(i=>{
-    const w=isDiv(i)?5:64;
-    if(curW+w>BUDGET&&cur.length){chunks.push(cur);cur=[];curW=0;}
+    if(n>=maxCols&&cur.length){chunks.push(cur);cur=[];n=0;}
     if(!cur.length&&isDiv(i))return; // never start a page with a divider
-    cur.push(i);curW+=w;
+    cur.push(i);if(!isDiv(i))n++;
   });
   if(cur.length)chunks.push(cur);
   chunks.forEach(c=>{while(c.length&&isDiv(c[c.length-1]))c.pop();}); // no trailing dividers
@@ -2695,7 +2730,7 @@ td{border:1pt solid #e2e8f0;padding:0;vertical-align:top;text-align:center}
 .c-ready{background:#bae6fd;color:#0c4a6e;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .c-not_ready{background:#fecaca;color:#7f1d1d;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 tr.rh{display:none}
-@page{size:landscape;margin:8mm}
+@page{size:${paper} landscape;margin:8mm}
 </style>
 </head>
 <body>
@@ -2744,9 +2779,9 @@ ${tableHTML}
 <script>
   // Auto-print then close
   window.onload=function(){
-    // Safety net: real data (long sub names, wrapped labels) can push a part a
-    // little past the estimated page width — shrink just that part to fit.
-    var LIMIT=1002; // px ≈ printable width of A4 landscape minus margins+padding
+    // Fit pass: shrink any part wider than the paper down to the printable
+    // width (px = paper width minus page margins and body padding at 96dpi).
+    var LIMIT=${paper==='A3'?1466:1002};
     document.querySelectorAll('.chunk').forEach(function(ch){
       var t=ch.querySelector('table');
       if(t&&t.scrollWidth>LIMIT)ch.style.zoom=(LIMIT/t.scrollWidth).toFixed(3);
