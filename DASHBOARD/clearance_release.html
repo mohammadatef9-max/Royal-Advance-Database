@@ -134,7 +134,7 @@ body.in-shell .topbar{display:none!important}
   <span class="tb-title">Clearance Release</span>
   <div class="tb-spacer"></div>
   <div class="tb-live"><span class="tb-dot"></span>Live</div>
-  <button class="btn btn-warn" style="font-size:11px;padding:5px 12px" onclick="runCsvConfirmationCheck()">↺ Run CSV Check</button>
+  <button class="btn btn-warn" style="font-size:11px;padding:5px 12px" title="Runs automatically after every clearance-log import" onclick="runCsvConfirmationCheck()">↺ Verify vs DC Log</button>
   <span class="tb-clock" id="clock">--:--:--</span>
 </div>
 <div class="tab-bar">
@@ -435,7 +435,7 @@ function buildCard(r,showActions){
     const discColor=disc==='electrical'?'var(--progress)':'var(--accent-text)';
     return`<span class="prereq-chip pc-${st}">${code} <span style="font-size:8px;opacity:.75;color:${discColor}">[${disc[0].toUpperCase()}]</span>: ${st.replace(/_/g,' ')}</span>`;
   }).join('');
-  const statusLabel={pending_site_engineer:'SE Review',pending_dc:'Pending DC',dc_released:'Released ✓ Complete',dc_rejected:'DC Rejected',csv_confirmed:'CSV Confirmed ✓',csv_failed:'CSV Failed — Reraise',sent_to_dc:'Sent to DC (legacy)'}[r.status]||r.status;
+  const statusLabel={pending_site_engineer:'SE Review',pending_dc:'Pending DC',dc_released:'Released ✓ Complete',dc_rejected:'DC Rejected',csv_confirmed:'Confirmed ✓ Complete',csv_failed:'Failed to Release ↩',sent_to_dc:'Sent to DC (legacy)'}[r.status]||r.status;
   let actions='';
   if(showActions&&r.status==='pending_dc'){
     if(isAdmin()||hasPerm('confirm_release')){
@@ -446,7 +446,7 @@ function buildCard(r,showActions){
   }
   if(r.status==='csv_failed')actions+=`<div class="card-actions"><button class="btn btn-warn btn-sm" data-reraise="${r.id}" onclick="reraiseRequest(${r.id})">↺ Re-raise to DC</button></div>`;
   const dcNote=r.dc_action==='rejected'&&r.dc_rejection_note?`<div class="note-box rejected">DC Rejection Note: ${r.dc_rejection_note}</div>`:'';
-  const csvFail=r.status==='csv_failed'?`<div class="note-box failed">⚠ CSV import did not confirm release — clearance still not fully approved in DC. Re-raise to DC queue.</div>`:'';
+  const csvFail=r.status==='csv_failed'?`<div class="note-box failed">⚠ DC marked this released, but the imported clearance log does not show it fully approved. It is back in <strong>Ready to Release</strong> — release it again or re-raise directly to DC.</div>`:'';
   const autoTag=r.auto_submitted?`<span class="status-pill sp-auto">AUTO</span>`:'';
   return`<div class="clr-card status-${r.status}">
     <div class="card-top">
@@ -528,7 +528,7 @@ function renderDaily(){
           <td style="padding:7px 12px"><span class="villa-badge">${v.cluster||'?'} · ${v.villa_no||'?'}</span></td>
           <td style="padding:7px 12px;color:var(--text)">${nm}</td>
           <td style="padding:7px 12px;font-family:var(--mono);font-size:11px;color:var(--text-dim)">${cc}</td>
-          <td style="padding:7px 12px"><span class="status-pill ${rel?'sp-dc_released':'sp-dc_rejected'}">${rel?'Released ✓':'Rejected ✕'}</span>${!rel&&r.dc_rejection_note?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${r.dc_rejection_note}</div>`:''}</td>
+          <td style="padding:7px 12px"><span class="status-pill ${rel?'sp-dc_released':'sp-dc_rejected'}">${rel?'Released ✓':'Rejected ✕'}</span>${r.status==='csv_failed'?`<div style="font-size:10px;color:var(--rejected);margin-top:2px">↩ later failed — log never confirmed</div>`:''}${!rel&&r.dc_rejection_note?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${r.dc_rejection_note}</div>`:''}</td>
           <td style="padding:7px 12px;font-size:11px;color:var(--text-muted)">${r.dc_actioned_by||'—'}</td>
         </tr>`;}).join('')}</tbody>
     </table>
@@ -735,29 +735,18 @@ async function reraiseRequest(reqId){
 }
 
 async function runCsvConfirmationCheck(){
-  const dcReleased=requests.filter(r=>r.status==='dc_released');
-  if(!dcReleased.length){toast('No dc_released requests to check','info');return;}
-  toast('Running CSV confirmation check…','info');
-  let confirmed=0,failed=0;
-  for(const req of dcReleased){
-    const v=getVilla(req.villa_id);
-    const clrCode=getClrCode(req.clearance_activity_id);
-    if(!v.cluster||!v.villa_no||!clrCode)continue;
-    try{
-      // Check canonical code + any alias codes
-      const aliasesToCheck=[clrCode,...(CLR_ALIASES[clrCode]||[])];
-      let status='not_submitted';
-      for(const chkCode of aliasesToCheck){
-        const rows=await fa(`v_latest_clearance_status?select=normalised_status&villa_id=eq.${req.villa_id}&raw_clearance_code=eq.${encodeURIComponent(chkCode)}&limit=1`);
-        if(rows[0]?.normalised_status==='fully_approved'){status='fully_approved';break;}
-        if(rows[0]?.normalised_status&&status==='not_submitted')status=rows[0].normalised_status;
-      }
-      if(status==='fully_approved'){await patch(`clearance_release_requests?id=eq.${req.id}`,{status:'csv_confirmed',confirmed_by_csv:true,confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString()});confirmed++;}
-      else if(status==='not_approved'||status==='pending'){await patch(`clearance_release_requests?id=eq.${req.id}`,{status:'csv_failed',updated_at:new Date().toISOString()});failed++;}
-    }catch(e){console.warn('CSV check err req',req.id,e.message);}
-  }
-  toast(`CSV check done: ${confirmed} confirmed ✓, ${failed} failed ✗`,failed?'warn':'ok');
-  await loadAll();
+  // Server-side check (also runs automatically after every clearance-log import):
+  // dc_released + log shows fully approved → csv_confirmed (complete);
+  // dc_released + log does NOT confirm → csv_failed = failed to release, back in Ready.
+  // Same-day releases are skipped — today's log predates them.
+  toast('Verifying released requests against the imported DC log…','info');
+  try{
+    const r=await fetch(`${SB}/rest/v1/rpc/confirm_clearance_releases`,{method:'POST',headers:getH(),body:'{}'});
+    if(!r.ok)throw new Error(await r.text());
+    const res=await r.json();
+    toast(`Check done: ${res.confirmed} confirmed complete ✓, ${res.failed} failed to release ↩`,res.failed?'warn':'ok');
+    await loadAll();
+  }catch(e){toast('Check error: '+e.message,'err');}
 }
 
 
@@ -993,13 +982,18 @@ function renderReady(){
     const CS_COLOR={not_received:'var(--text-dim)',pending:'var(--progress)',not_approved:'var(--rejected)'};
     const CS_BG={not_received:'var(--bg-hover)',pending:'var(--progress-bg)',not_approved:'var(--rejected-bg)'};
     const dcStatusBadge=`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:${CS_BG[csNorm]};color:${CS_COLOR[csNorm]}">${CS_LABEL[csNorm]}</span>`;
-    return `<div class="clr-card" style="border-left:3px solid var(--approved)">
+    // Flag items that came back after a failed release (DC said released, log never confirmed)
+    const clrIdF=clrActivities[r.clearance_code]?.id;
+    const failedBefore=requests.some(req=>req.villa_id===r.villa_id&&req.clearance_activity_id===clrIdF&&req.status==='csv_failed');
+    const failedBadge=failedBefore?`<span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:999px;background:var(--rejected-bg);color:var(--rejected);border:1px solid var(--rejected-bd,rgba(255,107,107,.3))">↩ Failed to release before</span>`:'';
+    return `<div class="clr-card" style="border-left:3px solid ${failedBefore?'var(--rejected)':'var(--approved)'}">
       <div class="card-top">
         <span class="villa-badge">${r.cluster} · Villa ${r.villa_no}</span>
         <span class="clr-name">${r.clearance_name||r.clearance_code}</span>
         <span class="clr-code">${r.clearance_code}</span>
         ${routeBadge}
         ${dcStatusBadge}
+        ${failedBadge}
         <span class="status-pill sp-dc_released">Ready ✓</span>
       </div>
       <div class="card-meta"><span style="color:var(--text-dim);font-size:11px">All prerequisite WIRs approved</span></div>

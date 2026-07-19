@@ -971,6 +971,11 @@ async function startImport(type){
     // Approved WIRs auto-complete the villa's site progress in the cluster tracker
     try{ const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'}); const n=await r.json(); if(r.ok) addLog(type,'✅ Site progress synced — '+n+' activities marked completed','info'); }
     catch(e){ addLog(type,'⚠ Progress sync failed (import still saved): '+e.message,'warn'); }
+  } else {
+    // Verify DC-released clearance requests against this fresh log: confirmed ones
+    // complete; unconfirmed ones go back to Ready to Release flagged as failed.
+    try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) addLog(type,'✅ Release check — '+res.confirmed+' confirmed complete, '+res.failed+' failed to release (back in Ready)','info'); }
+    catch(e){ addLog(type,'⚠ Release check failed (import still saved): '+e.message,'warn'); }
   }
   // Announce only after matviews + progress sync are done (refreshing earlier shows stale views)
   try{
@@ -1736,6 +1741,12 @@ async function dcStartUpload(tab){
       // Approved WIRs auto-complete the villa's site progress in the cluster tracker
       try{ const r=await fetch(SB+'/rest/v1/rpc/sync_progress_from_wir',{method:'POST',headers:getH(),body:'{}'}); const n=await r.json(); if(r.ok) dcAddLog(tab,'✅ Site progress synced — '+n+' activities marked completed','info'); }
       catch(e){ dcAddLog(tab,'⚠ Progress sync failed (import still saved): '+e.message,'warn'); }
+    }
+    if(tab==='clr'){
+      // Verify DC-released clearance requests against this fresh log: confirmed ones
+      // complete; unconfirmed ones go back to Ready to Release flagged as failed.
+      try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) dcAddLog(tab,'✅ Release check — '+res.confirmed+' confirmed complete, '+res.failed+' failed to release (back in Ready)','info'); }
+      catch(e){ dcAddLog(tab,'⚠ Release check failed (import still saved): '+e.message,'warn'); }
     }
     // Announce ONLY after matviews + progress sync are done — announcing earlier made
     // people refresh into stale views ("I refreshed and nothing changed").
