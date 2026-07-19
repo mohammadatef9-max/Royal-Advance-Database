@@ -143,6 +143,7 @@ body.in-shell .topbar{display:none!important}
   <button class="tab-btn" id="tbtn-pending" onclick="switchTab('pending')">Pending DC Action <span class="tab-badge" id="badge-pending">0</span></button>
   <button class="tab-btn" id="tbtn-actioned" onclick="switchTab('actioned')">DC Actioned <span class="tab-badge ok" id="badge-actioned">0</span></button>
   <button class="tab-btn" id="tbtn-blocked" onclick="switchTab('blocked')">Blocked Clearances <span class="tab-badge warn" id="badge-blocked">0</span></button>
+  <button class="tab-btn" id="tbtn-daily" onclick="switchTab('daily')">📅 Daily Log <span class="tab-badge ok" id="badge-daily">0</span></button>
 </div>
 <div class="page-area">
   <div class="tab-content active" id="tab-ready"><div class="inner">
@@ -201,7 +202,7 @@ body.in-shell .topbar{display:none!important}
   <div class="tab-content" id="tab-actioned"><div class="inner">
     <div class="kpi-strip" id="kpi-actioned"></div>
     <div class="toolbar">
-      <select class="fsel" id="af-status" onchange="renderActioned()"><option value="">All</option><option value="dc_released">DC Released</option><option value="dc_rejected">DC Rejected</option><option value="csv_confirmed">CSV Confirmed ✓</option><option value="csv_failed">CSV Failed</option></select>
+      <select class="fsel" id="af-status" onchange="renderActioned()"><option value="">All</option><option value="dc_released">Released ✓</option><option value="dc_rejected">DC Rejected</option><option value="csv_confirmed">CSV Confirmed ✓</option><option value="csv_failed">CSV Failed</option></select>
       <select class="fsel" id="af-cl" onchange="renderActioned()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
       <input class="finp" id="af-q" placeholder="Villa no or code…" oninput="renderActioned()">
       <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
@@ -237,6 +238,22 @@ body.in-shell .topbar{display:none!important}
       <div id="blocked-list"></div>
     </div>
   </div>
+
+  <div class="tab-content" id="tab-daily"><div class="inner">
+    <div class="kpi-strip" id="kpi-daily"></div>
+    <div class="toolbar">
+      <button class="btn btn-ghost" onclick="dailyShift(-1)">‹</button>
+      <input class="finp" type="date" id="df-date" onchange="renderDaily()" style="min-width:150px">
+      <button class="btn btn-ghost" onclick="dailyShift(1)">›</button>
+      <button class="btn btn-ghost" onclick="dailyToday()">Today</button>
+      <select class="fsel" id="df-cl" onchange="renderDaily()"><option value="">All Clusters</option><option>C1</option><option>C2</option><option>C3</option><option>C4</option><option>C5</option><option>C6</option><option>C7</option></select>
+      <button class="btn btn-ghost" onclick="loadAll()">↻ Refresh</button>
+      <button class="btn btn-ghost" onclick="printDaily()">🖨 Print</button>
+      <span class="toolbar-r" id="daily-count"></span>
+    </div>
+    <div class="sec">Clearances actioned by DC on this day</div>
+    <div id="daily-list"></div>
+  </div></div>
 
 </div>
 <div class="modal-overlay" id="dc-modal" onclick="if(event.target===this)closeDcModal()">
@@ -281,7 +298,7 @@ const fmtDT=d=>d?new Date(d).toLocaleString('en-GB',{day:'2-digit',month:'short'
 function toast(msg,type){const c=document.getElementById('toasts');const el=document.createElement('div');el.className='toast '+(type||'info');const icons={ok:'✓',err:'✕',info:'ℹ'};el.innerHTML=`<span style="font-size:15px">${icons[type]||'ℹ'}</span><span>${msg}</span>`;c.appendChild(el);setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),200);},3500);}
 function msg(m){const el=document.getElementById('lmsg');if(el)el.textContent=m;}
 function hideLoad(){document.getElementById('lov').classList.add('gone');}
-function switchTab(t){['ready','sereview','pending','actioned','blocked'].forEach(x=>{document.getElementById('tbtn-'+x)?.classList.toggle('active',x===t);document.getElementById('tab-'+x)?.classList.toggle('active',x===t);});if(t==='blocked')renderBlocked();if(t==='ready')renderReady();if(t==='sereview')renderSEReview();}
+function switchTab(t){['ready','sereview','pending','actioned','blocked','daily'].forEach(x=>{document.getElementById('tbtn-'+x)?.classList.toggle('active',x===t);document.getElementById('tab-'+x)?.classList.toggle('active',x===t);});if(t==='blocked')renderBlocked();if(t==='ready')renderReady();if(t==='sereview')renderSEReview();if(t==='daily')renderDaily();}
 
 async function init(){
   try{
@@ -418,7 +435,7 @@ function buildCard(r,showActions){
     const discColor=disc==='electrical'?'var(--progress)':'var(--accent-text)';
     return`<span class="prereq-chip pc-${st}">${code} <span style="font-size:8px;opacity:.75;color:${discColor}">[${disc[0].toUpperCase()}]</span>: ${st.replace(/_/g,' ')}</span>`;
   }).join('');
-  const statusLabel={pending_site_engineer:'SE Review',pending_dc:'Pending DC',dc_released:'DC Released',dc_rejected:'DC Rejected',csv_confirmed:'CSV Confirmed ✓',csv_failed:'CSV Failed — Reraise',sent_to_dc:'Sent to DC (legacy)'}[r.status]||r.status;
+  const statusLabel={pending_site_engineer:'SE Review',pending_dc:'Pending DC',dc_released:'Released ✓ Complete',dc_rejected:'DC Rejected',csv_confirmed:'CSV Confirmed ✓',csv_failed:'CSV Failed — Reraise',sent_to_dc:'Sent to DC (legacy)'}[r.status]||r.status;
   let actions='';
   if(showActions&&r.status==='pending_dc'){
     if(isAdmin()||hasPerm('confirm_release')){
@@ -454,6 +471,133 @@ function updateBadges(){
   document.getElementById('badge-sereview').textContent=requests.filter(r=>r.status==='pending_site_engineer').length;
   document.getElementById('badge-pending').textContent=requests.filter(r=>r.status==='pending_dc').length;
   document.getElementById('badge-actioned').textContent=requests.filter(r=>['dc_released','dc_rejected','csv_confirmed','csv_failed'].includes(r.status)).length;
+  document.getElementById('badge-daily').textContent=dailyRows(localDate(new Date())).filter(r=>r.dc_action==='released').length;
+}
+
+// ── DAILY LOG ──
+// A request counts on the day DC actioned it (dc_actioned_at, local time).
+// dc_action survives the optional CSV audit steps, so confirmed rows still count.
+const localDate=d=>new Date(d).toLocaleDateString('en-CA');
+function dailyRows(dateStr){
+  return requests.filter(r=>r.dc_action&&r.dc_actioned_at&&localDate(r.dc_actioned_at)===dateStr);
+}
+function dailyShift(n){
+  const inp=document.getElementById('df-date');
+  const d=new Date(inp.value||localDate(new Date()));
+  d.setDate(d.getDate()+n);
+  inp.value=localDate(d);
+  renderDaily();
+}
+function dailyToday(){document.getElementById('df-date').value=localDate(new Date());renderDaily();}
+function renderDaily(){
+  const inp=document.getElementById('df-date');
+  if(!inp.value)inp.value=localDate(new Date());
+  const cl=document.getElementById('df-cl')?.value||'';
+  let items=dailyRows(inp.value);
+  if(cl)items=items.filter(r=>getVilla(r.villa_id).cluster===cl);
+  const released=items.filter(r=>r.dc_action==='released');
+  const rejected=items.filter(r=>r.dc_action==='rejected');
+  // per-cluster counts of released
+  const byCl={};released.forEach(r=>{const c=getVilla(r.villa_id).cluster||'?';byCl[c]=(byCl[c]||0)+1;});
+  const clChips=Object.keys(byCl).sort().map(c=>`<div class="kpi ok"><div class="kpi-v">${byCl[c]}</div><div class="kpi-l">${c} Released</div><div class="kpi-bar"></div></div>`).join('');
+  document.getElementById('kpi-daily').innerHTML=`
+    <div class="kpi ok"><div class="kpi-v">${released.length}</div><div class="kpi-l">Released</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">${inp.value}</div><div class="kpi-bar"></div></div>
+    <div class="kpi err"><div class="kpi-v">${rejected.length}</div><div class="kpi-l">Rejected</div><div class="kpi-bar"></div></div>
+    ${clChips}`;
+  document.getElementById('daily-count').textContent=`${released.length} released · ${rejected.length} rejected`;
+  const el=document.getElementById('daily-list');
+  if(!items.length){el.innerHTML='<div class="empty"><div class="empty-icon">📅</div><p>No clearances actioned by DC on this day.</p></div>';return;}
+  const sorted=[...items].sort((a,b)=>(b.dc_action||'').localeCompare(a.dc_action||'')||new Date(a.dc_actioned_at)-new Date(b.dc_actioned_at));
+  el.innerHTML=`<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--bg-panel)">
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Time</th>
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Villa</th>
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Clearance</th>
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Code</th>
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">Action</th>
+        <th style="text-align:left;padding:8px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)">By</th>
+      </tr></thead>
+      <tbody>${sorted.map(r=>{
+        const v=getVilla(r.villa_id);
+        const cc=getClrCode(r.clearance_activity_id);
+        const nm=clrActivities[cc]?.name||cc;
+        const rel=r.dc_action==='released';
+        return`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:7px 12px;font-family:var(--mono);font-size:11px;color:var(--text-dim)">${new Date(r.dc_actioned_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td>
+          <td style="padding:7px 12px"><span class="villa-badge">${v.cluster||'?'} · ${v.villa_no||'?'}</span></td>
+          <td style="padding:7px 12px;color:var(--text)">${nm}</td>
+          <td style="padding:7px 12px;font-family:var(--mono);font-size:11px;color:var(--text-dim)">${cc}</td>
+          <td style="padding:7px 12px"><span class="status-pill ${rel?'sp-dc_released':'sp-dc_rejected'}">${rel?'Released ✓':'Rejected ✕'}</span>${!rel&&r.dc_rejection_note?`<div style="font-size:10px;color:var(--text-dim);margin-top:2px">${r.dc_rejection_note}</div>`:''}</td>
+          <td style="padding:7px 12px;font-size:11px;color:var(--text-muted)">${r.dc_actioned_by||'—'}</td>
+        </tr>`;}).join('')}</tbody>
+    </table>
+  </div>`;
+}
+function printDaily(){
+  const inp=document.getElementById('df-date');
+  const dateStr=inp.value||localDate(new Date());
+  const cl=document.getElementById('df-cl')?.value||'';
+  let items=dailyRows(dateStr);
+  if(cl)items=items.filter(r=>getVilla(r.villa_id).cluster===cl);
+  if(!items.length){toast('Nothing to print for this day','info');return;}
+  const released=items.filter(r=>r.dc_action==='released');
+  const rejected=items.filter(r=>r.dc_action==='rejected');
+  const sorted=[...items].sort((a,b)=>(b.dc_action||'').localeCompare(a.dc_action||'')||new Date(a.dc_actioned_at)-new Date(b.dc_actioned_at));
+  const rows=sorted.map(r=>{
+    const v=getVilla(r.villa_id);
+    const cc=getClrCode(r.clearance_activity_id);
+    const rel=r.dc_action==='released';
+    return`<tr>
+      <td class="mono">${new Date(r.dc_actioned_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td><span class="cl-badge">${v.cluster||'?'}</span></td>
+      <td class="num">${v.villa_no||'?'}</td>
+      <td>${clrActivities[cc]?.name||cc}</td>
+      <td class="mono">${cc}</td>
+      <td><span class="st-pill ${rel?'st-ok':'st-na'}">${rel?'Released':'Rejected'}</span>${!rel&&r.dc_rejection_note?`<div style="font-size:9px;color:#8a4">${r.dc_rejection_note}</div>`:''}</td>
+      <td style="font-size:10px">${r.dc_actioned_by||'—'}</td>
+    </tr>`;}).join('');
+  const w=window.open('','_blank');
+  if(!w){toast('Pop-up blocked — allow pop-ups to print','err');return;}
+  w.document.write(`<!DOCTYPE html><html><head><title>Daily Clearance Release Log — ${dateStr}</title>
+<meta charset="UTF-8">
+<style>
+@page{ margin:16mm 14mm; }
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,Helvetica,sans-serif;margin:0;padding:28px 32px;color:#1a1f2b;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #1a1f2b;padding-bottom:12px;margin-bottom:4px}
+.hdr h1{font-size:19px;font-weight:800;letter-spacing:-.01em;margin:0}
+.hdr .co{font-size:11px;color:#667;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+.hdr-right{text-align:right;font-size:11px;color:#556}
+.sub{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:#556;margin:10px 0 18px;padding:8px 12px;background:#f4f6f9;border-radius:6px;border:1px solid #e3e8ef}
+.sub b{color:#1a1f2b}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+thead th{background:#1a1f2b;color:#fff;text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+tbody td{padding:8px 10px;border-bottom:1px solid #e3e8ef;vertical-align:top}
+tbody tr:nth-child(even){background:#f8f9fb}
+.num{font-family:'Consolas',monospace;font-weight:600}
+.mono{font-family:'Consolas',monospace;font-size:10.5px;color:#556}
+.cl-badge{display:inline-block;font-family:'Consolas',monospace;font-weight:700;font-size:10.5px;background:#e8edf7;color:#2b4c9b;padding:2px 8px;border-radius:4px}
+.st-pill{display:inline-block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.st-pill.st-ok{background:#d9f2e0;color:#116632}
+.st-pill.st-na{background:#fbe4e4;color:#b3261e}
+tfoot td{padding-top:14px;font-size:10px;color:#8891a0;border:none}
+@media print{ thead{display:table-header-group} tr{page-break-inside:avoid} }
+</style></head><body>
+<div class="hdr">
+  <div><h1>Daily Clearance Release Log</h1><div class="co">MEP Tracker · Clearance Release</div></div>
+  <div class="hdr-right">Day<br><b style="color:#1a1f2b;font-size:12px">${dateStr}</b></div>
+</div>
+<div class="sub"><span>Released: <b>${released.length}</b></span><span>Rejected: <b>${rejected.length}</b></span>${cl?`<span>Cluster: <b>${cl}</b></span>`:''}<span>Generated: <b>${new Date().toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</b></span></div>
+<table>
+  <thead><tr><th>Time</th><th>Cluster</th><th>Villa</th><th>Clearance</th><th>Code</th><th>Action</th><th>By</th></tr></thead>
+  <tbody>${rows}</tbody>
+  <tfoot><tr><td colspan="7">Trojan Construction — MEP Tracker</td></tr></tfoot>
+</table>
+</body></html>`);
+  w.document.close();
+  w.focus();
+  setTimeout(()=>w.print(),300);
 }
 
 function applyFilter(list,{cl,q}){
@@ -474,7 +618,7 @@ function renderPending(){
   const totalMapped=Object.keys(CLR_PREREQS).length;
   document.getElementById('kpi-pending').innerHTML=`
     <div class="kpi dc"><div class="kpi-v">${items.length}</div><div class="kpi-l">Pending DC Action</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Auto-submitted</div><div class="kpi-bar"></div></div>
-    <div class="kpi ok"><div class="kpi-v">${requests.filter(r=>r.status==='csv_confirmed').length}</div><div class="kpi-l">CSV Confirmed</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Fully released</div><div class="kpi-bar"></div></div>
+    <div class="kpi ok"><div class="kpi-v">${requests.filter(r=>r.status==='dc_released'||r.status==='csv_confirmed').length}</div><div class="kpi-l">Released ✓</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Complete</div><div class="kpi-bar"></div></div>
     <div class="kpi warn"><div class="kpi-v">${requests.filter(r=>r.status==='csv_failed').length}</div><div class="kpi-l">CSV Failed</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Needs re-raise</div><div class="kpi-bar"></div></div>
     <div class="kpi err"><div class="kpi-v">${requests.filter(r=>r.status==='dc_rejected').length}</div><div class="kpi-l">DC Rejected</div><div class="kpi-s" style="font-size:10px;color:var(--text-dim);margin-top:2px">Action needed</div><div class="kpi-bar"></div></div>`;
   const el=document.getElementById('pending-list');
@@ -537,9 +681,11 @@ async function confirmDcAction(){
   const newStatus=_dcAction==='released'?'dc_released':'dc_rejected';
   const reqId=_dcReqId;
   try{
+    const actedBy=window.__MEP_USER__?.full_name||window.__MEP_USER__?.display_name||null;
     await patch(`clearance_release_requests?id=eq.${reqId}`,{
       status:newStatus,dc_action:_dcAction,
       dc_actioned_at:new Date().toISOString(),
+      dc_actioned_by:actedBy,
       dc_rejection_note:note||null,
       updated_at:new Date().toISOString()
     });
@@ -547,7 +693,7 @@ async function confirmDcAction(){
     const idx=requests.findIndex(r=>r.id===reqId);
     if(idx>-1){
       requests[idx]={...requests[idx],status:newStatus,dc_action:_dcAction,
-        dc_actioned_at:new Date().toISOString(),dc_rejection_note:note||null};
+        dc_actioned_at:new Date().toISOString(),dc_actioned_by:actedBy,dc_rejection_note:note||null};
     }
     toast(`DC ${_dcAction==='released'?'Released':'Rejected'} — clearance updated`,'ok');
     closeDcModal();
