@@ -15,6 +15,11 @@
    ===================================================================== */
 var SB  = 'https://tactslhsxglzcbsteokf.supabase.co';
 var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhY3RzbGhzeGdsemNic3Rlb2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4MDY1MDgsImV4cCI6MjA5MjM4MjUwOH0.-L21MGuRx_CvcpPP9bAv415nIgPvXDaVXtRhTo1UZ1o';
+/* Key for edge-function calls (functions/v1/*). The telegram-bot function
+   compares the Bearer token to its injected SUPABASE_ANON_KEY, which the
+   platform now supplies in the new publishable format — the legacy JWT KEY
+   above gets a 401 there. PostgREST calls keep using KEY. */
+var FN_KEY = 'sb_publishable_BrJ_ryvmzu9U5Q941sBIZA_WKyxw4T2';
 
 /* Canonical auth-headers helper for new pages. Existing pages keep their
    own getH() on purpose - several differ deliberately (qs.html: no

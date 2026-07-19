@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=3"></script>
+<script src="shared.js?v=4"></script>
 <meta charset="UTF-8">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1080,13 +1080,27 @@ async function saveUser() {
   }
 }
 
-// Telegram deep link — used only as a fallback when a phone hasn't verified with
-// the bot yet, so we can hand the admin a one-tap link instead of "search for the
-// bot and open a chat". Replace with the bot's real @username.
-const TELEGRAM_BOT_USERNAME = 'YOUR_BOT_USERNAME';
-
-function telegramInviteLink() {
-  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=verify`;
+// Telegram deep link — used as a fallback when a phone hasn't opened the bot chat
+// yet (Telegram bots cannot DM someone who never started the chat). The username
+// comes from the bot itself (getMe) so nothing is hardcoded.
+let _botUsername = null;
+async function getBotUsername() {
+  if (_botUsername) return _botUsername;
+  try { const c = localStorage.getItem('tg_bot_username'); if (c) { _botUsername = c; return c; } } catch (e) {}
+  try {
+    const r = await fetch(`${SB}/functions/v1/telegram-bot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof FN_KEY!=='undefined'?FN_KEY:KEY}` },
+      body: JSON.stringify({ event: 'GET_BOT_INFO', data: {} })
+    });
+    const j = await r.json();
+    if (j.username) { _botUsername = j.username; try { localStorage.setItem('tg_bot_username', j.username); } catch (e) {} }
+  } catch (e) {}
+  return _botUsername;
+}
+async function telegramInviteLink() {
+  const uname = await getBotUsername();
+  return uname ? `https://t.me/${uname}?start=verify` : null;
 }
 
 /** Upsert a phone into bot_approved_phones and keep bot_users in sync */
@@ -1116,7 +1130,7 @@ async function notifyBotPhone(phone, text) {
   try {
     const r = await fetch(`${SB}/functions/v1/telegram-bot`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}` },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof FN_KEY!=='undefined'?FN_KEY:KEY}` },
       body: JSON.stringify({ event: 'NOTIFY', data: { text, recipients: 'phone', phone } })
     });
     return await r.json();
@@ -1135,13 +1149,18 @@ async function announceOnTelegram(phone, name, role) {
   if (result.sent) {
     showModalAlert(`User saved — a Telegram message was sent to ${name}.`, 'success');
   } else {
-    const link = telegramInviteLink();
-    showModalAlert(
-      `User saved. ${name} hasn't linked Telegram yet — send them this one-tap link to activate the bot: ` +
-      `<a href="${link}" target="_blank" style="color:inherit;text-decoration:underline">${link}</a> ` +
-      `<button type="button" onclick="navigator.clipboard.writeText('${link}')" style="margin-left:6px;padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:none;color:inherit;cursor:pointer;font-size:11px">Copy</button>`,
-      'info'
-    );
+    const link = await telegramInviteLink();
+    if (link) {
+      showModalAlert(
+        `User saved. ${name} hasn't opened the bot chat yet (Telegram doesn't let bots message first). ` +
+        `Send them this link — it opens the bot and asks them to share their phone, one tap to verify: ` +
+        `<a href="${link}" target="_blank" style="color:inherit;text-decoration:underline">${link}</a> ` +
+        `<button type="button" onclick="navigator.clipboard.writeText('${link}')" style="margin-left:6px;padding:2px 8px;border-radius:4px;border:1px solid currentColor;background:none;color:inherit;cursor:pointer;font-size:11px">Copy</button>`,
+        'info'
+      );
+    } else {
+      showModalAlert(`User saved. ${name} hasn't opened the bot chat yet — ask them to open the bot on Telegram, tap Start, and share their phone to verify.`, 'info');
+    }
   }
   return result;
 }

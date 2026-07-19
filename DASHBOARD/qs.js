@@ -4130,7 +4130,7 @@ function notifyTelegram(event, data) {
   // Fire-and-forget — never throws or blocks the caller
   fetch(`${SB}/functions/v1/telegram-bot`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KEY}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${typeof FN_KEY!=='undefined'?FN_KEY:KEY}` },
     body: JSON.stringify({ event, data })
   }).catch(() => {});
 }
