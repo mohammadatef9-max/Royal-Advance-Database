@@ -800,6 +800,15 @@ document.addEventListener('keydown', e => {
     const ls = document.getElementById('login-screen');
     if (ls && ls.style.display !== 'none' && !ls.classList.contains('fade-out')) doLogin();
   }
+  // Ctrl+P with focus on the shell would print the shell (clipped iframe viewport).
+  // Delegate to the active page's own print builder when it has one.
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'p' || e.key === 'P')) {
+    const f = document.querySelector('.content iframe.active');
+    if (f && f.contentWindow && typeof f.contentWindow.printTracker === 'function') {
+      e.preventDefault();
+      f.contentWindow.printTracker();
+    }
+  }
 });
 
 // ── LOGOUT ──
