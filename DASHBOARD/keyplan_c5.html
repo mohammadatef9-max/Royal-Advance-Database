@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=3"></script>
+<script src="shared.js?v=5"></script>
 <meta charset="UTF-8">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Cluster 5 — Keyplan</title>
@@ -921,8 +921,11 @@ function toggleProgTint(){
   refreshProgTint();
 }
 async function loadKpProgress(){
-  if(_kpProgLoading)return;_kpProgLoading=true;
+  if(_kpProgLoading||kpProgMap)return;_kpProgLoading=true;
   try{
+    var _pv=await dataVersion('progress_updates'), _pck='kp_prog_'+CLUSTER;
+    var _pc=cacheGet(_pck,_pv,30*60*1000);
+    if(_pc){ kpProgMap=_pc; return; }
     var cl=await fetchAll('clusters?select=id,code&code=eq.'+CLUSTER);
     if(!cl.length)throw new Error('cluster not found');
     var vs=await fetchAll('villas?select=id,villa_no&is_active=eq.true&cluster_id=eq.'+cl[0].id);
@@ -940,6 +943,7 @@ async function loadKpProgress(){
       if(!kpProgMap[vn])kpProgMap[vn]={};
       kpProgMap[vn][code]=r.status;
     });
+    cacheSet(_pck,_pv,kpProgMap);
   }catch(e){console.warn('[keyplan] progress load failed:',e);kpProgMap={};}
   finally{_kpProgLoading=false;refreshProgTint();}
 }
@@ -1324,7 +1328,9 @@ async function loadData(){
   document.getElementById('lm').textContent='Loading WIR data...';
   var _kpWs=null; try{_kpWs=sessionStorage.getItem('kp_ws');}catch(e){}
   var _wsF=_kpWs==='civil'?'&discipline=eq.civil':(_kpWs==='mep'?'&or=(discipline.is.null,discipline.in.(mechanical,electrical))':'');
-  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,response_date&raw_cluster=eq.'+CLUSTER+_wsF);
+  var _impVer=await dataVersion('import_batches'), _wirCK='kp_wir_'+CLUSTER+'_'+(_kpWs||'all');
+  var wirRows=cacheGet(_wirCK,_impVer,6*3600*1000);
+  if(!wirRows){ wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,response_date&raw_cluster=eq.'+CLUSTER+_wsF); cacheSet(_wirCK,_impVer,wirRows); }
   var wirBestMap={};
   wirRows.forEach(function(row){
     var rawCode=row.raw_activity_code||'';
@@ -1357,7 +1363,9 @@ async function loadData(){
   wirSel.innerHTML='<option value="">— Select Activity —</option>';
   wirActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;wirSel.appendChild(o);});
   document.getElementById('lm').textContent='Loading clearance data...';
-  var clrRows=await fetchAll('clearance_import_log?select=raw_clearance_code,raw_activity_name,raw_villa_no,normalised_status,raw_villa_type&raw_cluster=eq.'+CLUSTER+'&match_status=eq.matched');
+  var _clrCK='kp_clr_'+CLUSTER;
+  var clrRows=cacheGet(_clrCK,_impVer,6*3600*1000);
+  if(!clrRows){ clrRows=await fetchAll('clearance_import_log?select=raw_clearance_code,raw_activity_name,raw_villa_no,normalised_status,raw_villa_type&raw_cluster=eq.'+CLUSTER+'&match_status=eq.matched'); cacheSet(_clrCK,_impVer,clrRows); }
   console.log('[keyplan] CLR raw rows fetched:',clrRows.length);
   clrCsvData=[];
   clrRows.forEach(function(row){
@@ -1398,6 +1406,9 @@ async function loadData(){
   console.log('[keyplan C5 DXF] WIR:',wirCsvData.length,'rows,',wirActKeys.length,'acts | CLR:',clrCsvData.length,'rows,',clrActKeys.length,'acts | Open Fronts:',openFrontVillas.size);
   document.getElementById('hdr-info').textContent='221 Villas · '+wirCsvData.length+' WIR · '+clrCsvData.length+' CLR · '+openFrontVillas.size+' Open Fronts';
   document.getElementById('loading').style.display='none';
+  // Eager-load the site-progress overlay in the background so the In Progress
+  // toggle is instant instead of fetching on first click.
+  setTimeout(function(){ try{ loadKpProgress(); }catch(e){} }, 60);
   renderVillas(null);updateStats(null);
   setTimeout(zoomFit,150);
 }

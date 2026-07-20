@@ -113,3 +113,40 @@ window.addEventListener('unhandledrejection', function (e) {
   var r = e.reason || {};
   __reportClientError(r.message || String(r), r.stack);
 });
+
+/* =====================================================================
+   Version-keyed session cache for expensive dashboard datasets.
+   sessionStorage is per-tab (cleared on tab close), so a fresh tab always
+   re-fetches. An entry is reused only when BOTH its stored version token
+   matches `version` AND it is within `ttlMs` (a backstop). Callers pass a
+   version token that changes whenever the underlying data changes (e.g. the
+   latest import_batches id, or the latest progress_updates id) so a cache
+   hit can never serve data from before the last relevant change.
+   ===================================================================== */
+function cacheGet(key, version, ttlMs){
+  try{
+    var raw = sessionStorage.getItem(key);
+    if(!raw) return null;
+    var o = JSON.parse(raw);
+    if(String(o.v) !== String(version)) return null;
+    if(ttlMs && (Date.now() - (o.t||0)) > ttlMs) return null;
+    return o.data;
+  }catch(e){ return null; }
+}
+function cacheSet(key, version, data){
+  try{ sessionStorage.setItem(key, JSON.stringify({v:String(version), t:Date.now(), data:data})); }
+  catch(e){ /* quota / serialization — skip caching, non-fatal */ }
+}
+/* Cheap "latest row id" probe used as a data-version token. One row, no paging.
+   Falls back to a 60s time bucket if the probe fails, so caching degrades safely. */
+async function dataVersion(table){
+  try{
+    var h = (typeof getH==='function') ? getH()
+          : (typeof sharedGetH==='function') ? sharedGetH()
+          : {apikey:KEY, Authorization:'Bearer '+KEY};
+    var r = await fetch(SB+'/rest/v1/'+table+'?select=id&order=id.desc&limit=1', {headers:h});
+    var d = await r.json();
+    if(Array.isArray(d) && d[0] && d[0].id!=null) return String(d[0].id);
+  }catch(e){}
+  return 't'+Math.floor(Date.now()/60000);
+}

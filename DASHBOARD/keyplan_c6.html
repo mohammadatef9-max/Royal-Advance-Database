@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-<script src="shared.js?v=3"></script>
+<script src="shared.js?v=5"></script>
 <meta charset="UTF-8">
 <meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Cluster 6 &mdash; Keyplan</title>
@@ -763,8 +763,11 @@ function toggleProgTint(){
   refreshProgTint();
 }
 async function loadKpProgress(){
-  if(_kpProgLoading)return;_kpProgLoading=true;
+  if(_kpProgLoading||kpProgMap)return;_kpProgLoading=true;
   try{
+    var _pv=await dataVersion('progress_updates'), _pck='kp_prog_'+CLUSTER;
+    var _pc=cacheGet(_pck,_pv,30*60*1000);
+    if(_pc){ kpProgMap=_pc; return; }
     var cl=await fetchAll('clusters?select=id,code&code=eq.'+CLUSTER);
     if(!cl.length)throw new Error('cluster not found');
     var vs=await fetchAll('villas?select=id,villa_no&is_active=eq.true&cluster_id=eq.'+cl[0].id);
@@ -782,6 +785,7 @@ async function loadKpProgress(){
       if(!kpProgMap[vn])kpProgMap[vn]={};
       kpProgMap[vn][code]=r.status;
     });
+    cacheSet(_pck,_pv,kpProgMap);
   }catch(e){console.warn('[keyplan] progress load failed:',e);kpProgMap={};}
   finally{_kpProgLoading=false;refreshProgTint();}
 }
@@ -1181,6 +1185,8 @@ function kpSheetHtml(mode, activity, tf){
     +(mode!=='clr'?'<div class="pl-item"><div class="pl-dot" style="background:#f87171"></div><span>Rejected</span></div>':'')
     +'<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Not Submitted</span></div>';
   if(openFrontVillas.size>0) legend+='<div class="pl-item"><div class="pl-dot" style="background:transparent;outline:2px solid #ec4899"></div><span>Open Front</span></div>';
+  var _progN=document.querySelectorAll('#villa-layer .villa[data-prog]').length;
+  if(_progN>0) legend+='<div class="pl-item"><div class="pl-dot" style="background:#eab308;border-color:#ca8a04"></div><span>In Progress ('+_progN+')</span></div>';
   var subNames=Object.keys(subColorMap).sort();
   if(subNames.length>0){ legend+='<span style="margin:0 4pt;color:#999;font-size:6pt">|</span>'; subNames.forEach(function(dn){ legend+='<div class="pl-item"><div class="pl-dot" style="background:'+subColorMap[dn]+';border-color:'+subColorMap[dn]+'"></div><span>['+subAbbr(dn)+'] '+dn+'</span></div>'; }); }
   return '<div class="kp-sheet">'
@@ -1220,7 +1226,7 @@ function openBatchPrint(){
 function closeBatchPrint(){ var m=document.getElementById('kp-batch-modal'); if(m) m.style.display='none'; }
 function kpBatchCount(){ var n=document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked').length; var el=document.getElementById('kp-batch-count'); if(el) el.textContent=n+' selected'; }
 function kpBatchAll(mode, e){ e.preventDefault(); var boxes=document.querySelectorAll('#kp-batch-'+mode+' input[type=checkbox]'); var anyOff=[].slice.call(boxes).some(function(b){return !b.checked;}); boxes.forEach(function(b){b.checked=anyOff;}); kpBatchCount(); }
-function batchPrint(){
+async function batchPrint(){
  try{
   var sels=[].slice.call(document.querySelectorAll('#kp-batch-modal input[type=checkbox]:checked')).map(function(c){return {mode:c.dataset.mode, value:c.value};});
   if(!sels.length){ return; }
@@ -1235,10 +1241,13 @@ function batchPrint(){
   var vW=vMaxX-vMinX, vH=vMaxY-vMinY, scale=Math.min(usableW/vW, mapH/vH);
   var tf={ mapH:mapH, scale:scale, ox:(usableW-vW*scale)/2-vMinX*scale, oy:(mapH-vH*scale)/2-vMinY*scale };
   var sheets=[], firstErr=null;
-  sels.forEach(function(s){ try{ kpRenderActivity(s.mode, s.value); sheets.push(kpSheetHtml(s.mode, s.value, tf)); }catch(err){ if(!firstErr)firstErr=err; console.error('keyplan sheet failed', s, err); } });
+  var _ptSave=progTintOn;
+  if(sels.some(function(s){return s.mode==='wir';}) && !kpProgMap){ try{ await loadKpProgress(); }catch(e){} }
+  sels.forEach(function(s){ try{ kpRenderActivity(s.mode, s.value); if(s.mode==='wir'&&kpProgMap){ progTintOn=true; try{refreshProgTint();}catch(e){} } sheets.push(kpSheetHtml(s.mode, s.value, tf)); }catch(err){ if(!firstErr)firstErr=err; console.error('keyplan sheet failed', s, err); } });
   // restore the on-screen view
   showSubLabels=prev.sub; compareMode=prev.cmp; act2Kind=prev.a2k; currentActivity2=prev.a2;
   try{ kpRenderActivity(prev.mode, prev.act); if(prev.cmp){ renderVillas(buildDataMap(prev.act), buildDataMapKind(prev.a2, prev.a2k)); } }catch(e){}
+  progTintOn=_ptSave; try{ if(progTintOn) refreshProgTint(); }catch(e){}
   if(!sheets.length){ alert('Could not prepare any keyplan.\n\n'+(firstErr&&(firstErr.message||firstErr)||'unknown error')); return; }
   // Render into THIS window (no pop-up). Scoped #kp-batch-print container shown only in print.
   var oldP=document.getElementById('kp-batch-print'); if(oldP) oldP.remove();
@@ -1293,7 +1302,9 @@ async function loadData(){
   document.getElementById('lm').textContent='Loading WIR data...';
   var _kpWs=null; try{_kpWs=sessionStorage.getItem('kp_ws');}catch(e){}
   var _wsF=_kpWs==='civil'?'&discipline=eq.civil':(_kpWs==='mep'?'&or=(discipline.is.null,discipline.in.(mechanical,electrical))':'');
-  var wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,response_date&raw_cluster=eq.C6'+_wsF);
+  var _impVer=await dataVersion('import_batches'), _wirCK='kp_wir_'+CLUSTER+'_'+(_kpWs||'all');
+  var wirRows=cacheGet(_wirCK,_impVer,6*3600*1000);
+  if(!wirRows){ wirRows=await fetchAll('dc_import_log?select=raw_activity_code,raw_villa_no,raw_subcontractor,raw_status,raw_villa_type,response_date&raw_cluster=eq.C6'+_wsF); cacheSet(_wirCK,_impVer,wirRows); }
   var wirBestMap={};
   wirRows.forEach(function(row){
     var rawCode=row.raw_activity_code||'';
@@ -1326,7 +1337,9 @@ async function loadData(){
   wirSel.innerHTML='<option value="">— Select Activity —</option>';
   wirActKeys.forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;wirSel.appendChild(o);});
   document.getElementById('lm').textContent='Loading clearance data...';
-  var clrRows=await fetchAll('clearance_import_log?select=raw_clearance_code,raw_activity_name,raw_villa_no,normalised_status,raw_villa_type&raw_cluster=eq.C6&match_status=eq.matched');
+  var _clrCK='kp_clr_'+CLUSTER;
+  var clrRows=cacheGet(_clrCK,_impVer,6*3600*1000);
+  if(!clrRows){ clrRows=await fetchAll('clearance_import_log?select=raw_clearance_code,raw_activity_name,raw_villa_no,normalised_status,raw_villa_type&raw_cluster=eq.C6&match_status=eq.matched'); cacheSet(_clrCK,_impVer,clrRows); }
   clrCsvData=[];
   clrRows.forEach(function(row){
     var code=row.raw_clearance_code||'';
@@ -1375,6 +1388,9 @@ async function loadData(){
   }catch(e){console.warn('[keyplan C6] NCR load failed:',e);}
   document.getElementById('hdr-info').textContent=TOTAL_VILLAS+' Villas · '+wirCsvData.length+' WIR · '+clrCsvData.length+' CLR · '+openFrontVillas.size+' Open Fronts';
   document.getElementById('loading').style.display='none';
+  // Eager-load the site-progress overlay in the background so the In Progress
+  // toggle is instant instead of fetching on first click.
+  setTimeout(function(){ try{ loadKpProgress(); }catch(e){} }, 60);
   renderVillas(null);updateStats(null);
   setTimeout(zoomFit,150);
 }
