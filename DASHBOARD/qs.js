@@ -1301,7 +1301,15 @@ function buildProgressSheetHtml(sec) {
           cls += ' cross-billed'; label = '⚠';
           tip += ` — ALREADY BILLED under "${st.crossBilled ? st.crossBilled.name : 'another scope'}" — excluded from this PC; click to override if billing again is intentional`;
         } else if (isCompleteToDate) {
-          cls += ' approved'; label = '✓';
+          if (effLocked) {
+            // Locked PC: WIR was approved within this PC's period but was never
+            // billed in it (no billed record) — a green ✓ here reads as "accounted
+            // for in this PC", which is wrong. Show it dimmed instead.
+            cls += ' not-approved'; label = '✓';
+            tip += ' — WIR approved in this period but NOT billed in this PC';
+          } else {
+            cls += ' approved'; label = '✓';
+          }
         } else {
           cls += ' not-approved'; label = '—';
         }
