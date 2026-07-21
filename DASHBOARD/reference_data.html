@@ -1778,9 +1778,12 @@ async function loadSubsTab() {
   if (list) list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</div>';
   const dirList = document.getElementById('subs-dir-list');
   if (dirList) dirList.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-dim)">Loading…</div>';
-  const [aliasRows, subRows] = await Promise.all([
+  const [aliasRows, subRows, allNameRows] = await Promise.all([
     sbFetch('subcontractor_aliases?select=alias,canonical_name&order=alias'),
-    sbFetch('subcontractors?select=*&order=name.asc')
+    sbFetch('subcontractors?select=*&order=name.asc'),
+    // Every raw name across WIR imports + progress entries + profiles + aliases —
+    // so any variant can be merged HERE, not just names with a directory profile.
+    sbFetch('v_distinct_sub_names?select=name&order=name')
   ]);
   subAliasExact = {}; subAliasMap = {};
   (Array.isArray(aliasRows) ? aliasRows : []).forEach(r => {
@@ -1798,6 +1801,7 @@ async function loadSubsTab() {
   Object.keys(subProfiles).forEach(n => nameSet.add(n));
   Object.keys(subAliasExact).forEach(a => nameSet.add(a));
   Object.values(subAliasExact).forEach(c => nameSet.add(c));
+  (Array.isArray(allNameRows) ? allNameRows : []).forEach(r => { if (r.name) nameSet.add(r.name.trim()); });
   subRawNames = [...nameSet].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   subsSel = new Set();
   // Which subs have a QS scope set up (for the directory badge). QS tables are
