@@ -1411,5 +1411,156 @@ if(window.self!==window.top){
 }else{_tryInit();}
 </script>
 
+<script>
+/* ===== Added Jul 2026: regular print includes In Progress + Custom highlight mode =====
+   Appended as a separate script so the (near-identical) core of all 7 keyplan files
+   stays untouched. Wraps doPrint/onModeChange by reassignment — inline onclick/onchange
+   handlers resolve the globals at call time, so the wrappers take effect everywhere. */
+(function(){
+
+  /* -- 1. Regular print always shows the In Progress overlay on WIR prints -------
+     Same behaviour as batch print: load the progress map if needed, force the
+     yellow tint while the print page captures the villa layer, then restore the
+     on-screen toggle. Timers can't fire while the print dialog blocks JS, so the
+     restore (1600ms) runs after the dialog closes, just after the print page is
+     removed (1500ms). The print page holds a *copy* of the layer HTML, so
+     restoring the live layer never affects the queued printout. */
+  var _doPrintBase = doPrint;
+  doPrint = async function(){
+    if(currentMode==='custom') return doPrintCustom();
+    var forced=false;
+    if(currentMode==='wir' && currentActivity && !compareMode){
+      if(!kpProgMap){ try{ await loadKpProgress(); }catch(e){} }
+      if(kpProgMap && !progTintOn){ progTintOn=true; forced=true; try{ refreshProgTint(); }catch(e){} }
+    }
+    try{ _doPrintBase(); }
+    finally{
+      if(forced) setTimeout(function(){ progTintOn=false; try{ refreshProgTint(); }catch(e){} }, 1600);
+    }
+  };
+
+  /* -- 2. Custom highlight mode ---------------------------------------------------
+     A third Mode option: click villas to paint them the selected color, set a
+     title, print it. Selection persists per cluster in localStorage. */
+  var CUSTOM_LS='kp_custom_'+CLUSTER;
+  var customMap={}, customColor='#f59e0b', customTitle='';
+  try{
+    var _cs=JSON.parse(localStorage.getItem(CUSTOM_LS)||'null');
+    if(_cs){ customMap=_cs.map||{}; customTitle=_cs.title||''; if(_cs.color)customColor=_cs.color; }
+  }catch(e){}
+  function saveCustom(){ try{ localStorage.setItem(CUSTOM_LS, JSON.stringify({map:customMap,title:customTitle,color:customColor})); }catch(e){} }
+
+  var _fm=document.getElementById('f-mode');
+  if(_fm && !_fm.querySelector('option[value="custom"]')) _fm.appendChild(new Option('Custom','custom'));
+
+  var ctr=document.createElement('span');
+  ctr.id='custom-ctrls';
+  ctr.style.cssText='display:none;align-items:center;gap:6px';
+  ctr.innerHTML=
+    '<input id="cst-title" placeholder="Title (shown on print)" style="background:var(--bg-panel);color:var(--fg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:11px;width:180px">'
+    +'<input type="color" id="cst-color" value="#f59e0b" style="width:30px;height:26px;padding:1px;border:1px solid var(--border);border-radius:5px;background:var(--bg-panel);cursor:pointer" title="Highlight color">'
+    +['#f59e0b','#22c55e','#3b82f6','#ef4444','#a855f7','#14b8a6'].map(function(c){
+        return '<span class="cst-swatch" data-c="'+c+'" style="width:16px;height:16px;border-radius:4px;background:'+c+';cursor:pointer;border:1px solid rgba(255,255,255,.25);display:inline-block" title="'+c+'"></span>';
+      }).join('')
+    +'<span id="cst-count" style="font-size:11px;color:var(--accent-text);font-weight:700;white-space:nowrap">0 highlighted</span>'
+    +'<button class="tbtn" id="cst-clear" title="Remove all highlights">\u2715 Clear</button>';
+  var _anchorSel=document.getElementById('f-clr-act');
+  if(_anchorSel && _anchorSel.parentNode) _anchorSel.parentNode.insertBefore(ctr, _anchorSel.nextSibling);
+
+  ctr.querySelector('#cst-title').addEventListener('input',function(){ customTitle=this.value; saveCustom(); });
+  ctr.querySelector('#cst-color').addEventListener('change',function(){ customColor=this.value; saveCustom(); });
+  ctr.querySelectorAll('.cst-swatch').forEach(function(sw){
+    sw.addEventListener('click',function(){ customColor=this.getAttribute('data-c'); document.getElementById('cst-color').value=customColor; saveCustom(); });
+  });
+  ctr.querySelector('#cst-clear').addEventListener('click',function(){
+    var n=Object.keys(customMap).length;
+    if(n && !confirm('Remove all '+n+' highlights?')) return;
+    customMap={}; saveCustom(); renderCustomVillas();
+  });
+
+  function updateCustomCount(){ var el=document.getElementById('cst-count'); if(el) el.textContent=Object.keys(customMap).length+' highlighted'; }
+
+  function renderCustomVillas(){
+    var layer=document.getElementById('villa-layer'); if(!layer) return;
+    var html='';
+    Object.keys(VILLAS).forEach(function(vNum){
+      var pos=VILLAS[vNum], angle=VILLA_ANGLES[parseInt(vNum)]||0;
+      var col=customMap[vNum];
+      var style='left:'+pos.x+'px;top:'+pos.y+'px;transform:translate(-23px,-16px) rotate('+angle+'deg);'
+        +(col?'background:'+col+' !important;border-color:'+col+' !important;':'');
+      html+='<div class="villa s-NS" style="'+style+'" data-v="'+vNum+'" data-s="NS" data-sub="\u2014" data-type="\u2014">'
+        +'<div class="vinner" style="transform:rotate('+(-angle)+'deg)"><span class="vnum"'+(col?' style="color:#fff"':'')+'>'+vNum+'</span></div></div>';
+    });
+    layer.innerHTML=html;
+    updateCustomCount();
+  }
+
+  function kpCustomModeSync(){
+    var on=currentMode==='custom';
+    ctr.style.display=on?'inline-flex':'none';
+    if(on){
+      var ti=document.getElementById('cst-title'); if(ti) ti.value=customTitle;
+      var ci=document.getElementById('cst-color'); if(ci) ci.value=customColor;
+      renderCustomVillas();
+    }
+  }
+  var _omcBase=onModeChange;
+  onModeChange=function(){ _omcBase(); kpCustomModeSync(); };
+
+  /* Capture-phase click so the NCR popup handler never fires while painting */
+  document.getElementById('villa-layer').addEventListener('click',function(e){
+    if(currentMode!=='custom') return;
+    var v=e.target.closest('.villa'); if(!v) return;
+    e.stopPropagation();
+    var vn=v.getAttribute('data-v'); if(!vn) return;
+    if(customMap[vn]===customColor) delete customMap[vn]; else customMap[vn]=customColor;
+    saveCustom(); renderCustomVillas();
+  }, true);
+
+  /* Print for custom mode: same page/scale math as doPrint, custom header/legend */
+  function doPrintCustom(){
+    var old=document.getElementById('print-page'); if(old) old.parentNode.removeChild(old);
+    var dt=new Date().toISOString().substring(0,10);
+    var total=Object.keys(VILLAS).length, hl=Object.keys(customMap).length;
+    var cardsHtml='<div class="pp-card"><div class="pv pv-tt">'+total+'</div><div class="pl">Total</div></div>'
+      +'<div class="pp-card"><div class="pv pv-ap">'+hl+'</div><div class="pl">Highlighted</div></div>';
+    var villaHtml=document.getElementById('villa-layer').innerHTML;
+    var colCounts={};
+    Object.keys(customMap).forEach(function(vn){ var c=customMap[vn]; colCounts[c]=(colCounts[c]||0)+1; });
+    var legendHtml=Object.keys(colCounts).map(function(c){
+        return '<div class="pl-item"><div class="pl-dot" style="background:'+c+';border-color:'+c+'"></div><span>'+colCounts[c]+' villas</span></div>';
+      }).join('')
+      +'<div class="pl-item"><div class="pl-dot" style="background:#e2e8f0;border-color:#94a3b8"></div><span>Other ('+(total-hl)+')</span></div>';
+    var clLabel=(typeof kpClusterLabel==='function')?kpClusterLabel():('CLUSTER '+String(CLUSTER).replace(/^C/,''));
+    var pp=document.createElement('div'); pp.id='print-page';
+    pp.innerHTML='<div class="pp-header"><div class="pp-left">'
+      +'<div class="pp-proj">Ba Al Ghaiylam \u2014 Royal Advance Engineering</div>'
+      +'<div class="pp-cluster">'+clLabel+' \u00b7 KEYPLAN</div>'
+      +'<div class="pp-meta"><b>CUSTOM</b>'+(customTitle?' \u00b7 <b>'+escHtml(customTitle)+'</b>':'')+' \u00b7 Date: <b>'+dt+'</b></div>'
+      +'</div><div class="pp-cards">'+cardsHtml+'</div></div>'
+      +'<div class="pp-map-wrap" id="pp-map-inner"><div class="pp-villa-layer" id="pp-layer-inner">'+villaHtml+'</div></div>'
+      +'<div class="pp-legend">'+legendHtml+'</div>';
+    pp.style.display='flex';
+    document.body.appendChild(pp);
+    var paper=(document.getElementById('print-paper')||{value:'A4'}).value;
+    var pageStyle=document.getElementById('_kp_page_style');
+    if(!pageStyle){ pageStyle=document.createElement('style'); pageStyle.id='_kp_page_style'; document.head.appendChild(pageStyle); }
+    pageStyle.textContent='@page{size:'+(paper==='A3'?'A3 landscape':'A4 landscape')+';margin:8mm}';
+    var MM=96/25.4, isA3=paper==='A3';
+    var usableW=((isA3?420:297)-24)*MM, usableH=((isA3?297:210)-24)*MM, mapH=usableH-90;
+    var vXs=Object.values(VILLAS).map(function(v){return v.x;}), vYs=Object.values(VILLAS).map(function(v){return v.y;});
+    var pad=30, vMinX=Math.min.apply(null,vXs)-pad, vMaxX=Math.max.apply(null,vXs)+pad, vMinY=Math.min.apply(null,vYs)-pad, vMaxY=Math.max.apply(null,vYs)+pad;
+    var vW=vMaxX-vMinX, vH=vMaxY-vMinY, scale=Math.min(usableW/vW, mapH/vH);
+    var ox=(usableW-vW*scale)/2-vMinX*scale, oy=(mapH-vH*scale)/2-vMinY*scale;
+    requestAnimationFrame(function(){
+      var layer=document.getElementById('pp-layer-inner'), mw=document.getElementById('pp-map-inner');
+      if(layer){ layer.style.transformOrigin='0 0'; layer.style.transform='translate('+ox.toFixed(1)+'px,'+oy.toFixed(1)+'px) scale('+scale.toFixed(5)+')'; }
+      if(mw){ mw.style.height=mapH+'px'; mw.style.flex='none'; }
+      window.print();
+      setTimeout(function(){ var p=document.getElementById('print-page'); if(p)p.parentNode.removeChild(p); },1500);
+    });
+  }
+})();
+</script>
 </body>
 </html>
