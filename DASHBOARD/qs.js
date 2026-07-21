@@ -3289,16 +3289,27 @@ async function submitHistPC() {
       });
     });
     if (billedItems.length) {
-      const brRes = await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code`, {
-        method: 'POST',
-        headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
-        body: JSON.stringify(billedItems)
-      });
-      if (!brRes.ok) {
-        let errMsg = `HTTP ${brRes.status}`;
-        try { const ed = await brRes.json(); if (ed && ed.message) errMsg = `[${brRes.status}] ${ed.message}`; } catch(_){}
-        throw new Error(`PC created (id ${res.id}) but billed records failed to save: ${errMsg}. Delete this PC and try again.`);
+      // Historical sheets can overlap earlier PCs — skip pairs already billed in
+      // this scope (any PC) so nothing is double-billed. The on_conflict target
+      // must name the table's REAL unique constraint (scope, villa, activity, PC —
+      // a 3-column target 400s with "no unique or exclusion constraint matching").
+      const existingBilled = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id,activity_code`);
+      const alreadyBilled = new Set(existingBilled.map(r => `${r.villa_id}:${r.activity_code}`));
+      const freshItems = billedItems.filter(b => !alreadyBilled.has(`${b.villa_id}:${b.activity_code}`));
+      const skipped = billedItems.length - freshItems.length;
+      if (freshItems.length) {
+        const brRes = await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code,locked_pc_id`, {
+          method: 'POST',
+          headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+          body: JSON.stringify(freshItems)
+        });
+        if (!brRes.ok) {
+          let errMsg = `HTTP ${brRes.status}`;
+          try { const ed = await brRes.json(); if (ed && ed.message) errMsg = `[${brRes.status}] ${ed.message}`; } catch(_){}
+          throw new Error(`PC created (id ${res.id}) but billed records failed to save: ${errMsg}. Delete this PC and try again.`);
+        }
       }
+      if (skipped > 0) console.warn(`[hist PC] ${skipped} pair(s) skipped — already billed on an earlier PC in this scope`);
     }
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
