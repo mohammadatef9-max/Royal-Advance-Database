@@ -21,6 +21,7 @@ let scopeActivityGroups = [];
 let scopeActivities = []; // flat, with group info
 let scopeActivityRates = {}; // { activity_id: { villa_type_label: rate_aed } } — for use_fixed_rate activities
 let scopeVillas = [];
+let _histVillasPinned = false; // hist-import preview pinned scopeVillas to the sheet — restore on close/create
 let manualVillaIds = new Set(); // villa_ids manually added to the primary scope (＋ Add Villa)
 let pcOverrides = {};  // key: villa_id+':'+activity_code
 let billedRecords = {}; // key: villa_id+':'+activity_code → [{pc_id, pct, carry}] (one per PC that billed part of the cell)
@@ -3233,7 +3234,11 @@ async function parseHistSheet(sheetName) {
       br.codes.forEach(code => { histPCSelections[v.id+':'+code]=true; cellsTicked++; });
     });
 
-    // The Excel defines this PC's villas — show ONLY those that have at least one billed activity
+    // The Excel defines this PC's villas — show ONLY those that have at least one billed activity.
+    // This pins the GLOBAL scopeVillas for the preview grid, so it MUST be restored via
+    // autoDetectScopeVillas() when the modal closes or the PC is created — otherwise every
+    // later PC in this session only offers the sheet's villas (new WIR villas invisible).
+    _histVillasPinned = true;
     scopeVillas = importedVillas.slice().sort((a,b)=>((a.cluster_id||0)-(b.cluster_id||0))||((a.villa_no||0)-(b.villa_no||0)));
     updateClusterFilter();
     renderHistGrid();
@@ -3322,8 +3327,14 @@ async function submitHistPC() {
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
     btn.disabled = false; btn.textContent = 'Create Locked PC';
+    // Restore the full villa universe BEFORE rendering the PC — the preview pinned
+    // scopeVillas to the sheet's villas, which would otherwise leak into every PC
+    // viewed/created this session (new WIR-approved villas invisible).
+    _histVillasPinned = false; // handled here — stop closeModal's async restore double-running
     closeModal('modal-hist-pc');
     closeModal('modal-new-pc');
+    scopeVillas = await autoDetectScopeVillas();
+    updateClusterFilter();
     await loadPCs();
     selectPC(res.id, await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`));
   } catch(e) {
@@ -4064,6 +4075,12 @@ async function savePcSigs() {
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
+  // Hist-import preview pinned scopeVillas to the sheet's villas — restore the full
+  // auto-detected universe so later PCs offer newly WIR-approved villas again.
+  if (id === 'modal-hist-pc' && _histVillasPinned) {
+    _histVillasPinned = false;
+    autoDetectScopeVillas().then(v => { scopeVillas = v; updateClusterFilter(); if (selectedPC) loadPCData(); }).catch(()=>{});
+  }
   // If we were editing a template, restore scope + tab visibility
   if (id === 'modal-config-scope' && _tplEditMode) {
     _tplEditMode = false;
