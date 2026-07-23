@@ -3262,7 +3262,11 @@ async function submitHistPC() {
   const btn = document.querySelector('#modal-hist-pc .btn-amber');
   btn.disabled = true; btn.textContent = 'Creating…';
   try {
-    // 1. Create the PC as locked
+    // 1. Create the PC as locked.
+    // Inherit retention from the scope config exactly like submitNewPC does — the
+    // column defaults to false, so without this every imported PC opened with
+    // retention switched off and had to be re-enabled by hand.
+    const scopeRetPct = parseFloat(selectedScope.retention_pct) || 0;
     const body = {
       scope_id: selectedScope.id,
       pc_number: histPCMeta.num,
@@ -3270,7 +3274,8 @@ async function submitHistPC() {
       period_label: histPCMeta.label,
       notes: histPCMeta.notes,
       created_by: currentUser?.full_name || '',
-      status: 'locked'
+      status: 'locked',
+      retention_applicable: scopeRetPct > 0
     };
     const res = await fp('qs_payment_certificates', body);
     if (!res?.id) throw new Error('PC was not created — PC number may already exist for this scope.');
