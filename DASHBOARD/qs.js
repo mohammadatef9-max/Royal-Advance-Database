@@ -3328,47 +3328,57 @@ async function parseHistSheet(sheetName) {
       }
     }
 
-    // Expand each base to its part columns: part[i] → startCol + i (consecutive sub-columns)
-    const codeCol = new Map();
-    baseParts.forEach((parts, base) => {
-      const start = baseStart.get(base);
-      if (start == null) return;
-      parts.forEach((p, i) => { if(!codeCol.has(p.code)) codeCol.set(p.code, start + i); });
-    });
+    // Resolve a sheet column for every activity. `codeCols` maps code → [column, …]
+    // (a list, because two activities may still share one code in older configs).
+    const codeCols = new Map();
+    const takenCols = new Set();
+    if (villaCol >= 0) takenCols.add(villaCol);
+    if (clusterCol >= 0) takenCols.add(clusterCol);
+    const addCol = (code, c) => {
+      if (!codeCols.has(code)) codeCols.set(code, []);
+      if (!codeCols.get(code).includes(c)) codeCols.get(code).push(c);
+      takenCols.add(c);
+    };
 
-    // A code can legitimately be fed by SEVERAL sheet columns — two scope activities may
-    // share one WIR code (e.g. "Copper Pipe (HL) Installation" + "Flaring" both under 3210).
-    const codeCols = new Map();                       // code → [column index, …]
-    codeCol.forEach((c, code) => codeCols.set(code, [c]));
-
-    // Supplementary pass — resolve a column for each ACTIVITY by its own name. Needed when
-    // the sheet heading is worded differently from the scope's activity name ("H L
-    // Installation" vs "Copper Pipe (HL) Installation"), and when two activities share a
-    // code — the base-level passes above only ever register the first of those names.
+    // PASS A — match each activity to a column by its own heading text. This runs FIRST
+    // because an explicitly-named column is far more reliable than the positional guess
+    // in pass B: activities that share a base (e.g. 3210 "Copper Pipe (HL) Installation"
+    // and 3210-FL "Flaring") sit in unrelated columns, not consecutive ones.
+    // Matching is whitespace/punctuation-insensitive and accepts either name containing
+    // the other, so a sheet headed "H L Installation" finds "Copper Pipe (HL) Installation".
     if (nameRow >= 0) {
       const nrow = rows[nameRow] || [];
-      const taken = new Set([...codeCol.values()]);
-      if (villaCol >= 0) taken.add(villaCol);
-      if (clusterCol >= 0) taken.add(clusterCol);
       const squash = s => _normTxt(s).replace(/[^a-z0-9]/g, '');
       scopeActivities.forEach(a => {
         const code = String(a.activity_code).trim();
         const want = squash(a.activity_name);
-        if (!code || want.length < 4) return;
+        if (!code || want.length < 4 || codeCols.has(code)) return;
+        let exact = -1, loose = -1;
         for (let c = 0; c < nrow.length; c++) {
-          if (taken.has(c)) continue;
+          if (takenCols.has(c)) continue;
           const have = squash(nrow[c]);
-          // Exact, or either name contained in the other (guards against 2-letter noise)
           if (!have || have.length < 4) continue;
-          if (have === want || have.includes(want) || want.includes(have)) {
-            taken.add(c);
-            if (!codeCols.has(code)) codeCols.set(code, []);
-            codeCols.get(code).push(c);
-            break;
-          }
+          if (have === want) { exact = c; break; }
+          if (loose < 0 && (have.includes(want) || want.includes(have))) loose = c;
         }
+        const hit = exact >= 0 ? exact : loose;
+        if (hit >= 0) addCol(code, hit);
       });
     }
+
+    // PASS B — fill anything still unresolved from the exact base-code cell, expanding a
+    // base's parts across consecutive sub-columns (how GF/FF splits are laid out in a BOQ).
+    // Never steals a column pass A already claimed by name.
+    baseParts.forEach((parts, base) => {
+      const start = baseStart.get(base);
+      if (start == null) return;
+      parts.forEach((p, i) => {
+        if (codeCols.has(p.code)) return;
+        const col = start + i;
+        if (takenCols.has(col)) return;
+        addCol(p.code, col);
+      });
+    });
 
     if (!codeCols.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
