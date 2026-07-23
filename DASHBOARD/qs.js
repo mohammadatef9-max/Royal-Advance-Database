@@ -22,6 +22,7 @@ let scopeActivities = []; // flat, with group info
 let scopeActivityRates = {}; // { activity_id: { villa_type_label: rate_aed } } — for use_fixed_rate activities
 let scopeVillas = [];
 let _histVillasPinned = false; // hist-import preview pinned scopeVillas to the sheet — restore on close/create
+let _histRestoreGen = 0;       // guards the async restore from clobbering a newer import
 let manualVillaIds = new Set(); // villa_ids manually added to the primary scope (＋ Add Villa)
 let pcOverrides = {};  // key: villa_id+':'+activity_code
 let billedRecords = {}; // key: villa_id+':'+activity_code → [{pc_id, pct, carry}] (one per PC that billed part of the cell)
@@ -3039,8 +3040,15 @@ function openHistPCSetup() {
 
 function renderHistGrid() {
   const grid = document.getElementById('hist-pc-grid');
-  if (!scopeVillas.length || !scopeActivities.length) {
-    grid.innerHTML = '<div style="color:var(--tx3);padding:16px">No villas or activities configured for this scope. Set up the scope configuration first.</div>';
+  if (!grid) return;
+  if (!scopeActivities.length) {
+    grid.innerHTML = '<div style="color:var(--tx3);padding:16px">No activities configured for this scope. Set up the scope configuration first.</div>';
+    return;
+  }
+  if (!scopeVillas.length) {
+    // Not a config problem — this scope just has no villas detected yet (common when
+    // rebuilding its first PC). Importing the sheet defines them.
+    grid.innerHTML = '<div style="color:var(--tx3);padding:16px">No villas loaded yet. <strong>Import the Excel sheet above</strong> — it defines which villas this PC covers.</div>';
     return;
   }
 
@@ -3383,6 +3391,7 @@ async function parseHistSheet(sheetName) {
     // autoDetectScopeVillas() when the modal closes or the PC is created — otherwise every
     // later PC in this session only offers the sheet's villas (new WIR villas invisible).
     _histVillasPinned = true;
+    _histRestoreGen++;   // supersede any restore still in flight from an earlier close
     scopeVillas = importedVillas.slice().sort((a,b)=>((a.cluster_id||0)-(b.cluster_id||0))||((a.villa_no||0)-(b.villa_no||0)));
     updateClusterFilter();
     renderHistGrid();
@@ -3439,20 +3448,25 @@ async function submitHistPC() {
     // 2. Insert billed records for all checked (villa, activity) pairs, carrying the
     //    per-cell % so partially-billed historical cells restore as partial payments
     //    (carry_remainder=true → the unpaid balance flows into a later PC).
+    // Read straight from the ticked selections rather than iterating scopeVillas — that
+    // global is shared with the PC grid and can be re-detected underneath us, which would
+    // silently save an empty PC.
     const billedItems = [];
-    scopeVillas.forEach(sv => {
-      scopeActivities.forEach(act => {
-        const pct = histPct(`${sv.villa_id}:${act.activity_code}`);
-        if (pct > 0) {
-          billedItems.push({
-            scope_id: selectedScope.id,
-            locked_pc_id: res.id,
-            villa_id: sv.villa_id,
-            activity_code: act.activity_code,
-            billed_pct: Math.round(pct * 1e6) / 1e6,
-            carry_remainder: true
-          });
-        }
+    const validCodes = new Set(scopeActivities.map(a => a.activity_code));
+    Object.keys(histPCSelections).forEach(key => {
+      const i = key.lastIndexOf(':');
+      if (i < 1) return;
+      const villaId = parseInt(key.slice(0, i), 10);
+      const actCode = key.slice(i + 1);
+      const pct = histPct(key);
+      if (!villaId || !validCodes.has(actCode) || pct <= 0) return;
+      billedItems.push({
+        scope_id: selectedScope.id,
+        locked_pc_id: res.id,
+        villa_id: villaId,
+        activity_code: actCode,
+        billed_pct: Math.round(pct * 1e6) / 1e6,
+        carry_remainder: true
       });
     });
     if (billedItems.length) {
@@ -4245,7 +4259,16 @@ function closeModal(id) {
   // auto-detected universe so later PCs offer newly WIR-approved villas again.
   if (id === 'modal-hist-pc' && _histVillasPinned) {
     _histVillasPinned = false;
-    autoDetectScopeVillas().then(v => { scopeVillas = v; updateClusterFilter(); if (selectedPC) loadPCData(); }).catch(()=>{});
+    const gen = ++_histRestoreGen;
+    autoDetectScopeVillas().then(v => {
+      // Abort if the user re-opened / re-imported while this lookup was in flight —
+      // otherwise it would wipe the freshly imported villa list and the PC would
+      // save with no billed records.
+      if (gen !== _histRestoreGen || _histVillasPinned) return;
+      const m = document.getElementById('modal-hist-pc');
+      if (m && m.style.display !== 'none') return;
+      scopeVillas = v; updateClusterFilter(); if (selectedPC) loadPCData();
+    }).catch(()=>{});
   }
   // If we were editing a template, restore scope + tab visibility
   if (id === 'modal-config-scope' && _tplEditMode) {
