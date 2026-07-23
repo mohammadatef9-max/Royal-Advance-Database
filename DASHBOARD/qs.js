@@ -971,16 +971,21 @@ async function loadPCData() {
     const sep = k.indexOf('|');
     const villaId = k.slice(0, sep), base = k.slice(sep + 1);
     const rows = byVillaBase[k];
-    // Split across floors ⇒ the activity is only complete when EVERY part is approved
-    // (a villa with 3210F pending and 3210G approved is not finished).
-    const allApproved = rows.every(r => r.normalised_status === 'approved');
-    // Completion date = the LAST part approved, so the period gate uses the true finish date
-    const dates = rows.map(r => r.response_date).filter(Boolean).sort();
-    const lastDate = dates.length ? dates[dates.length - 1] : null;
-    const withinPeriod = !periodDate || (lastDate && lastDate <= periodDate);
-    const approved = allApproved && withinPeriod;
+    // Each WIR is gated on its OWN response date, so a floor approved after this PC's
+    // period doesn't leak into it.
+    const okRow = r => r.normalised_status === 'approved' &&
+                       (!periodDate || (r.response_date && r.response_date <= periodDate));
+    const counted = rows.filter(okRow);
+    // Floors are now merged into the single base code (e.g. 3210), but legacy villas still
+    // carry per-floor WIRs. Both floors approved = the whole activity (100%); only one
+    // approved = half of it (50%) — the rest bills automatically once the other is approved.
+    const plainOk = counted.some(r => r.raw_activity_code === base);
+    const floorOk = counted.filter(r => r.raw_activity_code !== base).length;
+    const pct = plainOk ? 1 : Math.min(1, floorOk * 0.5);
+    const allDates = (counted.length ? counted : rows).map(r => r.response_date).filter(Boolean).sort();
+    const lastDate = allDates.length ? allDates[allDates.length - 1] : null;
     (baseToSplits[base] || [base]).forEach(actCode => {
-      wirData[villaId + ':' + actCode] = { approved, response_date: lastDate };
+      wirData[villaId + ':' + actCode] = { approved: pct > 0, pct, response_date: lastDate };
     });
   });
 
@@ -1051,7 +1056,7 @@ function clamp01(n){ return Math.max(0, Math.min(1, n)); }
 //  • partial payment (override.payment_pct = cumulative paid-to-date share of the cell),
 //  • carry vs withhold of the unpaid remainder across PCs (billed record's carry flag).
 // billedList: [{pc_id, pct, carry}] (any PC). override: row|undefined. wirApproved: bool. locked: bool.
-function computeCellBilling(billedList, override, wirApproved, locked) {
+function computeCellBilling(billedList, override, wirApproved, locked, wirPct) {
   const curNum = selectedPC ? selectedPC.pc_number : Infinity;
   const recs = (billedList || []).map(b => ({ pct: b.pct, carry: b.carry, num: pcNumById[b.pc_id] ?? null, pc_id: b.pc_id }));
   const prevRecs  = recs.filter(r => r.num !== null && r.num < curNum).sort((a,b) => a.num - b.num);
@@ -1066,6 +1071,12 @@ function computeCellBilling(billedList, override, wirApproved, locked) {
 
   const isCompleteToDate = override !== undefined ? !!override.is_complete : wirApproved;
 
+  // How much of this cell the WIRs currently justify billing: normally 100%, but a
+  // legacy villa with only ONE of its two floor WIRs approved justifies just 50%
+  // (the balance bills itself once the second floor is approved).
+  const autoTarget = (wirPct != null && wirPct > 0) ? clamp01(wirPct) : 1;
+  const target = (override && override.payment_pct != null) ? clamp01(Number(override.payment_pct)) : autoTarget;
+
   let curPct = 0;
   if (locked) {
     curPct = nowRec ? (nowRec.pct || 0) : 0;
@@ -1073,7 +1084,6 @@ function computeCellBilling(billedList, override, wirApproved, locked) {
     // An explicit complete override can release a previously-withheld balance
     const releasedByOverride = override !== undefined && override.is_complete;
     if (carriesIn || releasedByOverride) {
-      const target = (override && override.payment_pct != null) ? clamp01(Number(override.payment_pct)) : 1;
       curPct = Math.min(remaining, Math.max(0, target - prevPct));
     }
   }
@@ -1082,8 +1092,10 @@ function computeCellBilling(billedList, override, wirApproved, locked) {
   const wasBilledPrev = prevPct > 1e-9;
   const isBilledNow   = locked ? !!nowRec : curPct > 1e-9;
   const billedLater   = laterRecs.length > 0;
-  // Approved work whose remaining balance is NOT being billed now and won't auto-carry → withheld
-  const withheldPct   = (!locked && isCompleteToDate && remaining > 1e-9 && curPct < 1e-9) ? remaining : 0;
+  // Approved work whose remaining balance is NOT being billed now and won't auto-carry → withheld.
+  // Measured against `target`, so the half a villa hasn't earned yet (only one floor WIR
+  // approved) is NOT reported as withheld — it simply isn't billable yet.
+  const withheldPct   = (!locked && isCompleteToDate) ? Math.max(0, Math.min(remaining, target - prevPct - curPct)) : 0;
   const isPartial     = (curPct > 1e-9 && curPct < remaining - 1e-9) || todPct < 1 - 1e-9 && (wasBilledPrev || curPct > 1e-9);
 
   let source;
@@ -1112,7 +1124,7 @@ function getActivityStatus(villa_id, activity_code) {
   const override = pcOverrides[key];
   const wir = wirData[key];
   const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
-  const r = _applyCrossGuard(computeCellBilling(billedRecords[key], override, wir?.approved === true, locked), override, key);
+  const r = _applyCrossGuard(computeCellBilling(billedRecords[key], override, wir?.approved === true, locked, wir?.pct), override, key);
   return { ...r, override, wir };
 }
 
@@ -1216,9 +1228,16 @@ async function buildScopeCtx(scope) {
       const sep = k.indexOf('|');
       const villaId = k.slice(0, sep), base = k.slice(sep + 1);
       const rows = ctxByBase[k];
-      const dates = rows.map(r => r.response_date).filter(Boolean).sort();
+      // Same rule as loadPCData: merged base code = 100%; legacy per-floor WIRs are
+      // half each (both approved = 100%, one approved = 50%).
+      const counted = rows.filter(r => r.normalised_status === 'approved');
+      const plainOk = counted.some(r => r.raw_activity_code === base);
+      const floorOk = counted.filter(r => r.raw_activity_code !== base).length;
+      const pct = plainOk ? 1 : Math.min(1, floorOk * 0.5);
+      const dates = (counted.length ? counted : rows).map(r => r.response_date).filter(Boolean).sort();
       wir[villaId + ':' + base] = {
-        approved: rows.every(r => r.normalised_status === 'approved'),
+        approved: pct > 0,
+        pct,
         response_date: dates.length ? dates[dates.length - 1] : null
       };
     });
@@ -1232,7 +1251,7 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   const override = ctx.overrides[key];
   const wir = ctx.wir[key];
   const locked = selectedPC && selectedPC.status === 'locked';
-  return _applyCrossGuard(computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked), override, key);
+  return _applyCrossGuard(computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked, wir?.pct), override, key);
 }
 function ctxWorkdone(ctx, villa_id, villa_type_label) {
   let prevAed=0, curAed=0, todAed=0, totalPossibleAed=0;
