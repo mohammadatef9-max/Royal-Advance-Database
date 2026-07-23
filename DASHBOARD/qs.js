@@ -2995,11 +2995,19 @@ function renderHistGrid() {
     scopeActivityGroups.forEach(grp => {
       scopeActivities.filter(a => a.group_id === grp.id).forEach(act => {
         const key = `${sv.villa_id}:${act.activity_code}`;
-        const chk = histPCSelections[key] ? 'checked' : '';
-        cells += `<td style="text-align:center;padding:4px">
-          <input type="checkbox" ${chk} style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"
+        const pct = histPct(key);              // 0 = not billed, else fraction billed in this PC
+        const on  = pct > 0;
+        const chk = on ? 'checked' : '';
+        const partial = on && pct < 0.999;
+        cells += `<td style="text-align:center;padding:4px;white-space:nowrap">
+          <input type="checkbox" ${chk} style="width:15px;height:15px;accent-color:var(--green);cursor:pointer;vertical-align:middle"
             onchange="histToggle('${sv.villa_id}','${escH(act.activity_code)}',this.checked)"
             id="hpk_${sv.villa_id}_${escH(act.activity_code)}">
+          <input type="number" min="1" max="100" step="1" value="${on ? +(pct*100).toFixed(2) : ''}" ${on?'':'disabled'}
+            title="% billed in this PC — the remainder carries to a later PC"
+            style="width:42px;font-size:10px;padding:1px 3px;margin-left:3px;vertical-align:middle;text-align:center;background:var(--bg2);border:1px solid ${partial?'var(--amber)':'var(--bdr2)'};border-radius:3px;color:${partial?'var(--amber)':'var(--tx2)'}"
+            onchange="histSetPct('${sv.villa_id}','${escH(act.activity_code)}',this.value)"
+            id="hpp_${sv.villa_id}_${escH(act.activity_code)}">
         </td>`;
       });
     });
@@ -3019,39 +3027,83 @@ function renderHistGrid() {
   updateHistCount();
 }
 
+let _histLastPct = {}; // key → last non-zero % so an untick/re-tick round-trip keeps the imported value
+// histPCSelections values are FRACTIONS (0–1). Legacy `true` is read as 100%.
+function histPct(key) {
+  const v = histPCSelections[key];
+  if (typeof v === 'number') return v > 0 ? Math.min(1, v) : 0;
+  return v ? 1 : 0;
+}
+// Keep a cell's checkbox + % input in sync with the stored fraction
+function _histPaintCell(villaId, actCode, pct) {
+  const cIn = document.getElementById(`hpk_${villaId}_${actCode}`);
+  const pIn = document.getElementById(`hpp_${villaId}_${actCode}`);
+  const on = pct > 0, partial = on && pct < 0.999;
+  if (cIn) cIn.checked = on;
+  if (pIn) {
+    pIn.disabled = !on;
+    pIn.value = on ? +(pct*100).toFixed(2) : '';
+    pIn.style.borderColor = partial ? 'var(--amber)' : 'var(--bdr2)';
+    pIn.style.color = partial ? 'var(--amber)' : 'var(--tx2)';
+  }
+}
+
 function histToggle(villaId, actCode, val) {
-  histPCSelections[`${villaId}:${actCode}`] = val;
+  const key = `${villaId}:${actCode}`;
+  // Re-ticking restores the last %, so an accidental untick doesn't silently
+  // turn an imported 50% back into a full 100% bill.
+  const cur = histPct(key);
+  if (cur > 0) _histLastPct[key] = cur;
+  const pct = val ? (_histLastPct[key] > 0 ? _histLastPct[key] : 1) : 0;
+  histPCSelections[key] = pct;
+  _histPaintCell(villaId, actCode, pct);
+  updateHistCount();
+}
+
+// Set the % billed for one cell. 0 / blank unticks it; >100 clamps to 100.
+function histSetPct(villaId, actCode, raw) {
+  const key = `${villaId}:${actCode}`;
+  let p = parseFloat(raw);
+  if (isNaN(p) || p <= 0) p = 0;
+  if (p > 100) p = 100;
+  const pct = p / 100;
+  if (pct > 0) _histLastPct[key] = pct;
+  histPCSelections[key] = pct;
+  _histPaintCell(villaId, actCode, pct);
   updateHistCount();
 }
 
 function histSelectAllAct(actCode, val) {
   scopeVillas.forEach(sv => {
-    histPCSelections[`${sv.villa_id}:${actCode}`] = val;
-    const el = document.getElementById(`hpk_${sv.villa_id}_${actCode}`);
-    if (el) el.checked = val;
+    const pct = val ? 1 : 0;
+    histPCSelections[`${sv.villa_id}:${actCode}`] = pct;
+    _histPaintCell(sv.villa_id, actCode, pct);
   });
   updateHistCount();
 }
 
 function histSelectRow(villaId) {
-  const allOn = scopeActivities.every(act => histPCSelections[`${villaId}:${act.activity_code}`]);
+  const allOn = scopeActivities.every(act => histPct(`${villaId}:${act.activity_code}`) > 0);
   scopeActivities.forEach(act => {
-    const val = !allOn;
-    histPCSelections[`${villaId}:${act.activity_code}`] = val;
-    const el = document.getElementById(`hpk_${villaId}_${act.activity_code}`);
-    if (el) el.checked = val;
+    const pct = allOn ? 0 : 1;
+    histPCSelections[`${villaId}:${act.activity_code}`] = pct;
+    _histPaintCell(villaId, act.activity_code, pct);
   });
   updateHistCount();
 }
 
 function updateHistCount() {
-  const n = Object.values(histPCSelections).filter(Boolean).length;
-  document.getElementById('hist-pc-count').textContent = `${n} activit${n===1?'y':'ies'} selected across ${scopeVillas.length} villas`;
+  const vals = Object.keys(histPCSelections).map(k => histPct(k)).filter(p => p > 0);
+  const n = vals.length;
+  const partial = vals.filter(p => p < 0.999).length;
+  document.getElementById('hist-pc-count').textContent =
+    `${n} activit${n===1?'y':'ies'} selected across ${scopeVillas.length} villas` +
+    (partial ? ` · ${partial} partial` : '');
 }
 
 // ── Historical PC: import the progress Excel and pre-tick the grid ──
 function histClearAll() {
-  histPCSelections = {};
+  histPCSelections = {}; _histLastPct = {};
   renderHistGrid();
   const m = document.getElementById('hist-pc-import-msg');
   if (m) m.style.display = 'none';
@@ -3211,8 +3263,14 @@ async function parseHistSheet(sheetName) {
       if (!/vi[-\s]?\d+/i.test(villaRaw) && !/^\d+$/.test(villaRaw)) continue;
       const villaNo = _digits(villaRaw); if (villaNo==null) continue;
       const clusterNo = clusterCol>=0 ? _digits(row[clusterCol]) : null;
+      // Capture the ACTUAL percentage, not just 100% — the system supports partial
+      // payments, so a 50% cell in an old sheet is imported as a 50% partial bill
+      // (the remainder carries to a later PC).
       const codes=[];
-      for (const [code,col] of codeCol) if (_pctTo100(row[col]) >= 99.5) codes.push(code);
+      for (const [code,col] of codeCol) {
+        const p = _pctTo100(row[col]);
+        if (p >= 0.5) codes.push({ code, pct: Math.min(100, p) / 100 });
+      }
       if (!codes.length) continue;
       billRows.push({ villaNo, clusterNo, codes });
       if (clusterNo!=null) clusterSet.add(clusterNo);
@@ -3225,13 +3283,13 @@ async function parseHistSheet(sheetName) {
     projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no]=v; (vNo[v.villa_no]=vNo[v.villa_no]||[]).push(v); });
 
     histPCSelections = {};
-    const importedVillas=[]; const seen=new Set(); const unmatched=[]; let cellsTicked=0;
+    const importedVillas=[]; const seen=new Set(); const unmatched=[]; let cellsTicked=0; let partialCells=0;
     billRows.forEach(br => {
       let v = (br.clusterNo!=null) ? vKey[br.clusterNo+':'+br.villaNo] : undefined;
       if (!v) { const cand=vNo[br.villaNo]; if(cand&&cand.length===1) v=cand[0]; }
       if (!v) { unmatched.push('VI-'+br.villaNo+(br.clusterNo!=null?' (C'+br.clusterNo+')':'')); return; }
       if (!seen.has(v.id)){ seen.add(v.id); importedVillas.push({villa_id:v.id,villa_no:v.villa_no,cluster_id:v.cluster_id,villa_type_label:matchVillaType(v.villa_type),raw_villa_type:v.villa_type}); }
-      br.codes.forEach(code => { histPCSelections[v.id+':'+code]=true; cellsTicked++; });
+      br.codes.forEach(c => { histPCSelections[v.id+':'+c.code]=c.pct; cellsTicked++; if (c.pct < 0.999) partialCells++; });
     });
 
     // The Excel defines this PC's villas — show ONLY those that have at least one billed activity.
@@ -3247,7 +3305,7 @@ async function parseHistSheet(sheetName) {
     const lbl = c => escH((codeName[c]||'')+' ['+c+']');
     const missing = scopeActivities.map(a=>String(a.activity_code).trim()).filter(c=>!codeCol.has(c));
     let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(histWB._fileName||'')} — sheet <strong>${escH(sheetName)}</strong></div>
-      <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities ticked (100%): <strong>${cellsTicked}</strong></div>
+      <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities billed: <strong>${cellsTicked}</strong>${partialCells ? ` &middot; <span style="color:var(--amber)">of which partial (&lt;100%): <strong>${partialCells}</strong></span>` : ''}</div>
       <div style="color:var(--tx3)">Matched activities: ${[...codeCol.keys()].map(lbl).join(', ')}</div>`;
     if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column: ${missing.map(lbl).join(', ')}</div>`;
     if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
@@ -3292,28 +3350,45 @@ async function submitHistPC() {
       })));
     }
 
-    // 2. Insert billed records for all checked (villa, activity) pairs
+    // 2. Insert billed records for all checked (villa, activity) pairs, carrying the
+    //    per-cell % so partially-billed historical cells restore as partial payments
+    //    (carry_remainder=true → the unpaid balance flows into a later PC).
     const billedItems = [];
     scopeVillas.forEach(sv => {
       scopeActivities.forEach(act => {
-        if (histPCSelections[`${sv.villa_id}:${act.activity_code}`]) {
+        const pct = histPct(`${sv.villa_id}:${act.activity_code}`);
+        if (pct > 0) {
           billedItems.push({
             scope_id: selectedScope.id,
             locked_pc_id: res.id,
             villa_id: sv.villa_id,
-            activity_code: act.activity_code
+            activity_code: act.activity_code,
+            billed_pct: Math.round(pct * 1e6) / 1e6,
+            carry_remainder: true
           });
         }
       });
     });
     if (billedItems.length) {
-      // Historical sheets can overlap earlier PCs — skip pairs already billed in
-      // this scope (any PC) so nothing is double-billed. The on_conflict target
-      // must name the table's REAL unique constraint (scope, villa, activity, PC —
-      // a 3-column target 400s with "no unique or exclusion constraint matching").
-      const existingBilled = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id,activity_code`);
-      const alreadyBilled = new Set(existingBilled.map(r => `${r.villa_id}:${r.activity_code}`));
-      const freshItems = billedItems.filter(b => !alreadyBilled.has(`${b.villa_id}:${b.activity_code}`));
+      // A progress sheet's % is CUMULATIVE to-date, but billed_pct is the increment for
+      // THIS PC. So subtract whatever the scope already has billed for each villa+activity
+      // and store only the remainder — a 50% PC1 followed by a 100% PC2 bills 50% + 50%,
+      // never 150%. Fully-billed pairs drop out (increment 0), which also covers overlapping
+      // re-imports. The on_conflict target must name the table's REAL unique constraint
+      // (scope, villa, activity, PC — a 3-column target 400s with "no unique or exclusion
+      // constraint matching").
+      const existingBilled = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id,activity_code,billed_pct`);
+      const priorPct = {};
+      existingBilled.forEach(r => {
+        const k = `${r.villa_id}:${r.activity_code}`;
+        priorPct[k] = (priorPct[k] || 0) + (r.billed_pct == null ? 1 : Number(r.billed_pct));
+      });
+      const freshItems = [];
+      billedItems.forEach(b => {
+        const prior = priorPct[`${b.villa_id}:${b.activity_code}`] || 0;
+        const inc = Math.min(b.billed_pct, 1) - prior;
+        if (inc > 1e-6) freshItems.push({ ...b, billed_pct: Math.round(inc * 1e6) / 1e6 });
+      });
       const skipped = billedItems.length - freshItems.length;
       if (freshItems.length) {
         const brRes = await fetch(`${SB}/rest/v1/qs_billed_records?on_conflict=scope_id,villa_id,activity_code,locked_pc_id`, {
@@ -3327,7 +3402,7 @@ async function submitHistPC() {
           throw new Error(`PC created (id ${res.id}) but billed records failed to save: ${errMsg}. Delete this PC and try again.`);
         }
       }
-      if (skipped > 0) console.warn(`[hist PC] ${skipped} pair(s) skipped — already billed on an earlier PC in this scope`);
+      if (skipped > 0) console.warn(`[hist PC] ${skipped} pair(s) skipped — already fully billed on an earlier PC in this scope`);
     }
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
