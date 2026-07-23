@@ -3336,9 +3336,43 @@ async function parseHistSheet(sheetName) {
       parts.forEach((p, i) => { if(!codeCol.has(p.code)) codeCol.set(p.code, start + i); });
     });
 
-    if (!codeCol.size || villaCol < 0) {
+    // A code can legitimately be fed by SEVERAL sheet columns — two scope activities may
+    // share one WIR code (e.g. "Copper Pipe (HL) Installation" + "Flaring" both under 3210).
+    const codeCols = new Map();                       // code → [column index, …]
+    codeCol.forEach((c, code) => codeCols.set(code, [c]));
+
+    // Supplementary pass — resolve a column for each ACTIVITY by its own name. Needed when
+    // the sheet heading is worded differently from the scope's activity name ("H L
+    // Installation" vs "Copper Pipe (HL) Installation"), and when two activities share a
+    // code — the base-level passes above only ever register the first of those names.
+    if (nameRow >= 0) {
+      const nrow = rows[nameRow] || [];
+      const taken = new Set([...codeCol.values()]);
+      if (villaCol >= 0) taken.add(villaCol);
+      if (clusterCol >= 0) taken.add(clusterCol);
+      const squash = s => _normTxt(s).replace(/[^a-z0-9]/g, '');
+      scopeActivities.forEach(a => {
+        const code = String(a.activity_code).trim();
+        const want = squash(a.activity_name);
+        if (!code || want.length < 4) return;
+        for (let c = 0; c < nrow.length; c++) {
+          if (taken.has(c)) continue;
+          const have = squash(nrow[c]);
+          // Exact, or either name contained in the other (guards against 2-letter noise)
+          if (!have || have.length < 4) continue;
+          if (have === want || have.includes(want) || want.includes(have)) {
+            taken.add(c);
+            if (!codeCols.has(code)) codeCols.set(code, []);
+            codeCols.get(code).push(c);
+            break;
+          }
+        }
+      });
+    }
+
+    if (!codeCols.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
-      diag += `<div style="color:var(--tx2);margin-top:4px">${villaCol<0?'<span style="color:var(--amber)">no “Villa No” column</span> · ':''}${!codeCol.size?'<span style="color:var(--amber)">no activity columns matched by name</span>':''}</div>`;
+      diag += `<div style="color:var(--tx2);margin-top:4px">${villaCol<0?'<span style="color:var(--amber)">no “Villa No” column</span> · ':''}${!codeCols.size?'<span style="color:var(--amber)">no activity columns matched by name</span>':''}</div>`;
       diag += `<div style="color:var(--tx3)">Scope groups: ${scopeActivityGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
       diag += `<div style="color:var(--tx3)">Scope activities: ${scopeActivities.map(a=>escH(a.activity_name)).join(', ')}</div>`;
       diag += `<div style="margin-top:6px;color:var(--tx2)">Top rows seen:</div>`;
@@ -3361,8 +3395,11 @@ async function parseHistSheet(sheetName) {
       // payments, so a 50% cell in an old sheet is imported as a 50% partial bill
       // (the remainder carries to a later PC).
       const codes=[];
-      for (const [code,col] of codeCol) {
-        const p = _pctTo100(row[col]);
+      for (const [code,cols] of codeCols) {
+        // Several columns can feed one code (two activities sharing a WIR code) —
+        // the furthest-along column wins.
+        let p = 0;
+        cols.forEach(col => { const v = _pctTo100(row[col]); if (v > p) p = v; });
         if (p >= 0.5) codes.push({ code, pct: Math.min(100, p) / 100 });
       }
       if (!codes.length) continue;
@@ -3398,11 +3435,16 @@ async function parseHistSheet(sheetName) {
 
     const codeName = {}; scopeActivities.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
     const lbl = c => escH((codeName[c]||'')+' ['+c+']');
-    const missing = scopeActivities.map(a=>String(a.activity_code).trim()).filter(c=>!codeCol.has(c));
+    const missing = [...new Set(scopeActivities.map(a=>String(a.activity_code).trim()).filter(c=>!codeCols.has(c)))];
+    // Two scope activities sharing one WIR code bill as a single cell — worth flagging,
+    // it is usually why a column "disappears" into another.
+    const dupCodes = [...new Set(scopeActivities.map(a=>String(a.activity_code).trim())
+      .filter(c=>c).filter((c,i,arr)=>arr.indexOf(c)!==i))];
     let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(histWB._fileName||'')} — sheet <strong>${escH(sheetName)}</strong></div>
       <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities billed: <strong>${cellsTicked}</strong>${partialCells ? ` &middot; <span style="color:var(--amber)">of which partial (&lt;100%): <strong>${partialCells}</strong></span>` : ''}</div>
-      <div style="color:var(--tx3)">Matched activities: ${[...codeCol.keys()].map(lbl).join(', ')}</div>`;
+      <div style="color:var(--tx3)">Matched activities: ${[...codeCols.keys()].map(lbl).join(', ')}</div>`;
     if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column: ${missing.map(lbl).join(', ')}</div>`;
+    if (dupCodes.length) html += `<div style="color:var(--tx3)">ℹ Code${dupCodes.length>1?'s':''} ${dupCodes.map(escH).join(', ')} ${dupCodes.length>1?'are':'is'} used by more than one activity in this scope — those columns bill as one cell (highest % wins).</div>`;
     if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
     html += `<div style="color:var(--tx3);margin-top:4px">Review the grid, then click <strong>Create Locked PC</strong>. Wrong sheet? Pick another above.</div>`;
     showHistImportMsg('ok', html, true);
