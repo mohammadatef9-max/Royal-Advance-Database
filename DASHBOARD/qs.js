@@ -664,6 +664,39 @@ async function subRawClause(subName) {
   return `raw_subcontractor=ilike.${encodeURIComponent(subName)}`;
 }
 
+// ── Floor-split WIR codes ────────────────────────────────────────────────────
+// Some villas' WIRs are raised per floor: the base code plus a G (ground) or F
+// (first) suffix — e.g. 3210 / 3210F / 3210G. They are the SAME activity, so a
+// villa that only ever got 3210G must still be detected and billed.
+// Only F/G are absorbed: other suffixes in the data (R, BR, FL, AR…) are genuinely
+// separate activities. Guard: never absorb a suffix code that the scope configures
+// as its own activity, or it would be double-counted.
+const WIR_FLOOR_SUFFIXES = ['F', 'G'];
+function wirCodeVariants(base, configuredCodes) {
+  const out = [base];
+  WIR_FLOOR_SUFFIXES.forEach(sfx => {
+    const v = base + sfx;
+    if (!configuredCodes || !configuredCodes.has(v)) out.push(v);
+  });
+  return out;
+}
+// Expand a list of configured base codes into every code we should query for.
+function wirExpandCodes(baseCodes) {
+  const configured = new Set(baseCodes);
+  const out = new Set();
+  baseCodes.forEach(b => wirCodeVariants(b, configured).forEach(c => out.add(c)));
+  return [...out];
+}
+// Map a raw WIR code back to the configured base it belongs to (identity if it is
+// already a configured code, or has no absorbable F/G suffix).
+function wirBaseOf(rawCode, configuredCodes) {
+  if (!rawCode) return rawCode;
+  if (configuredCodes && configuredCodes.has(rawCode)) return rawCode;
+  const m = /^(.*?)([FG])$/.exec(rawCode);
+  if (m && configuredCodes && configuredCodes.has(m[1])) return m[1];
+  return rawCode;
+}
+
 // ── Auto-detect villas from WIR data for this subcontractor ──
 async function _detectWirVillas() {
   const subName = selectedScope.subcontractor_name;
@@ -676,7 +709,10 @@ async function _detectWirVillas() {
   const actCodes = [...new Set(scopeActivities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
   if (!actCodes.length) return [];
 
-  const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
+  // Include per-floor variants (3210 → 3210F/3210G) so villas whose WIR was only
+  // ever raised with a floor suffix are still detected.
+  const queryCodes = wirExpandCodes(actCodes);
+  const actFilter = `&raw_activity_code=in.(${queryCodes.map(c => `"${c}"`).join(',')})`;
   // Get distinct villa_ids that have WIR entries for this sub + these specific activities.
   // Use the per-subcontractor view so we don't miss villas where another sub raised the latest
   // revision for a shared activity code (the project-wide view would collapse this sub's row away).
@@ -895,7 +931,9 @@ async function loadPCData() {
   // For split activities use base_code for the WIR query — raw_activity_code in WIR data
   // only has the base code (e.g. "3190"), never the synthetic split code ("3190-GF").
   const baseCodes = [...new Set(scopeActivities.map(a => a.base_code || a.activity_code))];
-  const baseCodesStr = baseCodes.map(c => `"${c}"`).join(',');
+  const baseCodeSet = new Set(baseCodes);
+  // Query the per-floor variants too (3210 → 3210F/3210G); they fold back into the base below.
+  const baseCodesStr = wirExpandCodes(baseCodes).map(c => `"${c}"`).join(',');
   // Map base_code → [activity_codes] so each WIR row fans out to all its split parts
   const baseToSplits = {};
   scopeActivities.forEach(a => {
@@ -921,17 +959,28 @@ async function loadPCData() {
   // before the PC's period_date. If the PC has no period_date, no date restriction applies.
   const periodDate = selectedPC.period_date || null; // "YYYY-MM-DD" or null
   wirData = {};
+  // Group the rows per villa + base code first, folding floor variants (3210F/3210G)
+  // into their base, then decide approval once per activity.
+  const byVillaBase = {};
   wirRows.forEach(w => {
-    const splits = baseToSplits[w.raw_activity_code] || [w.raw_activity_code];
-    splits.forEach(actCode => {
-      const key = w.villa_id + ':' + actCode;
-      const existing = wirData[key];
-      // Only count as approved if: status is approved AND (no period gate OR response_date ≤ period)
-      const withinPeriod = !periodDate || (w.response_date && w.response_date <= periodDate);
-      const approved = w.normalised_status === 'approved' && withinPeriod;
-      if (!existing || approved) {
-        wirData[key] = { approved, response_date: w.response_date };
-      }
+    const base = wirBaseOf(w.raw_activity_code, baseCodeSet);
+    const k = w.villa_id + '|' + base;
+    (byVillaBase[k] = byVillaBase[k] || []).push(w);
+  });
+  Object.keys(byVillaBase).forEach(k => {
+    const sep = k.indexOf('|');
+    const villaId = k.slice(0, sep), base = k.slice(sep + 1);
+    const rows = byVillaBase[k];
+    // Split across floors ⇒ the activity is only complete when EVERY part is approved
+    // (a villa with 3210F pending and 3210G approved is not finished).
+    const allApproved = rows.every(r => r.normalised_status === 'approved');
+    // Completion date = the LAST part approved, so the period gate uses the true finish date
+    const dates = rows.map(r => r.response_date).filter(Boolean).sort();
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+    const withinPeriod = !periodDate || (lastDate && lastDate <= periodDate);
+    const approved = allApproved && withinPeriod;
+    (baseToSplits[base] || [base]).forEach(actCode => {
+      wirData[villaId + ':' + actCode] = { approved, response_date: lastDate };
     });
   });
 
@@ -1118,7 +1167,7 @@ async function ctxDetectVillas(scope, villaTypes, activities, extraIds) {
     const nameFilter = await subRawClause(subName);
     const actCodes = [...new Set(activities.map(a => (a.base_code || a.activity_code)).filter(Boolean))];
     if (actCodes.length) {
-      const actFilter = `&raw_activity_code=in.(${actCodes.map(c => `"${c}"`).join(',')})`;
+      const actFilter = `&raw_activity_code=in.(${wirExpandCodes(actCodes).map(c => `"${c}"`).join(',')})`;
       const wirRows = await fa(`v_latest_wir_by_sub?${nameFilter}${actFilter}&select=villa_id`);
       villaIds = wirRows.map(r => r.villa_id).filter(Boolean);
     }
@@ -1143,8 +1192,10 @@ async function buildScopeCtx(scope) {
   const wir = {}, overrides = {}, billed = {};
   const villaIds = villas.map(v => v.villa_id);
   const actCodes = activities.map(a => a.activity_code);
+  const actCodeSet = new Set(actCodes);
   if (villaIds.length && actCodes.length) {
-    const vStr = villaIds.join(','), aStr = actCodes.map(c => `"${c}"`).join(',');
+    // Query per-floor variants too (3210 → 3210F/3210G) and fold them back below.
+    const vStr = villaIds.join(','), aStr = wirExpandCodes(actCodes).map(c => `"${c}"`).join(',');
     // Scope WIRs to this scope's own subcontractor (canonical + merged aliases) so a shared
     // activity code can't cross-credit another sub's approved WIR.
     const subClause = await subRawClause(scope.subcontractor_name);
@@ -1154,7 +1205,23 @@ async function buildScopeCtx(scope) {
       fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,payment_pct,carry_remainder`),
       fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id,billed_pct,carry_remainder`),
     ]);
-    wirRows.forEach(w => { const k=w.villa_id+':'+w.raw_activity_code; if(!wir[k]||w.normalised_status==='approved') wir[k]={approved:w.normalised_status==='approved',response_date:w.response_date}; });
+    // Fold floor variants into their base, then require every part approved (see loadPCData)
+    const ctxByBase = {};
+    wirRows.forEach(w => {
+      const base = wirBaseOf(w.raw_activity_code, actCodeSet);
+      const k = w.villa_id + '|' + base;
+      (ctxByBase[k] = ctxByBase[k] || []).push(w);
+    });
+    Object.keys(ctxByBase).forEach(k => {
+      const sep = k.indexOf('|');
+      const villaId = k.slice(0, sep), base = k.slice(sep + 1);
+      const rows = ctxByBase[k];
+      const dates = rows.map(r => r.response_date).filter(Boolean).sort();
+      wir[villaId + ':' + base] = {
+        approved: rows.every(r => r.normalised_status === 'approved'),
+        response_date: dates.length ? dates[dates.length - 1] : null
+      };
+    });
     ovRows.forEach(o => { overrides[o.villa_id+':'+o.activity_code]=o; });
     bRows.forEach(b => { const k=b.villa_id+':'+b.activity_code; (billed[k]=billed[k]||[]).push({ pc_id:b.locked_pc_id, pct:b.billed_pct==null?1:Number(b.billed_pct), carry:b.carry_remainder!==false }); });
   }
