@@ -3006,9 +3006,10 @@ async function submitNewPC() {
 function toggleHistMode(on) {
   const btn = document.getElementById('npc-submit-btn');
   btn.textContent = on ? 'Next: Import Excel →' : 'Create PC';
-  // Multi-scope merging isn't supported for historical PCs
+  // Historical PCs carry their scope family (base + VOs) too — otherwise a rebuilt PC
+  // leaves its VOs unattached and they show up as separate certificates.
   const row = document.getElementById('npc-scopes-row');
-  if (row) row.style.display = (on || !document.getElementById('npc-scopes-list').children.length) ? 'none' : '';
+  if (row) row.style.display = document.getElementById('npc-scopes-list').children.length ? '' : 'none';
 }
 
 function handleNewPC() {
@@ -3485,8 +3486,11 @@ async function submitHistPC() {
     const res = await fp('qs_payment_certificates', body);
     if (!res?.id) throw new Error('PC was not created — PC number may already exist for this scope.');
 
-    // Link the scope (historical PCs are single-scope)
-    await fp('qs_pc_scopes', [{ pc_id: res.id, scope_id: selectedScope.id, sort_order: 0 }]);
+    // Link every scope ticked in the New PC dialog — the base plus its VO children — so a
+    // rebuilt historical PC carries its variations like a normal PC instead of leaving them
+    // to appear as separate certificates.
+    const histScopeIds = [...new Set([selectedScope.id, ...(newPcScopeIds || [])])];
+    await fp('qs_pc_scopes', histScopeIds.map((sid, i) => ({ pc_id: res.id, scope_id: sid, sort_order: i })));
 
     // Copy the Default signatory template (a different template can be loaded from Edit Signatories)
     const globalSigsCopy = await fa('qs_signatories?is_active=eq.true&template_name=eq.Default&order=sort_order.asc');
