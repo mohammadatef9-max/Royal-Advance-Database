@@ -3312,13 +3312,18 @@ async function parseHistSheet(sheetName) {
       }
     }
 
-    // Find the START column for each base. Pass 1 — exact base-code cell. Pass 2 — name(+group)/order.
+    // Find the START column for each base. Pass 1 — exact base-code cell (also tolerating a
+    // "WIR-3210" / "WIR 3210" style prefix people sometimes type in the code row). Pass 2 —
+    // name(+group)/order.
     const baseStart = new Map();
     for (let r=0; r<scan && baseStart.size<baseParts.size; r++){
       const row = rows[r]||[];
       for (let c=0;c<row.length;c++){
         const cell = String(row[c]==null?'':row[c]).trim();
-        if (cell && baseParts.has(cell) && !baseStart.has(cell)) baseStart.set(cell, c);
+        if (!cell) continue;
+        const bare = cell.replace(/^wir[\s\-_:#]*/i, '').trim();   // "WIR-3210" → "3210"
+        const key = baseParts.has(cell) ? cell : (baseParts.has(bare) ? bare : null);
+        if (key && !baseStart.has(key)) baseStart.set(key, c);
       }
     }
     if (nameRow>=0 && baseStart.size < baseParts.size) {
@@ -3390,6 +3395,29 @@ async function parseHistSheet(sheetName) {
         addCol(p.code, col);
       });
     });
+
+    // PASS C — some sheets split each activity into a GF | FF | Progress % sub-block, with the
+    // activity NAME only on the first (GF) sub-column. The value we want to bill is the
+    // "Progress %" (total) sub-column, not the heading column. If a "progress/total/overall"
+    // sub-header sits within an activity's block, read from there instead. The common
+    // single-column layout has no such sub-header, so nothing changes for it.
+    if (nameRow >= 0) {
+      const starts = [...new Set([].concat(...codeCols.values()))].sort((a, b) => a - b);
+      const isTotalHdr = s => /^(progress|total|overall)\b/.test(_normTxt(s));
+      codeCols.forEach((cols, code) => {
+        const out = cols.map(c => {
+          const nextStart = starts.find(s => s > c);
+          const maxCc = Math.min(nextStart != null ? nextStart - 1 : c + 2, c + 2);
+          for (let cc = c; cc <= maxCc; cc++) {
+            for (let rr = nameRow + 1; rr <= nameRow + 6 && rr < rows.length; rr++) {
+              if (isTotalHdr((rows[rr] || [])[cc])) return cc;
+            }
+          }
+          return c;
+        });
+        codeCols.set(code, out);
+      });
+    }
 
     if (!codeCols.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
