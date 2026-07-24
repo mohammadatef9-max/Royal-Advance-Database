@@ -1388,16 +1388,13 @@ function buildProgressSheetHtml(sec) {
         } else if (source === 'cross-billed') {
           cls += ' cross-billed'; label = '⚠';
           tip += ` — ALREADY BILLED under "${st.crossBilled ? st.crossBilled.name : 'another scope'}" — excluded from this PC; click to override if billing again is intentional`;
-        } else if (isCompleteToDate) {
-          if (effLocked) {
-            // Locked PC: WIR was approved within this PC's period but was never
-            // billed in it (no billed record) — a green ✓ here reads as "accounted
-            // for in this PC", which is wrong. Show it dimmed instead.
-            cls += ' not-approved'; label = '✓';
-            tip += ' — WIR approved in this period but NOT billed in this PC';
-          } else {
-            cls += ' approved'; label = '✓';
-          }
+        } else if (isCompleteToDate && !effLocked) {
+          // Draft: an approved WIR is billable now, so show it as ✓.
+          // A LOCKED PC deliberately falls through to "—": it is a historical record of
+          // what was actually billed, so work whose WIR happened to be approved in that
+          // period but was NOT billed must not appear at all. This keeps an imported
+          // historical sheet identical to the source Excel.
+          cls += ' approved'; label = '✓';
         } else {
           cls += ' not-approved'; label = '—';
         }
