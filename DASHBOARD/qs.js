@@ -1953,15 +1953,23 @@ function renderPaymentSummarySingle() {
         <span class="pos-val" style="font-size:13px">${fmtAED(adjustedContract)}</span>
       </div>` : ''}
       <div class="pos-divider"></div>
+      <!-- Contract consumption is measured on GROSS work done. Retention and advance
+           recovery are cash adjustments, not un-done work — netting them off here
+           overstated "Remaining Contract" (and it could never reach zero at 100%
+           complete, since retention is always held back). -->
       <div class="pos-row">
-        <span class="pos-label">Certified To Date (this PC)</span>
-        <span class="pos-val green">${fmtAED(certified)}<span class="pos-pct">${adjustedContract > 0 ? ((certified/adjustedContract)*100).toFixed(1)+'%' : ''}</span></span>
+        <span class="pos-label">Work Done to Date</span>
+        <span class="pos-val green">${fmtAED(totTodAmt)}<span class="pos-pct">${adjustedContract > 0 ? ((totTodAmt/adjustedContract)*100).toFixed(1)+'%' : ''}</span></span>
       </div>
       ${adjustedContract > 0 ? `
       <div class="pos-row">
         <span class="pos-label">Remaining Contract</span>
-        <span class="pos-val ${adjustedContract - certified < 0 ? 'red' : ''}">${fmtAED(adjustedContract - certified)}</span>
+        <span class="pos-val ${adjustedContract - totTodAmt < 0 ? 'red' : ''}">${fmtAED(adjustedContract - totTodAmt)}</span>
       </div>` : ''}
+      <div class="pos-row">
+        <span class="pos-label" style="color:var(--tx3)">Certified to Date <span style="font-size:11px">(after retention${(parseFloat(selectedScope.advance_amount_aed)||0) > 0 ? ' &amp; advance' : ''})</span></span>
+        <span class="pos-val">${fmtAED(certified)}</span>
+      </div>
       ${retHeldTotal > 0 || (parseFloat(selectedScope.advance_amount_aed)||0) > 0 ? `<div class="pos-divider"></div>` : ''}
       ${retHeldTotal > 0 ? `
       <div class="pos-row">
@@ -2160,7 +2168,9 @@ function renderPaymentSummaryMulti() {
       ${combVOs>0?`<div class="pos-row"><span class="pos-label" style="font-weight:700">Approved Variations</span><span class="pos-val accent">+ ${fmtAED(combVOs)}</span></div>
       <div class="pos-row"><span class="pos-label" style="font-weight:700;color:var(--tx)">Adjusted Contract Value</span><span class="pos-val" style="font-size:13px">${fmtAED(totSubcon+combVOs)}</span></div>`:''}
       <div class="pos-divider"></div>
-      <div class="pos-row"><span class="pos-label">Certified To Date (this PC)</span><span class="pos-val green">${fmtAED(certTod)}</span></div>
+      <div class="pos-row"><span class="pos-label">Work Done to Date</span><span class="pos-val green">${fmtAED(combTod)}${(totSubcon+combVOs) > 0 ? `<span class="pos-pct">${((combTod/(totSubcon+combVOs))*100).toFixed(1)}%</span>` : ''}</span></div>
+      ${(totSubcon+combVOs) > 0 ? `<div class="pos-row"><span class="pos-label">Remaining Contract</span><span class="pos-val ${(totSubcon+combVOs-combTod) < 0 ? 'red' : ''}">${fmtAED(totSubcon+combVOs-combTod)}</span></div>` : ''}
+      <div class="pos-row"><span class="pos-label" style="color:var(--tx3)">Certified to Date <span style="font-size:11px">(after retention)</span></span><span class="pos-val">${fmtAED(certTod)}</span></div>
     </div>` : ''}
 
     <div class="sig-block">
