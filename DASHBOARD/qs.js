@@ -87,6 +87,22 @@ async function fa(path) {
     return Array.isArray(d) ? d : [];
   } catch { return []; }
 }
+// Paged read for result sets that can exceed PostgREST's 1000-row cap. A plain fa() silently
+// returns only the first 1000 rows — no error — so anything unbounded (e.g. every villa in
+// several clusters) MUST come through here. `path` must carry a stable unique &order= or
+// offset paging can skip/repeat rows.
+async function faPaged(path, pageSize = 1000, max = 50000) {
+  const sep = path.includes('?') ? '&' : '?';
+  let all = [], offset = 0;
+  while (all.length < max) {
+    const page = await fa(`${path}${sep}limit=${pageSize}&offset=${offset}`);
+    if (!page.length) break;
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all;
+}
 async function fp(path, body) {
   const r = await fetch(`${SB}/rest/v1/${path}`, {
     method:'POST', headers: getH({'Prefer':'return=representation'}), body: JSON.stringify(body)
@@ -3481,7 +3497,11 @@ async function parseHistSheet(sheetName) {
 
     // Match villas against the PROJECT villa list
     const clusterFilter = clusterSet.size ? `cluster_id=in.(${[...clusterSet].join(',')})&` : '';
-    const projVillas = await fa(`villas?${clusterFilter}select=id,villa_no,cluster_id,villa_type&is_active=eq.true&limit=20000`);
+    // Paged + explicitly ordered: a sheet spanning several clusters asks for well over 1000
+    // villas, and PostgREST caps a single request at 1000 rows without erroring — which
+    // silently dropped every villa past that point (e.g. C7 villas, which sort last), so the
+    // importer reported them as "not found in the project".
+    const projVillas = await faPaged(`villas?${clusterFilter}select=id,villa_no,cluster_id,villa_type&is_active=eq.true&order=id.asc`);
     const vKey={}, vNo={};
     projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no]=v; (vNo[v.villa_no]=vNo[v.villa_no]||[]).push(v); });
 
