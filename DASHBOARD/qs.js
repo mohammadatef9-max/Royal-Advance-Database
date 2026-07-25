@@ -1057,7 +1057,7 @@ function clamp01(n){ return Math.max(0, Math.min(1, n)); }
 //  • partial payment (override.payment_pct = cumulative paid-to-date share of the cell),
 //  • carry vs withhold of the unpaid remainder across PCs (billed record's carry flag).
 // billedList: [{pc_id, pct, carry}] (any PC). override: row|undefined. wirApproved: bool. locked: bool.
-function computeCellBilling(billedList, override, wirApproved, locked, wirPct) {
+function computeCellBilling(billedList, override, wirApproved, locked, wirPct, billedOnly) {
   const curNum = selectedPC ? selectedPC.pc_number : Infinity;
   const recs = (billedList || []).map(b => ({ pct: b.pct, carry: b.carry, num: pcNumById[b.pc_id] ?? null, pc_id: b.pc_id }));
   const prevRecs  = recs.filter(r => r.num !== null && r.num < curNum).sort((a,b) => a.num - b.num);
@@ -1070,7 +1070,11 @@ function computeCellBilling(billedList, override, wirApproved, locked, wirPct) {
   // on the most-recent prior lock's carry flag (withheld balances wait for an explicit override).
   const carriesIn = prevRecs.length === 0 ? true : (prevRecs[prevRecs.length - 1].carry !== false);
 
-  const isCompleteToDate = override !== undefined ? !!override.is_complete : wirApproved;
+  // billed_only: an imported PC, reopened for edits. It mirrors its source Excel — the WIR does
+  // NOT drive billing. A cell bills what its own record holds, or what an explicit override sets;
+  // a bare approved WIR contributes nothing (so reopening never re-adds villas from live WIR).
+  const isCompleteToDate = override !== undefined ? !!override.is_complete
+                         : (billedOnly ? (nowRec != null) : wirApproved);
 
   // How much of this cell the WIRs currently justify billing: normally 100%, but a
   // legacy villa with only ONE of its two floor WIRs approved justifies just 50%
@@ -1081,6 +1085,17 @@ function computeCellBilling(billedList, override, wirApproved, locked, wirPct) {
   let curPct = 0;
   if (locked) {
     curPct = nowRec ? (nowRec.pct || 0) : 0;
+  } else if (billedOnly) {
+    if (override !== undefined) {
+      // Manual edit on an Excel-exact PC: an "on" override bills its % (default full remaining);
+      // an "off" override bills nothing.
+      if (override.is_complete && remaining > 1e-9) {
+        const t = override.payment_pct != null ? clamp01(Number(override.payment_pct)) : 1;
+        curPct = Math.min(remaining, Math.max(0, t - prevPct));
+      }
+    } else {
+      curPct = nowRec ? (nowRec.pct || 0) : 0;   // exactly what the sheet billed
+    }
   } else if (isCompleteToDate && remaining > 1e-9) {
     // An explicit complete override can release a previously-withheld balance
     const releasedByOverride = override !== undefined && override.is_complete;
@@ -1095,8 +1110,9 @@ function computeCellBilling(billedList, override, wirApproved, locked, wirPct) {
   const billedLater   = laterRecs.length > 0;
   // Approved work whose remaining balance is NOT being billed now and won't auto-carry → withheld.
   // Measured against `target`, so the half a villa hasn't earned yet (only one floor WIR
-  // approved) is NOT reported as withheld — it simply isn't billable yet.
-  const withheldPct   = (!locked && isCompleteToDate) ? Math.max(0, Math.min(remaining, target - prevPct - curPct)) : 0;
+  // approved) is NOT reported as withheld — it simply isn't billable yet. Never in billed_only:
+  // an approved-but-unbilled cell there is simply "not in the sheet", not withheld.
+  const withheldPct   = (!locked && !billedOnly && isCompleteToDate) ? Math.max(0, Math.min(remaining, target - prevPct - curPct)) : 0;
   const isPartial     = (curPct > 1e-9 && curPct < remaining - 1e-9) || todPct < 1 - 1e-9 && (wasBilledPrev || curPct > 1e-9);
 
   let source;
@@ -1125,7 +1141,8 @@ function getActivityStatus(villa_id, activity_code) {
   const override = pcOverrides[key];
   const wir = wirData[key];
   const locked = selectedPC && selectedPC.status === 'locked' && !lockedBilledMissing;
-  const r = _applyCrossGuard(computeCellBilling(billedRecords[key], override, wir?.approved === true, locked, wir?.pct), override, key);
+  const billedOnly = selectedPC && selectedPC.billed_only === true && !locked;
+  const r = _applyCrossGuard(computeCellBilling(billedRecords[key], override, wir?.approved === true, locked, wir?.pct, billedOnly), override, key);
   return { ...r, override, wir };
 }
 
@@ -1252,7 +1269,8 @@ function ctxActStatus(ctx, villa_id, activity_code) {
   const override = ctx.overrides[key];
   const wir = ctx.wir[key];
   const locked = selectedPC && selectedPC.status === 'locked';
-  return _applyCrossGuard(computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked, wir?.pct), override, key);
+  const billedOnly = selectedPC && selectedPC.billed_only === true && !locked;
+  return _applyCrossGuard(computeCellBilling(ctx.billed[key], override, wir?.approved === true, locked, wir?.pct, billedOnly), override, key);
 }
 function ctxWorkdone(ctx, villa_id, villa_type_label) {
   let prevAed=0, curAed=0, todAed=0, totalPossibleAed=0;
@@ -1341,9 +1359,12 @@ function buildProgressSheetHtml(sec) {
   // (or, for a draft, work that's approvable now). Villas billed only in LATER PCs are hidden.
   // Manually-added villas are always shown so a not-yet-approved WIR can be billed by override.
   const effLocked = isLocked && !lockedBilledMissing;   // legacy locked w/o billed → behave like to-date
+  // billed_only reopened PC: Excel-exact, so never pull villas in from live WIR — only billed
+  // (this/earlier PC) or manually-added villas appear.
+  const billedOnlyPc = selectedPC && selectedPC.billed_only === true && !isLocked;
   const villaInThisPc = sv => manualSet.has(sv.villa_id) || shActs.some(a => {
     const st = statusOf(sv.villa_id, a.activity_code);
-    return st.wasBilledPrev || st.isBilledNow || (!effLocked && st.isCompleteToDate && !st.billedLater);
+    return st.wasBilledPrev || st.isBilledNow || (!effLocked && !billedOnlyPc && st.isCompleteToDate && !st.billedLater);
   });
 
   // Apply cluster filter + PC relevance
@@ -2627,10 +2648,15 @@ async function confirmReopen() {
   const msg    = document.getElementById('reopen-msg');
   if (!reason) { showMsg(msg, 'err', 'Please enter a reason for reopening.'); return; }
   try {
-    // 1. Remove billed records created by this lock
-    await fetch(`${SB}/rest/v1/qs_billed_records?locked_pc_id=eq.${selectedPC.id}`, {
-      method: 'DELETE', headers: getH()
-    });
+    const keepImport = selectedPC.billed_only === true;
+    // 1. Remove billed records created by this lock — EXCEPT for an Excel-sourced (billed_only)
+    //    PC, where the records ARE the source of truth. Keeping them means reopening edits the
+    //    imported figures in place instead of discarding them and re-deriving from live WIR.
+    if (!keepImport) {
+      await fetch(`${SB}/rest/v1/qs_billed_records?locked_pc_id=eq.${selectedPC.id}`, {
+        method: 'DELETE', headers: getH()
+      });
+    }
     // 2. Reset PC to draft, clear locked snapshot fields
     await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
       status: 'draft', gross_aed: null, locked_at: null
@@ -3516,7 +3542,9 @@ async function submitHistPC() {
       notes: histPCMeta.notes,
       created_by: currentUser?.full_name || '',
       status: 'locked',
-      retention_applicable: scopeRetPct > 0
+      retention_applicable: scopeRetPct > 0,
+      // Mark as Excel-sourced so it stays exact even if reopened for edits (no WIR auto-add).
+      billed_only: true
     };
     const res = await fp('qs_payment_certificates', body);
     if (!res?.id) throw new Error('PC was not created — PC number may already exist for this scope.');
