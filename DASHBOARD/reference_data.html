@@ -276,6 +276,10 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Open Front <span class="tab-badge" id="badge-openfront">—</span>
     </button>
+    <button class="tab-btn" id="tab-villas" onclick="switchTab('villas')" style="display:none;color:#22c55e">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+      Villa Types <span class="tab-badge" id="badge-villas">—</span>
+    </button>
     <button class="tab-btn" id="tab-maint" onclick="switchTab('maint')" style="color:var(--rejected,#ff8a99)">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
       Maintenance
@@ -749,7 +753,87 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
     </div>
   </div><!-- end content-priority -->
 
+  <!-- ══ VILLA TYPES TAB (super admin only) ══ -->
+  <div class="tab-content" id="content-villas" style="flex-direction:column">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="search-input" id="vt-search" placeholder="Search villa no or type…" oninput="renderVillaTypes()">
+      </div>
+      <select class="filter-sel" id="vt-cluster" onchange="renderVillaTypes()">
+        <option value="">All Clusters</option>
+      </select>
+      <select class="filter-sel" id="vt-typefilter" onchange="renderVillaTypes()">
+        <option value="">All Types</option>
+      </select>
+      <div class="toolbar-right">
+        <button class="btn btn-ghost" onclick="loadVillaTypes()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-ghost" onclick="downloadVillaTypesCsv()" title="Download the rows currently shown as CSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download CSV
+        </button>
+        <button class="btn btn-ghost" id="vt-edit-btn" onclick="toggleVillaTypeEdit()" style="color:#f59e0b;border-color:rgba(245,158,11,.45)">
+          🔒 Editing locked — click to unlock
+        </button>
+        <button class="btn btn-primary" id="vt-save-btn" onclick="openVillaTypeSaveModal()" style="display:none">
+          💾 Save changes (<span id="vt-dirty-count">0</span>)
+        </button>
+      </div>
+    </div>
+    <div id="vt-editing-banner" style="display:none;margin:0 24px 4px;padding:8px 12px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:#f59e0b;font-size:12px">
+      ⚠ <b>Editing unlocked.</b> Villa types drive QS rates (matched by bedroom count), keyplans and reports. Changes are saved only when you click <b>Save changes</b>.
+    </div>
+    <div id="vt-summary" style="padding:4px 24px 0"></div>
+    <div style="flex:1;overflow-y:auto;padding:12px 24px 24px">
+      <div id="vt-list">
+        <div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">Loading villas…</div>
+      </div>
+    </div>
+  </div><!-- end content-villas -->
+
 </div><!-- end page-wrap -->
+
+  <!-- ══ VILLA TYPE MODALS ══ -->
+  <div class="modal-overlay" id="vt-unlock-modal" style="display:none" onclick="if(event.target===this)closeVtUnlock()">
+    <div class="modal" style="width:520px;max-width:95vw">
+      <h2 style="color:#f59e0b">⚠ Unlock villa type editing?</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-6px;margin-bottom:14px">
+        Villa types are core project data. Changing one affects:
+      </p>
+      <ul style="font-size:12.5px;color:var(--muted);line-height:1.85;margin:0 0 14px 18px;padding:0">
+        <li><b>QS billing rates</b> — the rate is matched by the <b>bedroom number</b> in the type
+            (e.g. “Semi D <b>3</b>Bed” → the scope's 3-bedroom rate). A wrong number bills the wrong rate.</li>
+        <li><b>Existing payment certificates</b> — already-locked PCs keep their figures, but
+            drafts and future PCs will recalculate.</li>
+        <li><b>Keyplans, trackers and reports</b>, which display the type.</li>
+      </ul>
+      <p style="font-size:12.5px;color:var(--muted);margin:0 0 16px">
+        Nothing is written until you press <b>Save changes</b>.
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeVtUnlock()">Cancel</button>
+        <button class="btn btn-primary" style="background:#f59e0b;border-color:#f59e0b" onclick="confirmVtUnlock()">I understand — unlock editing</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="vt-save-modal" style="display:none" onclick="if(event.target===this)closeVtSave()">
+    <div class="modal" style="width:560px;max-width:95vw">
+      <h2 style="color:#f59e0b">⚠ Confirm villa type changes</h2>
+      <p style="font-size:13px;color:var(--muted);margin-top:-6px;margin-bottom:12px">
+        You are about to change <b><span id="vt-save-count">0</span></b> villa type(s). Review carefully:
+      </p>
+      <div id="vt-save-diff" style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:12px"></div>
+      <div id="vt-save-warn" style="display:none;font-size:12.5px;color:#f59e0b;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);border-radius:8px;padding:8px 10px;margin-bottom:12px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeVtSave()">Cancel</button>
+        <button class="btn btn-primary" id="vt-save-confirm" onclick="saveVillaTypes()">Save changes</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ══ PRIORITY MODAL ══ -->
   <div class="modal-overlay" id="pri-modal" style="display:none" onclick="if(event.target===this)closePriModal()">
@@ -940,8 +1024,9 @@ function switchTab(tab) {
     if(pc&&!pc.value) pc.value='3';
     loadPriority();
   }
+  if(tab==='villas'){ if(!isAdmin()){ toast('Villa Types is restricted to super admins','error'); return; } loadVillaTypes(); }
   currentTab = tab;
-  ['wir','clr','map','alias','subs','wiralias','civprog','maint','openfront','priority'].forEach(t => {
+  ['wir','clr','map','alias','subs','wiralias','civprog','maint','openfront','priority','villas'].forEach(t => {
     document.getElementById('tab-'+t)?.classList.toggle('active', t === tab);
     document.getElementById('content-'+t)?.classList.toggle('active', t === tab);
   });
@@ -1634,6 +1719,282 @@ async function removeAlias(id) {
 }
 
 
+// ══════════════════════════════════════════════
+// VILLA TYPES TAB (super admin only)
+// Every villa in the project, grouped by cluster, with its type editable.
+// Types are the source of the QS rate match (by bedroom count), so edits are
+// deliberately gated: locked by default → warning to unlock → staged edits →
+// diff confirmation before anything is written.
+// ══════════════════════════════════════════════
+var vtAll = [];            // [{id, villa_no, cluster_id, villa_type, cluster_code}]
+var vtDirty = {};          // villa_id → new type (only differing values)
+var vtEditMode = false;
+var vtSaving = false;
+
+// What the QS engine reads out of a type string — the first number in it.
+function vtBeds(t){ var m = String(t||'').match(/(\d+)/); return m ? parseInt(m[1],10) : null; }
+
+async function loadVillaTypes(){
+  var list = document.getElementById('vt-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">Loading villas…</div>';
+  try {
+    // fetchAll pages in 500s — the project has >2000 villas, well past PostgREST's 1000 cap.
+    var [villas, clusters] = await Promise.all([
+      fetchAll('villas?select=id,villa_no,cluster_id,villa_type,is_active&is_active=eq.true&order=cluster_id.asc,villa_no.asc'),
+      sbFetch('clusters?select=id,code,name&order=code')
+    ]);
+    var cmap = {};
+    (Array.isArray(clusters)?clusters:[]).forEach(function(c){ cmap[c.id] = c.code || ('C'+c.id); });
+    vtAll = (villas||[]).map(function(v){
+      return { id:v.id, villa_no:v.villa_no, cluster_id:v.cluster_id,
+               villa_type:v.villa_type || '', cluster_code: cmap[v.cluster_id] || ('C'+v.cluster_id) };
+    });
+    vtDirty = {};
+    updateVtDirtyCount();
+    // Cluster + type filter options
+    var cs = document.getElementById('vt-cluster');
+    if (cs) {
+      var codes = [];
+      vtAll.forEach(function(v){ if (codes.indexOf(v.cluster_code)<0) codes.push(v.cluster_code); });
+      codes.sort();
+      cs.innerHTML = '<option value="">All Clusters</option>' +
+        codes.map(function(c){ return '<option value="'+esc2(c)+'">'+esc2(c)+'</option>'; }).join('');
+    }
+    var ts = document.getElementById('vt-typefilter');
+    if (ts) {
+      var types = [];
+      vtAll.forEach(function(v){ if (v.villa_type && types.indexOf(v.villa_type)<0) types.push(v.villa_type); });
+      types.sort();
+      ts.innerHTML = '<option value="">All Types</option>' +
+        types.map(function(t){ return '<option value="'+esc2(t)+'">'+esc2(t)+'</option>'; }).join('');
+    }
+    var badge = document.getElementById('badge-villas');
+    if (badge) badge.textContent = vtAll.length;
+    renderVillaTypes();
+  } catch(e) {
+    if (list) list.innerHTML = '<div style="text-align:center;padding:48px 24px;color:var(--rejected,#ff8a99);font-size:13px">Could not load villas: '+esc2(e.message)+'</div>';
+  }
+}
+
+function vtFiltered(){
+  var q  = (document.getElementById('vt-search')?.value || '').toLowerCase().trim();
+  var cl = document.getElementById('vt-cluster')?.value || '';
+  var tf = document.getElementById('vt-typefilter')?.value || '';
+  return vtAll.filter(function(v){
+    if (cl && v.cluster_code !== cl) return false;
+    if (tf && v.villa_type !== tf) return false;
+    if (q) {
+      var cur = (vtDirty[v.id] != null ? vtDirty[v.id] : v.villa_type) || '';
+      if (String(v.villa_no).indexOf(q) < 0 && cur.toLowerCase().indexOf(q) < 0 &&
+          v.cluster_code.toLowerCase().indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+}
+
+function renderVillaTypes(){
+  var rows = vtFiltered();
+  var list = document.getElementById('vt-list');
+  var sum  = document.getElementById('vt-summary');
+  if (!list) return;
+
+  // Summary: count per cluster per type, and flag types with no readable bedroom number
+  var byCluster = {};
+  rows.forEach(function(v){
+    var t = (vtDirty[v.id] != null ? vtDirty[v.id] : v.villa_type) || '(blank)';
+    byCluster[v.cluster_code] = byCluster[v.cluster_code] || {};
+    byCluster[v.cluster_code][t] = (byCluster[v.cluster_code][t] || 0) + 1;
+  });
+  if (sum) {
+    var clKeys = Object.keys(byCluster).sort();
+    sum.innerHTML = clKeys.length ? '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px">' +
+      clKeys.map(function(c){
+        var types = byCluster[c];
+        var total = Object.keys(types).reduce(function(a,k){ return a + types[k]; }, 0);
+        var chips = Object.keys(types).sort().map(function(t){
+          var beds = vtBeds(t);
+          var warn = beds == null;
+          return '<span style="display:inline-block;margin:2px 4px 0 0;padding:1px 7px;border-radius:10px;font-size:10.5px;'+
+                 (warn ? 'background:rgba(245,158,11,.16);color:#f59e0b;border:1px solid rgba(245,158,11,.4)'
+                       : 'background:var(--bg-hover,rgba(255,255,255,.06));color:var(--muted)')+'" '+
+                 'title="'+(warn?'No bedroom number in this type — QS cannot match a rate':'System reads '+beds+' bedrooms')+'">'+
+                 esc2(t)+' · '+types[t]+(warn?' ⚠':'')+'</span>';
+        }).join('');
+        return '<div style="background:var(--bg-panel,rgba(255,255,255,.03));border:1px solid var(--border);border-radius:8px;padding:6px 10px;min-width:190px">'+
+               '<div style="font-size:11.5px;font-weight:700;color:var(--accent-text,#93b6ff)">'+esc2(c)+' · '+total+' villas</div>'+
+               '<div>'+chips+'</div></div>';
+      }).join('') + '</div>' : '';
+  }
+
+  if (!rows.length) {
+    list.innerHTML = '<div style="text-align:center;padding:48px 24px;color:var(--muted);font-size:13px">No villas match the current filters.</div>';
+    return;
+  }
+
+  // Datalist of known types so editing is mostly a pick, not free typing
+  var known = [];
+  vtAll.forEach(function(v){ if (v.villa_type && known.indexOf(v.villa_type)<0) known.push(v.villa_type); });
+  known.sort();
+
+  var html = '<datalist id="vt-known">' + known.map(function(t){ return '<option value="'+esc2(t)+'">'; }).join('') + '</datalist>';
+  var lastCl = null;
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+  rows.forEach(function(v){
+    if (v.cluster_code !== lastCl) {
+      lastCl = v.cluster_code;
+      var n = rows.filter(function(x){ return x.cluster_code === lastCl; }).length;
+      html += '<tr><td colspan="4" style="background:var(--bg-hover,rgba(255,255,255,.05));padding:6px 10px;font-weight:700;font-size:11.5px;'+
+              'letter-spacing:.05em;text-transform:uppercase;color:var(--accent-text,#93b6ff);border-top:2px solid var(--border)">'+
+              esc2(lastCl)+' — '+n+' villas</td></tr>';
+    }
+    var cur = vtDirty[v.id] != null ? vtDirty[v.id] : v.villa_type;
+    var dirty = vtDirty[v.id] != null;
+    var beds = vtBeds(cur);
+    html += '<tr style="border-bottom:1px solid var(--border)'+(dirty?';background:rgba(245,158,11,.10)':'')+'">'+
+      '<td style="padding:4px 10px;width:110px;font-weight:600">VI-'+esc2(v.villa_no)+'</td>'+
+      '<td style="padding:4px 10px;width:70px;color:var(--muted)">'+esc2(v.cluster_code)+'</td>'+
+      '<td style="padding:4px 10px">'+
+        (vtEditMode
+          ? '<input list="vt-known" value="'+esc2(cur)+'" data-vid="'+v.id+'" oninput="onVtTypeInput('+v.id+',this.value)" '+
+            'style="width:100%;max-width:260px;background:var(--bg-input,rgba(255,255,255,.05));border:1px solid '+(dirty?'#f59e0b':'var(--border)')+';'+
+            'border-radius:6px;padding:3px 8px;color:var(--fg,#e6e6e6);font-size:12.5px">'
+          : esc2(cur || '—')) +
+      '</td>'+
+      '<td style="padding:4px 10px;width:130px;font-size:11.5px;'+(beds==null?'color:#f59e0b':'color:var(--muted)')+'" '+
+          'title="Bedroom count the QS rate match reads from this type">'+
+        (beds==null ? '⚠ no bedroom no.' : beds+' bed') +
+        (dirty ? ' <span style="color:#f59e0b;font-weight:700">• edited</span>' : '') +
+      '</td></tr>';
+  });
+  html += '</table>';
+  list.innerHTML = html;
+}
+
+function onVtTypeInput(vid, val){
+  var v = vtAll.find(function(x){ return x.id === vid; });
+  if (!v) return;
+  if ((val||'') === (v.villa_type||'')) delete vtDirty[vid];
+  else vtDirty[vid] = val || '';
+  updateVtDirtyCount();
+}
+
+function updateVtDirtyCount(){
+  var n = Object.keys(vtDirty).length;
+  var c = document.getElementById('vt-dirty-count'); if (c) c.textContent = n;
+  var b = document.getElementById('vt-save-btn');   if (b) b.style.display = (vtEditMode && n) ? '' : 'none';
+}
+
+function toggleVillaTypeEdit(){
+  if (vtEditMode) {   // locking again
+    if (Object.keys(vtDirty).length && !confirm('Discard '+Object.keys(vtDirty).length+' unsaved change(s)?')) return;
+    vtDirty = {}; vtEditMode = false;
+    document.getElementById('vt-edit-btn').innerHTML = '🔒 Editing locked — click to unlock';
+    document.getElementById('vt-editing-banner').style.display = 'none';
+    updateVtDirtyCount(); renderVillaTypes();
+    return;
+  }
+  document.getElementById('vt-unlock-modal').style.display = 'flex';
+}
+function closeVtUnlock(){ document.getElementById('vt-unlock-modal').style.display = 'none'; }
+function confirmVtUnlock(){
+  closeVtUnlock();
+  vtEditMode = true;
+  document.getElementById('vt-edit-btn').innerHTML = '🔓 Editing unlocked — click to lock';
+  document.getElementById('vt-editing-banner').style.display = '';
+  renderVillaTypes(); updateVtDirtyCount();
+}
+
+function openVillaTypeSaveModal(){
+  var ids = Object.keys(vtDirty);
+  if (!ids.length) { toast('No changes to save', 'info'); return; }
+  var diff = document.getElementById('vt-save-diff');
+  var blanks = 0, nobeds = 0, bedChanged = 0;
+  diff.innerHTML = ids.map(function(id){
+    var v = vtAll.find(function(x){ return x.id === +id; });
+    var to = vtDirty[id];
+    if (!String(to||'').trim()) blanks++;
+    if (vtBeds(to) == null) nobeds++;
+    if (vtBeds(to) !== vtBeds(v.villa_type)) bedChanged++;
+    return '<div style="padding:2px 0;border-bottom:1px solid var(--border)">'+
+      '<b>'+esc2(v.cluster_code)+' · VI-'+esc2(v.villa_no)+'</b>: '+
+      '<span style="color:var(--muted)">'+esc2(v.villa_type||'(blank)')+'</span> → '+
+      '<span style="color:#f59e0b;font-weight:600">'+esc2(to||'(blank)')+'</span>'+
+      (vtBeds(to)!==vtBeds(v.villa_type)
+        ? ' <span style="color:#ff8a99">(bedrooms '+(vtBeds(v.villa_type)==null?'—':vtBeds(v.villa_type))+' → '+(vtBeds(to)==null?'—':vtBeds(to))+')</span>'
+        : '')+
+      '</div>';
+  }).join('');
+  document.getElementById('vt-save-count').textContent = ids.length;
+  var warn = document.getElementById('vt-save-warn'), msgs = [];
+  if (bedChanged) msgs.push('<b>'+bedChanged+'</b> change(s) alter the bedroom count — these will bill at a <b>different QS rate</b>.');
+  if (nobeds)  msgs.push('<b>'+nobeds+'</b> new value(s) contain no bedroom number — QS cannot match a rate and those villas may be skipped in payment certificates.');
+  if (blanks)  msgs.push('<b>'+blanks+'</b> value(s) are blank.');
+  warn.style.display = msgs.length ? '' : 'none';
+  warn.innerHTML = msgs.join('<br>');
+  document.getElementById('vt-save-modal').style.display = 'flex';
+}
+function closeVtSave(){ if (!vtSaving) document.getElementById('vt-save-modal').style.display = 'none'; }
+
+async function saveVillaTypes(){
+  if (vtSaving) return;
+  var ids = Object.keys(vtDirty);
+  if (!ids.length) { closeVtSave(); return; }
+  vtSaving = true;
+  var btn = document.getElementById('vt-save-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  var ok = 0, failed = [];
+  for (var i = 0; i < ids.length; i++) {
+    var id = ids[i];
+    try {
+      var r = await fetch(SB+'/rest/v1/villas?id=eq.'+id, {
+        method: 'PATCH',
+        headers: getH({'Prefer':'return=minimal'}),
+        body: JSON.stringify({ villa_type: vtDirty[id] })
+      });
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      var v = vtAll.find(function(x){ return x.id === +id; });
+      if (v) v.villa_type = vtDirty[id];
+      ok++;
+    } catch(e) {
+      var vv = vtAll.find(function(x){ return x.id === +id; });
+      failed.push((vv ? vv.cluster_code+' VI-'+vv.villa_no : 'id '+id) + ' (' + e.message + ')');
+    }
+  }
+  vtSaving = false;
+  if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  document.getElementById('vt-save-modal').style.display = 'none';
+  vtDirty = {};
+  if (failed.length) {
+    toast(ok+' saved, '+failed.length+' failed: '+failed.slice(0,3).join('; '), 'error');
+  } else {
+    toast(ok+' villa type'+(ok===1?'':'s')+' updated', 'success');
+  }
+  updateVtDirtyCount();
+  // Re-filter options in case a type name disappeared/appeared
+  await loadVillaTypes();
+}
+
+function downloadVillaTypesCsv(){
+  var rows = vtFiltered();
+  if (!rows.length) { toast('Nothing to download for the current filters', 'info'); return; }
+  var q = function(s){ return '"' + String(s == null ? '' : s).replace(/"/g,'""') + '"'; };
+  var lines = ['Cluster,Villa No,Villa Type,Bedrooms Read By System'];
+  rows.forEach(function(v){
+    var t = vtDirty[v.id] != null ? vtDirty[v.id] : v.villa_type;
+    var b = vtBeds(t);
+    lines.push([q(v.cluster_code), q('VI-'+v.villa_no), q(t), q(b == null ? '' : b)].join(','));
+  });
+  // BOM so Excel opens UTF-8 correctly
+  var blob = new Blob(['﻿' + lines.join('\r\n')], { type:'text/csv;charset=utf-8;' });
+  var cl = document.getElementById('vt-cluster')?.value || 'all-clusters';
+  var name = 'villa-types_' + cl + '_' + new Date().toISOString().slice(0,10) + '.csv';
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  toast('Downloaded '+rows.length+' villa'+(rows.length===1?'':'s'), 'success');
+}
+
 // ── PERMISSION GUARD ──
 function hasPerm(p){
   if(window.__MEP_PERMS__&&window.__MEP_PERMS__.length) return window.__MEP_PERMS__.includes(p);
@@ -1646,6 +2007,9 @@ function hasPerm(p){
 function isAdmin(){return hasPerm('manage_users')&&hasPerm('manage_system');}
 
 function checkAccess(){
+  // Villa Types tab is super-admin only — reveal it once perms are known.
+  var vtBtn=document.getElementById('tab-villas');
+  if(vtBtn) vtBtn.style.display = isAdmin() ? '' : 'none';
   if(isAdmin()||hasPerm('manage_activities')) return; // allowed
   // No permission — show overlay and block the page.
   // The overlay div sits near the end of the body, so wait for the DOM
