@@ -790,7 +790,9 @@ async function runCsvConfirmationCheck(){
     const r=await fetch(`${SB}/rest/v1/rpc/confirm_clearance_releases`,{method:'POST',headers:getH(),body:'{}'});
     if(!r.ok)throw new Error(await r.text());
     const res=await r.json();
-    toast(`Check done: ${res.confirmed} confirmed complete ✓, ${res.failed} failed to release ↩`,res.failed?'warn':'ok');
+    // auto_confirmed = requests the DC never actioned in-system but the log shows released
+    const autoTxt=res.auto_confirmed?` (${res.auto_confirmed} auto-closed from the DC log)`:'';
+    toast(`Check done: ${res.confirmed} confirmed complete ✓${autoTxt}, ${res.failed} failed to release ↩`,res.failed?'warn':'ok');
     await loadAll();
   }catch(e){toast('Check error: '+e.message,'err');}
 }

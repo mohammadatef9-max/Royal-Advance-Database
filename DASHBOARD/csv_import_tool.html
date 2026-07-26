@@ -974,7 +974,7 @@ async function startImport(type){
   } else {
     // Verify DC-released clearance requests against this fresh log: confirmed ones
     // complete; unconfirmed ones go back to Ready to Release flagged as failed.
-    try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) addLog(type,'✅ Release check — '+res.confirmed+' confirmed complete, '+res.failed+' failed to release (back in Ready)','info'); }
+    try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) addLog(type,'✅ Release check — '+res.confirmed+' confirmed complete'+(res.auto_confirmed?' ('+res.auto_confirmed+' auto-closed from the DC log)':'')+', '+res.failed+' failed to release (back in Ready)','info'); }
     catch(e){ addLog(type,'⚠ Release check failed (import still saved): '+e.message,'warn'); }
   }
   // Announce only after matviews + progress sync are done (refreshing earlier shows stale views)
@@ -1745,7 +1745,7 @@ async function dcStartUpload(tab){
     if(tab==='clr'){
       // Verify DC-released clearance requests against this fresh log: confirmed ones
       // complete; unconfirmed ones go back to Ready to Release flagged as failed.
-      try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) dcAddLog(tab,'✅ Release check — '+res.confirmed+' confirmed complete, '+res.failed+' failed to release (back in Ready)','info'); }
+      try{ const r=await fetch(SB+'/rest/v1/rpc/confirm_clearance_releases',{method:'POST',headers:getH(),body:'{}'}); const res=await r.json(); if(r.ok&&(res.confirmed||res.failed)) dcAddLog(tab,'✅ Release check — '+res.confirmed+' confirmed complete'+(res.auto_confirmed?' ('+res.auto_confirmed+' auto-closed from the DC log)':'')+', '+res.failed+' failed to release (back in Ready)','info'); }
       catch(e){ dcAddLog(tab,'⚠ Release check failed (import still saved): '+e.message,'warn'); }
     }
     // Announce ONLY after matviews + progress sync are done — announcing earlier made
