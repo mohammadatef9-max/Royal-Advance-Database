@@ -166,6 +166,7 @@ body.in-shell .topbar{display:none!important}
       </button>
       <span class="toolbar-r" id="ready-count"></span>
     </div>
+    <div id="unmapped-panel"></div>
     <div class="sec">All WIRs Approved — Awaiting Site Engineer Release</div>
     <div class="card-list" id="ready-list"></div>
   </div></div>
@@ -466,7 +467,52 @@ function buildCard(r,showActions){
   </div>`;
 }
 
-function renderAll(){renderReady();renderSEReview();renderPending();renderActioned();updateBadges();}
+function renderAll(){renderUnmapped();renderReady();renderSEReview();renderPending();renderActioned();updateBadges();}
+
+// Clearances with no prerequisite WIRs configured can never reach "Ready to Release":
+// autoSubmitReady() only fetches mapped codes, and bails at the !prereqs.length guard.
+// They used to vanish silently, which made the page look complete when it wasn't —
+// surface them instead so the config gap is visible.
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
+
+function getUnmappedClearances(){
+  const mapped=new Set(Object.keys(CLR_PREREQS));
+  return Object.entries(clrActivities)
+    .filter(([code])=>!mapped.has(code))
+    .map(([code,c])=>({code,name:c.name,discipline:c.discipline}))
+    .sort((a,b)=>a.code.localeCompare(b.code));
+}
+
+function renderUnmapped(){
+  const el=document.getElementById('unmapped-panel');
+  if(!el)return;
+  const items=getUnmappedClearances();
+  if(!items.length){el.innerHTML='';return;}
+  const total=Object.keys(clrActivities).length;
+  const open=window._unmappedOpen===true;
+  el.innerHTML=
+    '<div style="border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.10);border-radius:8px;padding:10px 12px;margin-bottom:12px">'
+    +'<div onclick="toggleUnmapped()" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none">'
+      +'<span style="font-size:13px">⚠</span>'
+      +'<span style="font-size:12.5px;color:#f59e0b;font-weight:600">'
+        +items.length+' of '+total+' clearance types have no prerequisite WIRs configured'
+      +'</span>'
+      +'<span style="font-size:11px;color:var(--text-muted);margin-left:auto">'+(open?'▾ hide':'▸ show')+'</span>'
+    +'</div>'
+    +'<div style="font-size:11.5px;color:var(--text-muted);margin-top:4px">'
+      +'These can never appear in Ready to Release — the page has no way to tell when they are due. '
+      +'Configure prerequisites in <b>Reference Data → WIR Mappings</b>.'
+    +'</div>'
+    +(open
+      ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:9px">'
+        +items.map(i=>'<span title="'+esc(i.name)+'" style="font-size:10.5px;padding:2px 7px;border-radius:10px;'
+          +'background:var(--bg-panel,rgba(255,255,255,.06));color:var(--text-muted);border:1px solid var(--border)">'
+          +esc(i.code)+'</span>').join('')
+        +'</div>'
+      : '')
+    +'</div>';
+}
+function toggleUnmapped(){window._unmappedOpen=!window._unmappedOpen;renderUnmapped();}
 function updateBadges(){
   document.getElementById('badge-sereview').textContent=requests.filter(r=>r.status==='pending_site_engineer').length;
   document.getElementById('badge-pending').textContent=requests.filter(r=>r.status==='pending_dc').length;
