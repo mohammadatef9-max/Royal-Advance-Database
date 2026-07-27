@@ -191,6 +191,36 @@ body.space-down #map-viewport{cursor:grab}
 #print-page .pp-legend .pl-dot{width:8pt;height:8pt;border-radius:2pt;border:1pt solid #555;flex-shrink:0}
 
 
+/* ===== EDIT MODE (temporary layout editor) ===== */
+.toolbar .tbtn.active{background:#facc15;color:#000;border-color:#facc15;font-weight:800;}
+body.edit-mode #map-wrap{cursor:crosshair;user-select:none}
+body.edit-mode .villa{cursor:move}
+body.edit-mode .villa:hover{filter:brightness(1.2);box-shadow:0 0 12px var(--accent)}
+.villa.is-selected{outline:3px solid #facc15 !important;outline-offset:2px;z-index:200;filter:brightness(1.3)}
+#grid-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;display:none;opacity:0.4}
+#grid-overlay.visible{display:block}
+#marquee{position:absolute;border:1.5px dashed #facc15;background:rgba(250,204,21,0.08);pointer-events:none;display:none;z-index:150}
+.edit-mode-banner{position:fixed;top:54px;left:50%;transform:translateX(-50%);background:#facc15;color:#000;padding:6px 16px;border-radius:6px;font-weight:800;font-size:11px;z-index:1000;box-shadow:0 4px 16px rgba(0,0,0,0.4);display:none}
+body.edit-mode .edit-mode-banner{display:block}
+#edit-panel{position:fixed;right:14px;top:90px;width:270px;max-height:calc(100vh - 110px);background:var(--bg-elev);border:2px solid #facc15;border-radius:10px;padding:12px;box-shadow:0 12px 40px rgba(0,0,0,0.6);display:none;flex-direction:column;gap:10px;z-index:400;overflow-y:auto;font-family:'Inter',sans-serif}
+body.edit-mode #edit-panel{display:flex}
+.ep-section{display:flex;flex-direction:column;gap:6px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.ep-section:last-child{border-bottom:none;padding-bottom:0}
+.ep-title{font-size:11px;font-weight:800;color:#facc15;letter-spacing:0.5px;text-transform:uppercase}
+.ep-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;font-weight:700}
+.ep-hint{font-size:10px;color:var(--muted);line-height:1.4}
+.ep-row{display:flex;align-items:center;gap:6px;font-size:11px}
+.ep-mini{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.3px;min-width:42px}
+.ep-val{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--text)}
+.ep-actions{display:flex;gap:4px;flex-wrap:wrap}
+.ep-btn{background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:5px 9px;border-radius:5px;font-size:10px;cursor:pointer;font-weight:600;white-space:nowrap;font-family:inherit}
+.ep-btn:hover{background:var(--accent-soft);border-color:var(--accent)}
+.ep-btn-primary{background:#facc15;color:#000;border-color:#facc15;font-weight:800}
+.ep-btn-primary:hover{background:#eab308}
+#edit-panel input[type=number]{background:var(--bg-panel);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px;font-family:inherit;width:80px}
+#edit-panel label{font-size:11px;color:var(--text);display:flex;align-items:center;gap:4px;cursor:pointer}
+#edit-panel input[type=checkbox]{accent-color:#facc15}
+#edit-panel input[type=range]{accent-color:#facc15;width:100%}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;700;800;900&display=swap" rel="stylesheet">
 </head>
@@ -242,6 +272,8 @@ body.space-down #map-viewport{cursor:grab}
     <option value="A4">A4 Landscape</option>
     <option value="A3">A3 Landscape</option>
   </select>
+  <button class="tbtn" id="btn-edit" onclick="toggleEditMode()" title="Temporary layout editor — drag villas, rotate, snap to grid, export JSON">✏️ Edit Layout</button>
+  <div class="edit-mode-banner">✏️ EDIT MODE — drag villas to move · Shift+click multi · arrow keys nudge · R/T rotate · Ctrl+Z undo · Download JSON when done</div>
   <button class="tbtn" onclick="doPrint()">🖨 Print</button>
   <button class="tbtn" onclick="openBatchPrint()" title="Print several WIR/Clearance keyplans at once">&#128424; Batch</button>
   <div class="tb-div"></div>
@@ -358,6 +390,8 @@ body.space-down #map-viewport{cursor:grab}
     <div id="map-viewport">
     <div id="map-container">
 
+  <div id="marquee"></div>
+        <svg id="grid-overlay" preserveAspectRatio="none"></svg>
       <img id="map-img" src="" style="display:none" alt="C7 Keyplan">
       <div id="villa-layer"></div>
     </div>
@@ -1706,6 +1740,186 @@ if(window.self!==window.top){
       setTimeout(function(){ var p=document.getElementById('print-page'); if(p)p.parentNode.removeChild(p); },1500);
     });
   }
+})();
+</script>
+
+<div id="edit-panel">
+  <div class="ep-section"><div class="ep-title">EDIT TOOLS</div><div class="ep-hint">Click villa = select · Shift+click = multi · drag empty = marquee · Esc = clear · Ctrl+A = all</div></div>
+  <div class="ep-section">
+    <div class="ep-label">Selection · <span class="ep-val" id="ep-selcount">0</span></div>
+    <div class="ep-row"><span class="ep-mini">Villas</span><span class="ep-val" id="ep-selnames" style="font-size:10px">—</span></div>
+    <div class="ep-actions"><button class="ep-btn" onclick="editSelectAll()">Select All</button><button class="ep-btn" onclick="editClearSel()">Clear</button></div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Rotation (selected)</div>
+    <div class="ep-row"><input type="number" id="ep-rot-input" step="1" placeholder="degrees"><button class="ep-btn" onclick="editApplyRot()">Set</button></div>
+    <div class="ep-actions"><button class="ep-btn" onclick="editRotateSel(-1)">−1°</button><button class="ep-btn" onclick="editRotateSel(1)">+1°</button><button class="ep-btn" onclick="editRotateSel(-15)">−15°</button><button class="ep-btn" onclick="editRotateSel(15)">+15°</button><button class="ep-btn" onclick="editRotateSel(90)">±90°</button></div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Align edges</div>
+    <div class="ep-actions" style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+      <button class="ep-btn" onclick="editAlign('left')">⫷ Left</button><button class="ep-btn" onclick="editAlign('cx')">┃ CenterX</button><button class="ep-btn" onclick="editAlign('right')">⫸ Right</button>
+      <button class="ep-btn" onclick="editAlign('top')">⨂ Top</button><button class="ep-btn" onclick="editAlign('cy')">━ CenterY</button><button class="ep-btn" onclick="editAlign('bottom')">⨂ Bot</button>
+    </div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Batch</div>
+    <div class="ep-actions"><button class="ep-btn" onclick="editDistribute()">⟺ Distribute</button><button class="ep-btn" onclick="editStraighten()">📏 Straighten</button></div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Grid · <span id="ep-grid-val" style="color:#facc15">10 px</span></div>
+    <input type="range" id="ep-grid" min="1" max="50" value="10" oninput="editSetGrid(this.value)">
+    <div class="ep-row" style="margin-top:6px;gap:10px"><label><input type="checkbox" id="ep-snap" checked onchange="editToggleSnap()"> Snap</label><label><input type="checkbox" id="ep-grid-show" checked onchange="editToggleGrid()"> Show grid</label></div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Map size · <span id="ep-mapscale-val" style="color:#facc15">1.00×</span></div>
+    <input type="range" id="ep-mapscale" min="0.5" max="4" step="0.05" value="1" oninput="editSetMapScale(this.value)">
+    <div class="ep-actions" style="margin-top:6px"><button class="ep-btn" onclick="bumpMapScale(-0.1)">− Smaller</button><button class="ep-btn" onclick="bumpMapScale(0.1)">+ Bigger</button><button class="ep-btn" onclick="editSetMapScale(1)">Reset 1×</button></div>
+    <div class="ep-hint" style="margin-top:6px">Scales the background plan so its drawn villas match the box size. Boxes stay fixed; placed villas scale with the plan.</div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">History · <span class="ep-val" id="ep-change-count">0</span> changes</div>
+    <div class="ep-actions"><button class="ep-btn" onclick="editUndo()">↶ Undo</button><button class="ep-btn" onclick="editRedo()">↷ Redo</button><button class="ep-btn" onclick="editResetAll()" style="color:#f87171">⟲ Reset</button></div>
+  </div>
+  <div class="ep-section">
+    <div class="ep-label">Export</div>
+    <div class="ep-actions"><button class="ep-btn ep-btn-primary" onclick="editExportJSON()">⬇ Download JSON</button><button class="ep-btn" onclick="editCopyJSON()">📋 Copy</button></div>
+    <div class="ep-hint" style="margin-top:6px">Send the downloaded JSON back to Claude to bake into the keyplan.</div>
+  </div>
+</div>
+<script>
+/* ========= EDIT MODE (temporary) ========= */
+var EDIT={on:false,selected:new Set(),gridSize:10,snap:true,showGrid:true,history:[],redoStack:[],dragging:null,marquee:null,pendingChanges:0};
+/* Working map-scale aid: enlarges the background plan (and any placed villas)
+   so its drawn villas can be sized to match the fixed 46x32 boxes. The villa
+   boxes themselves stay fixed, so raising the scale makes a box relatively
+   smaller vs the plan. Positions + image_size export together, so the final
+   JSON is self-describing. */
+var BASE_W=1320, BASE_H=1207, BASE_LAYER_H=1207;
+var MAP_SCALE=1;
+function editSetMapScale(s){
+  s=Math.max(0.5,Math.min(4,Math.round((parseFloat(s)||1)*100)/100));
+  if(Math.abs(s-MAP_SCALE)<1e-9){ return; }
+  // Resize the BACKGROUND IMAGE (and the coordinate space) only — villa positions are NOT
+  // scaled and we do NOT re-fit the view, so the plan visibly grows/shrinks while the villa
+  // boxes keep their place & on-screen size. Use it to size the plan so its drawn villas
+  // match the fixed boxes; the chosen size is exported as image_size for baking.
+  MAP_SCALE=s;
+  IMG_W=Math.round(BASE_W*s); IMG_H=Math.round(BASE_H*s);
+  var cw=IMG_W+'px';
+  var cont=document.getElementById('map-container'); if(cont)cont.style.width=cw;
+  var img=document.getElementById('map-img'); if(img)img.style.width=cw;
+  var layer=document.getElementById('villa-layer'); if(layer){layer.style.width=cw;layer.style.height=Math.round(BASE_LAYER_H*s)+'px';}
+  var rng=document.getElementById('ep-mapscale'); if(rng&&Math.abs(parseFloat(rng.value)-s)>1e-9)rng.value=s;
+  var lbl=document.getElementById('ep-mapscale-val'); if(lbl)lbl.textContent=s.toFixed(2)+'×';
+  if(EDIT.showGrid)drawGrid();
+  renderVillas(buildDataMap()); reapplySelection();
+}
+function bumpMapScale(d){ editSetMapScale(MAP_SCALE+d); }
+function toggleEditMode(){
+  EDIT.on=!EDIT.on;
+  document.body.classList.toggle('edit-mode',EDIT.on);
+  document.getElementById('btn-edit').classList.toggle('active',EDIT.on);
+  if(EDIT.on){ drawGrid(); document.getElementById('grid-overlay').classList.toggle('visible',EDIT.showGrid); if(typeof tip!=='undefined'&&tip)tip.style.display='none'; updateSelInfo(); }
+  else { document.getElementById('grid-overlay').classList.remove('visible'); EDIT.selected.clear(); renderVillas(buildDataMap()); }
+}
+function drawGrid(){
+  var svg=document.getElementById('grid-overlay'); svg.setAttribute('viewBox','0 0 '+IMG_W+' '+IMG_H);
+  var lines='',step=EDIT.gridSize;
+  for(var x=0;x<=IMG_W;x+=step){ var mj=(x%(step*5)===0); lines+='<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+IMG_H+'" stroke="'+(mj?'#facc15':'#94a3b8')+'" stroke-width="'+(mj?0.8:0.3)+'"/>'; }
+  for(var y=0;y<=IMG_H;y+=step){ var mj2=(y%(step*5)===0); lines+='<line x1="0" y1="'+y+'" x2="'+IMG_W+'" y2="'+y+'" stroke="'+(mj2?'#facc15':'#94a3b8')+'" stroke-width="'+(mj2?0.8:0.3)+'"/>'; }
+  svg.innerHTML=lines;
+}
+function editSetGrid(v){ EDIT.gridSize=Math.max(1,parseInt(v)||10); document.getElementById('ep-grid-val').textContent=EDIT.gridSize+' px'; if(EDIT.showGrid)drawGrid(); }
+function editToggleSnap(){ EDIT.snap=document.getElementById('ep-snap').checked; }
+function editToggleGrid(){ EDIT.showGrid=document.getElementById('ep-grid-show').checked; document.getElementById('grid-overlay').classList.toggle('visible',EDIT.showGrid); }
+function snapVal(v){ return EDIT.snap?Math.round(v/EDIT.gridSize)*EDIT.gridSize:Math.round(v*10)/10; }
+function pushHistory(){ EDIT.history.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); if(EDIT.history.length>100)EDIT.history.shift(); EDIT.redoStack=[]; EDIT.pendingChanges++; document.getElementById('ep-change-count').textContent=EDIT.pendingChanges; }
+function editUndo(){ if(!EDIT.history.length)return; EDIT.redoStack.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); var prev=EDIT.history.pop(); VILLAS=JSON.parse(JSON.stringify(prev.pos)); VILLA_ANGLES=Object.assign({},prev.ang); renderVillas(buildDataMap()); reapplySelection(); }
+function editRedo(){ if(!EDIT.redoStack.length)return; EDIT.history.push({pos:JSON.parse(JSON.stringify(VILLAS)),ang:Object.assign({},VILLA_ANGLES)}); var s=EDIT.redoStack.pop(); VILLAS=JSON.parse(JSON.stringify(s.pos)); VILLA_ANGLES=Object.assign({},s.ang); renderVillas(buildDataMap()); reapplySelection(); }
+function editResetAll(){ if(!confirm('Reset ALL villas to initial positions and angles?'))return; pushHistory(); VILLAS=JSON.parse(JSON.stringify(VILLAS_DEFAULT)); if(MAP_SCALE!==1){Object.keys(VILLAS).forEach(function(k){VILLAS[k].x=Math.round(VILLAS[k].x*MAP_SCALE*10)/10;VILLAS[k].y=Math.round(VILLAS[k].y*MAP_SCALE*10)/10;});} if(typeof ANGLES_DEFAULT!=='undefined')VILLA_ANGLES=Object.assign({},ANGLES_DEFAULT); EDIT.pendingChanges=0; document.getElementById('ep-change-count').textContent='0'; renderVillas(buildDataMap()); reapplySelection(); }
+function reapplySelection(){ document.querySelectorAll('.villa').forEach(function(el){ el.classList.toggle('is-selected',EDIT.selected.has(el.getAttribute('data-v'))); }); updateSelInfo(); }
+function updateSelInfo(){
+  document.getElementById('ep-selcount').textContent=EDIT.selected.size;
+  var arr=Array.from(EDIT.selected).map(Number).sort(function(a,b){return a-b;});
+  document.getElementById('ep-selnames').textContent=arr.length?(arr.length<=12?arr.join(', '):(arr.slice(0,10).join(', ')+'... +'+(arr.length-10))):'—';
+  if(EDIT.selected.size===1){ var v=Array.from(EDIT.selected)[0]; document.getElementById('ep-rot-input').value=VILLA_ANGLES[parseInt(v)]||0; } else { document.getElementById('ep-rot-input').value=''; }
+}
+function editSelectAll(){ EDIT.selected.clear(); Object.keys(VILLAS).forEach(function(v){EDIT.selected.add(v);}); reapplySelection(); }
+function editClearSel(){ EDIT.selected.clear(); document.querySelectorAll('.villa.is-selected').forEach(function(el){el.classList.remove('is-selected');}); updateSelInfo(); }
+function editApplyRot(){ var v=parseInt(document.getElementById('ep-rot-input').value); if(isNaN(v)){alert('Enter a number.');return;} if(!EDIT.selected.size){alert('Select at least one villa first.');return;} pushHistory(); EDIT.selected.forEach(function(vNum){VILLA_ANGLES[parseInt(vNum)]=v;}); renderVillas(buildDataMap()); reapplySelection(); }
+function editRotateSel(delta){ if(!EDIT.selected.size)return; pushHistory(); EDIT.selected.forEach(function(vNum){ var cur=VILLA_ANGLES[parseInt(vNum)]||0; var nv=cur+delta; while(nv>90)nv-=180; while(nv<-90)nv+=180; VILLA_ANGLES[parseInt(vNum)]=nv; }); renderVillas(buildDataMap()); reapplySelection(); if(EDIT.selected.size===1){ var v=Array.from(EDIT.selected)[0]; document.getElementById('ep-rot-input').value=VILLA_ANGLES[parseInt(v)]; } }
+function villaAABB(vNum){ var W=46,H=32; var ang=(VILLA_ANGLES[parseInt(vNum)]||0)*Math.PI/180; var ca=Math.abs(Math.cos(ang)),sa=Math.abs(Math.sin(ang)); return {hx:(W/2)*ca+(H/2)*sa,hy:(W/2)*sa+(H/2)*ca}; }
+function editAlign(mode){
+  if(EDIT.selected.size<2)return; pushHistory();
+  var boxes=Array.from(EDIT.selected).map(function(v){ var p=VILLAS[v],ab=villaAABB(v); return {v:v,cx:p.x,cy:p.y,left:p.x-ab.hx,right:p.x+ab.hx,top:p.y-ab.hy,bottom:p.y+ab.hy,hx:ab.hx,hy:ab.hy}; });
+  var ref;
+  if(mode==='left'){ref=snapVal(Math.min.apply(null,boxes.map(function(b){return b.left;})));boxes.forEach(function(b){VILLAS[b.v].x=ref+b.hx;});}
+  else if(mode==='right'){ref=snapVal(Math.max.apply(null,boxes.map(function(b){return b.right;})));boxes.forEach(function(b){VILLAS[b.v].x=ref-b.hx;});}
+  else if(mode==='top'){ref=snapVal(Math.min.apply(null,boxes.map(function(b){return b.top;})));boxes.forEach(function(b){VILLAS[b.v].y=ref+b.hy;});}
+  else if(mode==='bottom'){ref=snapVal(Math.max.apply(null,boxes.map(function(b){return b.bottom;})));boxes.forEach(function(b){VILLAS[b.v].y=ref-b.hy;});}
+  else if(mode==='cx'){ref=snapVal(boxes.reduce(function(a,b){return a+b.cx;},0)/boxes.length);boxes.forEach(function(b){VILLAS[b.v].x=ref;});}
+  else if(mode==='cy'){ref=snapVal(boxes.reduce(function(a,b){return a+b.cy;},0)/boxes.length);boxes.forEach(function(b){VILLAS[b.v].y=ref;});}
+  renderVillas(buildDataMap()); reapplySelection();
+}
+function editDistribute(){ if(EDIT.selected.size<3)return; pushHistory(); var arr=Array.from(EDIT.selected).map(Number).sort(function(a,b){return a-b;}); var first=VILLAS[String(arr[0])],last=VILLAS[String(arr[arr.length-1])]; for(var i=1;i<arr.length-1;i++){ var t=i/(arr.length-1); VILLAS[String(arr[i])]={x:snapVal(first.x+(last.x-first.x)*t),y:snapVal(first.y+(last.y-first.y)*t)}; } renderVillas(buildDataMap()); reapplySelection(); }
+function editStraighten(){ if(EDIT.selected.size<2)return; pushHistory(); var arr=Array.from(EDIT.selected).map(Number).sort(function(a,b){return a-b;}); var first=VILLAS[String(arr[0])],last=VILLAS[String(arr[arr.length-1])]; var dx=last.x-first.x,dy=last.y-first.y; var ang=Math.atan2(dy,dx)*180/Math.PI; while(ang>90)ang-=180; while(ang<-90)ang+=180; for(var i=0;i<arr.length;i++){ var t=i/(arr.length-1); VILLAS[String(arr[i])]={x:snapVal(first.x+dx*t),y:snapVal(first.y+dy*t)}; VILLA_ANGLES[arr[i]]=Math.round(ang); } renderVillas(buildDataMap()); reapplySelection(); }
+function editExportJSON(){ var data={positions:VILLAS,angles:VILLA_ANGLES,image_size:[IMG_W,IMG_H],exported_at:new Date().toISOString(),cluster:(typeof CLUSTER!=='undefined'?CLUSTER:'C?'),pending_changes:EDIT.pendingChanges}; var blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=(data.cluster.toLowerCase())+'_villa_layout_'+new Date().toISOString().replace(/[:.]/g,'-').substring(0,19)+'.json'; document.body.appendChild(a); a.click(); setTimeout(function(){a.remove();URL.revokeObjectURL(a.href);},1000); }
+function editCopyJSON(){ var data={positions:VILLAS,angles:VILLA_ANGLES,image_size:[IMG_W,IMG_H]}; var btn=window.event&&window.event.target; var orig=btn?btn.textContent:''; navigator.clipboard.writeText(JSON.stringify(data,null,1)).then(function(){ if(btn){btn.textContent='✓ Copied!';setTimeout(function(){btn.textContent=orig;},1500);} }).catch(function(){alert('Copy failed. Use Download JSON instead.');}); }
+function getMapCoords(e){ var rect=document.getElementById('map-container').getBoundingClientRect(); var scale=IMG_W/rect.width; return {x:(e.clientX-rect.left)*scale,y:(e.clientY-rect.top)*scale}; }
+(function bindEditEvents(){
+  var layer=document.getElementById('villa-layer'); var marqueeEl=document.getElementById('marquee');
+  layer.addEventListener('mousedown',function(e){
+    if(!EDIT.on)return; if(e.button!==0)return; if(typeof VIEW!=='undefined'&&VIEW.spaceDown)return;
+    var v=e.target.closest('.villa');
+    if(v){
+      var vNum=v.getAttribute('data-v');
+      if(e.shiftKey){ if(EDIT.selected.has(vNum)){EDIT.selected.delete(vNum);v.classList.remove('is-selected');} else {EDIT.selected.add(vNum);v.classList.add('is-selected');} updateSelInfo(); }
+      else if(!EDIT.selected.has(vNum)){ EDIT.selected.clear(); document.querySelectorAll('.villa.is-selected').forEach(function(el){el.classList.remove('is-selected');}); EDIT.selected.add(vNum); v.classList.add('is-selected'); updateSelInfo(); }
+      var startMap=getMapCoords(e); EDIT.dragging={startMouse:startMap,offsets:{},moved:false};
+      EDIT.selected.forEach(function(vn){ EDIT.dragging.offsets[vn]={dx:VILLAS[vn].x-startMap.x,dy:VILLAS[vn].y-startMap.y}; });
+      e.preventDefault();
+    } else {
+      var startMap2=getMapCoords(e); EDIT.marquee={startX:startMap2.x,startY:startMap2.y,additive:e.shiftKey};
+      marqueeEl.style.display='block'; marqueeEl.style.left=startMap2.x+'px'; marqueeEl.style.top=startMap2.y+'px'; marqueeEl.style.width='0px'; marqueeEl.style.height='0px';
+      if(!e.shiftKey){editClearSel();}
+    }
+  });
+  window.addEventListener('mousemove',function(e){
+    if(!EDIT.on)return;
+    if(EDIT.dragging){
+      var cur=getMapCoords(e);
+      if(!EDIT.dragging.moved){ if(Math.abs(cur.x-EDIT.dragging.startMouse.x)<3&&Math.abs(cur.y-EDIT.dragging.startMouse.y)<3)return; EDIT.dragging.moved=true; pushHistory(); }
+      EDIT.selected.forEach(function(vn){ var off=EDIT.dragging.offsets[vn]; var nx=snapVal(cur.x+off.dx),ny=snapVal(cur.y+off.dy); VILLAS[vn].x=nx; VILLAS[vn].y=ny; var el=document.querySelector('.villa[data-v="'+vn+'"]'); if(el){el.style.left=nx+'px';el.style.top=ny+'px';} });
+    } else if(EDIT.marquee){
+      var cur2=getMapCoords(e); var x=Math.min(EDIT.marquee.startX,cur2.x),y=Math.min(EDIT.marquee.startY,cur2.y),w=Math.abs(cur2.x-EDIT.marquee.startX),h=Math.abs(cur2.y-EDIT.marquee.startY);
+      marqueeEl.style.left=x+'px'; marqueeEl.style.top=y+'px'; marqueeEl.style.width=w+'px'; marqueeEl.style.height=h+'px';
+    }
+  });
+  window.addEventListener('mouseup',function(e){
+    if(!EDIT.on)return;
+    if(EDIT.dragging){EDIT.dragging=null;}
+    if(EDIT.marquee){
+      var cur=getMapCoords(e); var x1=Math.min(EDIT.marquee.startX,cur.x),x2=Math.max(EDIT.marquee.startX,cur.x),y1=Math.min(EDIT.marquee.startY,cur.y),y2=Math.max(EDIT.marquee.startY,cur.y);
+      if(Math.abs(x2-x1)>3||Math.abs(y2-y1)>3){ Object.keys(VILLAS).forEach(function(vn){ var p=VILLAS[vn]; if(p.x>=x1&&p.x<=x2&&p.y>=y1&&p.y<=y2){EDIT.selected.add(vn);} }); reapplySelection(); }
+      EDIT.marquee=null; marqueeEl.style.display='none';
+    }
+  });
+  window.addEventListener('keydown',function(e){
+    if(!EDIT.on)return; var tag=(e.target.tagName||''); if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA')return;
+    var step=EDIT.snap?EDIT.gridSize:(e.shiftKey?10:1); if(e.shiftKey&&EDIT.snap)step=EDIT.gridSize*5; var moved=false;
+    if(e.key==='ArrowLeft'){if(EDIT.selected.size){pushHistory();EDIT.selected.forEach(function(v){VILLAS[v].x-=step;});moved=true;e.preventDefault();}}
+    else if(e.key==='ArrowRight'){if(EDIT.selected.size){pushHistory();EDIT.selected.forEach(function(v){VILLAS[v].x+=step;});moved=true;e.preventDefault();}}
+    else if(e.key==='ArrowUp'){if(EDIT.selected.size){pushHistory();EDIT.selected.forEach(function(v){VILLAS[v].y-=step;});moved=true;e.preventDefault();}}
+    else if(e.key==='ArrowDown'){if(EDIT.selected.size){pushHistory();EDIT.selected.forEach(function(v){VILLAS[v].y+=step;});moved=true;e.preventDefault();}}
+    else if(e.key==='r'||e.key==='R'){editRotateSel(e.shiftKey?-15:-1);e.preventDefault();return;}
+    else if(e.key==='t'||e.key==='T'){editRotateSel(e.shiftKey?15:1);e.preventDefault();return;}
+    else if(e.key==='Escape'){editClearSel();e.preventDefault();return;}
+    else if((e.ctrlKey||e.metaKey)&&(e.key==='z'||e.key==='Z')&&!e.shiftKey){editUndo();e.preventDefault();return;}
+    else if((e.ctrlKey||e.metaKey)&&(e.key==='y'||e.key==='Y'||((e.key==='z'||e.key==='Z')&&e.shiftKey))){editRedo();e.preventDefault();return;}
+    else if((e.ctrlKey||e.metaKey)&&(e.key==='a'||e.key==='A')){editSelectAll();e.preventDefault();return;}
+    if(moved){ EDIT.selected.forEach(function(vn){ var el=document.querySelector('.villa[data-v="'+vn+'"]'); if(el){el.style.left=VILLAS[vn].x+'px';el.style.top=VILLAS[vn].y+'px';} }); }
+  });
 })();
 </script>
 </body>
