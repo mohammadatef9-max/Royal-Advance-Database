@@ -951,12 +951,15 @@ async function loadPCData() {
   const baseCodeSet = new Set(baseCodes);
   // Query the per-floor variants too (3210 → 3210F/3210G); they fold back into the base below.
   const baseCodesStr = wirExpandCodes(baseCodes).map(c => `"${c}"`).join(',');
-  // Map base_code → [activity_codes] so each WIR row fans out to all its split parts
+  // Map base_code → [{code, part}] so each WIR row fans out to its split parts. part_label is
+  // kept because a per-floor WIR (3190G/3190F) has to be matched to the part standing for that
+  // floor. Note part_label is not always a floor — some scopes use it to hang several real WIR
+  // codes off one synthetic base (ACT1/4060) — so only GF/FF are treated as floors below.
   const baseToSplits = {};
   scopeActivities.forEach(a => {
     const base = a.base_code || a.activity_code;
     if (!baseToSplits[base]) baseToSplits[base] = [];
-    baseToSplits[base].push(a.activity_code);
+    baseToSplits[base].push({ code: a.activity_code, part: (a.part_label || '').trim().toUpperCase() });
   });
 
   // Only count WIRs raised by THIS scope's subcontractor (canonical + merged aliases), so a
@@ -997,12 +1000,29 @@ async function loadPCData() {
     // carry per-floor WIRs. Both floors approved = the whole activity (100%); only one
     // approved = half of it (50%) — the rest bills automatically once the other is approved.
     const plainOk = counted.some(r => r.raw_activity_code === base);
-    const floorOk = counted.filter(r => r.raw_activity_code !== base).length;
-    const pct = plainOk ? 1 : Math.min(1, floorOk * 0.5);
+    // Which floors the WIRs cover: code suffix G = ground, F = first.
+    const floorsOk = new Set(
+      counted.filter(r => r.raw_activity_code !== base)
+             .map(r => (/([FG])$/.exec(r.raw_activity_code) || [])[1])
+             .filter(Boolean)
+             .map(sfx => sfx === 'G' ? 'GF' : 'FF')
+    );
     const allDates = (counted.length ? counted : rows).map(r => r.response_date).filter(Boolean).sort();
     const lastDate = allDates.length ? allDates[allDates.length - 1] : null;
-    (baseToSplits[base] || [base]).forEach(actCode => {
-      wirData[villaId + ':' + actCode] = { approved: pct > 0, pct, response_date: lastDate };
+    const parts = baseToSplits[base] || [{ code: base, part: '' }];
+    // If the scope already splits this activity into GF/FF parts, the value is split THERE —
+    // one floor's WIR completes its own part outright. Halving both parts on top of that would
+    // be splitting the same thing twice (and understates whenever the parts carry unequal
+    // weights). The old 50%-each rule still applies when the scope has no floor parts, so a
+    // single un-split activity backed by per-floor WIRs keeps billing half per floor.
+    const hasFloorParts = parts.some(p => p.part === 'GF' || p.part === 'FF');
+    parts.forEach(p => {
+      let pct;
+      if (plainOk) pct = 1;                                   // merged WIR covers the whole activity
+      else if (hasFloorParts && (p.part === 'GF' || p.part === 'FF'))
+        pct = floorsOk.has(p.part) ? 1 : 0;                   // this part's own floor
+      else pct = Math.min(1, floorsOk.size * 0.5);            // un-split activity: half per floor
+      wirData[villaId + ':' + p.code] = { approved: pct > 0, pct, response_date: lastDate };
     });
   });
 
