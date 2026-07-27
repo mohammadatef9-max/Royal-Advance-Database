@@ -1648,6 +1648,24 @@ function renderPaymentSummary() {
   renderPaymentSummarySingle();
 }
 
+// Capture the aggregated per-type rows of a locked PC so its figures can never move again.
+// Written once: if a snapshot already exists it is never overwritten, so re-viewing an old
+// certificate can't re-freeze it against newer villa types or rates.
+async function savePcSummarySnapshot(entries) {
+  if (!selectedPC || selectedPC.status !== 'locked' || selectedPC.summary_snapshot) return;
+  if (!Array.isArray(entries) || !entries.length) return;
+  const snap = { v: 1, saved_at: new Date().toISOString(), types: entries };
+  selectedPC.summary_snapshot = snap;   // set first so a re-render doesn't double-save
+  try {
+    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { summary_snapshot: snap });
+    const cached = allScopePCs.find(p => p.id === selectedPC.id);
+    if (cached) cached.summary_snapshot = snap;
+  } catch (e) {
+    selectedPC.summary_snapshot = null;  // let a later view retry
+    console.warn('PC summary snapshot not saved:', e.message);
+  }
+}
+
 function renderPaymentSummarySingle() {
   // Aggregate by villa type
   const typeMap = {};
@@ -1666,7 +1684,18 @@ function renderPaymentSummarySingle() {
     tm.todAed  += todAed;
   });
 
-  const typeEntries = Object.values(typeMap);
+  let typeEntries = Object.values(typeMap);
+  // ── Locked certificates are frozen ──────────────────────────────────────────
+  // Everything below derives from typeEntries, which is rebuilt live from the villa
+  // types and scope rates. That means correcting a villa type or a rate would restate
+  // money already certified. Once a PC is locked, replay the rows captured at lock time
+  // instead. PCs locked before this existed are captured on first view, so their figures
+  // pin to what they show today rather than drifting again later.
+  if (selectedPC && selectedPC.status === 'locked') {
+    const snap = selectedPC.summary_snapshot;
+    if (snap && Array.isArray(snap.types) && snap.types.length) typeEntries = snap.types;
+    else savePcSummarySnapshot(typeEntries);
+  }
   const totQty      = typeEntries.reduce((a,t)=>a+t.qty, 0);
   const totPrevQty  = typeEntries.reduce((a,t)=>a+t.prev, 0);
   const totCurQty   = typeEntries.reduce((a,t)=>a+t.current, 0);
