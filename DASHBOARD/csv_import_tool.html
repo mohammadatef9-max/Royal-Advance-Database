@@ -868,6 +868,7 @@ async function startImport(type){
   }
   // Skip-reason sample: track first 3 skip reasons for diagnosis
   const skipSamples=[];
+  let voidSkipped=0;  // WIR rows with DC response "D" (void/cancelled) — see below
 
   for(let i=0;i<rows.length;i++){
     const r=rows[i];
@@ -875,6 +876,9 @@ async function startImport(type){
     const rawCluster=(r[m.cluster]||'').trim().toUpperCase();
     const rawCode=(r[m.code]||'').trim();
     const rawStatus=(r[m.status]||'').trim();
+    // DC response "D" means the WIR was void/cancelled — never import it.
+    // Exact match only: "D1" is a different code and is left alone deliberately.
+    if(type==='wir'&&rawStatus.toUpperCase()==='D'){voidSkipped++;skipped++;continue;}
     if(!rawVilla||isNaN(rawVilla)||!rawCluster||!rawCode){
       skipped++;
       if(skipSamples.length<3){
@@ -945,6 +949,7 @@ async function startImport(type){
   document.getElementById(pfx+'-unmatched').textContent=unmatched;
   document.getElementById(pfx+'-skipped').textContent=skipped;
 
+  if(voidSkipped>0) addLog(type,'🚫 '+voidSkipped+' WIR row(s) with DC response "D" (void/cancelled) were not imported','info');
   if(skipSamples.length>0) addLog(type,'⚠ Skip samples (first 3 skipped rows): '+skipSamples.join(' || '),'warn');
   // Show cluster breakdown of matched rows
   const clrBreakdown={};
@@ -1647,7 +1652,7 @@ async function dcStartUpload(tab){
   }catch(e){dcAddLog(tab,'⚠ Batch creation error: '+e.message+' — continuing','warn');}
 
   const CHUNK=50;
-  let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0;
+  let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0,dcVoidSkipped=0;
 
   for(let i=0;i<merged.length;i++){
     const r=merged[i];
@@ -1655,6 +1660,8 @@ async function dcStartUpload(tab){
       const villa=parseInt(r['Villa No']);
       const cluster=(r['Location']||'').trim().toUpperCase();
       const code=(r['Activity Code']||'').trim();
+      // DC response "D" = void/cancelled WIR — never import it (exact match; "D1" is left alone).
+      if((r['Status']||'').trim().toUpperCase()==='D'){skipped++;dcVoidSkipped++;continue;}
       if(!villa||isNaN(villa)||!cluster||!code){
         skipped++;
         if(skipped<=3) dcAddLog(tab,'⚠ Skip row '+(i+1)+': villa="'+(r['Villa No']||'')+'" cluster="'+cluster+'" code="'+code+'"','warn');
@@ -1730,6 +1737,7 @@ async function dcStartUpload(tab){
 
   document.getElementById('prog-fill-'+tab).style.width='100%';
   const summary=uploaded+' uploaded · '+matched+' matched · '+unmatched+' unmatched · '+skipped+' skipped'+(chunksFailed>0?' · '+chunksFailed+' chunks FAILED':'');
+  if(dcVoidSkipped>0) dcAddLog(tab,'🚫 '+dcVoidSkipped+' WIR row(s) with DC response "D" (void/cancelled) were not imported','info');
   dcAddLog(tab,(chunksFailed>0?'⚠ Completed with errors — ':'✅ Done — ')+summary,chunksFailed>0?'warn':'ok');
   dcToast(chunksFailed>0?'Completed with errors: '+uploaded+' rows':'Upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
 
@@ -1899,10 +1907,12 @@ async function dcStartCivilUpload(){
     if(br.ok){const bd=await br.json();batchId=Array.isArray(bd)?bd[0]?.id:bd?.id;}
   }catch(e){}
 
-  const CHUNK=50; let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0;
+  const CHUNK=50; let records=[],uploaded=0,matched=0,unmatched=0,skipped=0,chunksFailed=0,civVoidSkipped=0;
   for(let i=0;i<rows.length;i++){
     const r=rows[i];
     const villa=parseInt(r.villa); const cluster=(r.cluster||'').trim().toUpperCase(); const code=(r.code||'').trim();
+    // DC response "D" = void/cancelled WIR — never import it (exact match; "D1" is left alone).
+    if((r.status||'').trim().toUpperCase()==='D'){skipped++;civVoidSkipped++;continue;}
     if(!villa||isNaN(villa)||!cluster||!code){skipped++;continue;}
     const vid=villaMap[cluster+'_'+villa]; const aid=actMap[code];
     const ms=!vid?'unmatched_villa':!aid?'unmatched_activity':'matched';
@@ -1929,6 +1939,7 @@ async function dcStartCivilUpload(){
   if(batchId){await fetch(SB+'/rest/v1/import_batches?id=eq.'+batchId,{method:'PATCH',headers:getH(),body:JSON.stringify({matched_rows:matched,skipped_rows:unmatched+skipped,status:chunksFailed>0?'completed_with_errors':'completed'})});}
   document.getElementById('prog-fill-civ').style.width='100%';
   const summary=uploaded+' uploaded · '+matched+' matched · '+unmatched+' unmatched · '+skipped+' skipped'+(chunksFailed>0?' · '+chunksFailed+' chunks FAILED':'');
+  if(civVoidSkipped>0) dcAddLog('civ','🚫 '+civVoidSkipped+' WIR row(s) with DC response "D" (void/cancelled) were not imported','info');
   dcAddLog('civ',(chunksFailed>0?'⚠ Completed with errors — ':'✅ Done — ')+summary,chunksFailed>0?'warn':'ok');
   dcToast(chunksFailed>0?'Completed with errors':'Civil upload complete: '+uploaded+' rows',chunksFailed>0?'err':'ok');
   if(uploaded>0){
