@@ -1724,14 +1724,26 @@ function renderPaymentSummarySingle() {
     .reduce((a,v) => a + (parseFloat(v.value_aed)||0), 0);
   const adjustedContract = contractValue + approvedVOsTotal;
 
-  // Cumulative retention + advance from locked PCs (excluding current PC, which uses live calcs)
-  const otherLockedPCs = allScopePCs.filter(p => p.status === 'locked' && p.id !== selectedPC.id);
-  const retHeldOther  = otherLockedPCs.reduce((a,p) => a + (parseFloat(p.retention_aed)||0), 0);
-  const advRecOther   = otherLockedPCs.reduce((a,p) => a + (parseFloat(p.advance_recovery_aed)||0), 0);
-  // Include current PC if locked or submitted
-  const includeThis   = selectedPC.status === 'locked' || selectedPC.status === 'submitted';
-  const retHeldTotal  = retHeldOther + (includeThis ? ret : 0);
-  const advRecTotal   = advRecOther  + (includeThis ? adv : 0);
+  // Retention and advance recovery are already TO-DATE figures, not per-period ones:
+  // both are computed from totTodAmt (cumulative gross), and that running total is what
+  // gets stored on each PC at lock time. So "held to date" is simply the latest
+  // certificate's own figure — summing them across PCs re-counts every earlier period
+  // (e.g. a scope with 12,213.85 then 22,017.65 held would have shown 34,231.50).
+  // Previously this also dropped the current PC's own figure unless it was locked, so a
+  // draft showed the last locked PC's amount — a stale, earlier month.
+  // Fall back to the most recent earlier certificate only when this PC holds none
+  // (e.g. retention switched off), so previously-held money is still reported.
+  const priorCerts = allScopePCs
+    .filter(p => (p.status === 'locked' || p.status === 'submitted')
+                 && p.id !== selectedPC.id
+                 && (p.pc_number||0) < (selectedPC.pc_number||0))
+    .sort((a,b) => (b.pc_number||0) - (a.pc_number||0));
+  const lastHeld = key => {
+    const hit = priorCerts.find(p => (parseFloat(p[key])||0) > 0);
+    return hit ? parseFloat(hit[key]) : 0;
+  };
+  const retHeldTotal  = ret > 0 ? ret : lastHeld('retention_aed');
+  const advRecTotal   = adv > 0 ? adv : lastHeld('advance_recovery_aed');
   const advanceBalance = Math.max(0, (parseFloat(selectedScope.advance_amount_aed)||0) - advRecTotal);
 
   const isLocked = selectedPC.status === 'locked';
