@@ -70,7 +70,10 @@ body.in-shell #app{height:100vh}
 #sub-list .leg-item span{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:148px}
 #map-wrap{flex:1;overflow:hidden;background:var(--map-bg);position:relative}
 #map-viewport{position:absolute;inset:0;overflow:hidden;background:var(--map-bg)}
-#map-container{position:absolute;left:0;top:0;display:inline-block;width:1320px;transform-origin:0 0;will-change:transform}
+/* Must match IMG_W/IMG_H exactly: getMapCoords() converts cursor position to map
+   coordinates via IMG_W/rect.width, so a stale width makes every drag overshoot.
+   The height is explicit because there is no background image to imply it. */
+#map-container{position:absolute;left:0;top:0;display:inline-block;width:1963px;height:2855px;transform-origin:0 0;will-change:transform}
 body.panning,body.panning *{cursor:grabbing !important}
 body.space-down #map-viewport{cursor:grab}
 #map-img{display:none}
@@ -1795,7 +1798,10 @@ var EDIT={on:false,selected:new Set(),gridSize:10,snap:true,showGrid:true,histor
    boxes themselves stay fixed, so raising the scale makes a box relatively
    smaller vs the plan. Positions + image_size export together, so the final
    JSON is self-describing. */
-var BASE_W=1320, BASE_H=1207, BASE_LAYER_H=1207;
+// Must equal the baked IMG_W/IMG_H. editSetMapScale() rebuilds the coordinate space as
+// BASE_* x scale, so stale values here would snap the canvas back to the old size the
+// moment the Map Size slider (or Reset 1x) is touched, throwing every villa out of place.
+var BASE_W=1963, BASE_H=2855, BASE_LAYER_H=2855;
 var MAP_SCALE=1;
 function editSetMapScale(s){
   s=Math.max(0.5,Math.min(4,Math.round((parseFloat(s)||1)*100)/100));
