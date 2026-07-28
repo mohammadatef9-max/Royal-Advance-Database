@@ -1826,6 +1826,10 @@ function toggleEditMode(){
   EDIT.on=!EDIT.on;
   document.body.classList.toggle('edit-mode',EDIT.on);
   document.getElementById('btn-edit').classList.toggle('active',EDIT.on);
+  // C7 is a big cluster, so Fit lands around 30% where a villa box is only ~14x10px.
+  // At that size a drag misses the box and starts a marquee instead, which reads as
+  // "the editor doesn't work". Zoom to a size the boxes can actually be grabbed at.
+  if(EDIT.on && VIEW.scale < 0.55){ zoomBy(0.7/VIEW.scale); }
   if(EDIT.on){ drawGrid(); document.getElementById('grid-overlay').classList.toggle('visible',EDIT.showGrid); if(typeof tip!=='undefined'&&tip)tip.style.display='none'; updateSelInfo(); }
   else { document.getElementById('grid-overlay').classList.remove('visible'); EDIT.selected.clear(); renderVillas(buildDataMap()); }
 }
