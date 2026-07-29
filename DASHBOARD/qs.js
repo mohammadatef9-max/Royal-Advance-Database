@@ -875,7 +875,7 @@ async function loadPCData() {
     const canSubmit = canManage || canAdmin;
     strip.innerHTML = `
       <span style="font-size:11px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.06em">${selectedPC.status.toUpperCase()}</span>
-      ${canSubmit && selectedPC.status==='draft' ? '<button class="btn btn-ghost btn-sm" onclick="submitPC()">Submit</button>' : ''}
+      ${canSubmit && selectedPC.status==='draft' ? '<button class="btn btn-danger btn-sm" onclick="openLock()" title="Submits and locks the certificate in one step — you still get the confirmation summary first">🔒 Submit &amp; Lock</button>' : ''}
       ${canLock && selectedPC.status==='submitted' ? '<button class="btn btn-danger btn-sm" onclick="openLock()">🔒 Lock PC</button>' : ''}
       ${(canManage||canAdmin) ? '<button class="btn btn-ghost btn-sm" onclick="openAddVilla()" title="Manually add a villa to the sheet — e.g. to bill a WIR that is not approved yet at a partial %">＋ Add Villa</button>' : ''}
       ${canAdmin ? '<button class="btn btn-danger btn-sm" onclick="openDeletePC()">🗑 Delete PC</button>' : ''}
@@ -2680,7 +2680,10 @@ async function confirmLock() {
       });
     }
     // 2. Update PC status (store combined gross_aed for reporting)
-    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString(), gross_aed: lastGrossAed });
+    // Locking now covers submitting: 'submitted' did nothing except reveal the Lock button,
+    // so the two were collapsed into one action. Stamp submitted_at when it was never set
+    // (locking straight from draft) so the audit trail still records a submission time.
+    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString(), submitted_at: selectedPC.submitted_at || new Date().toISOString(), gross_aed: lastGrossAed });
 
     // 2b. Per-scope locked snapshots → correct dashboard roll-up of combined PCs
     const effRetPct = (selectedPC.retention_pct_override!=null && selectedPC.retention_pct_override!=='')
