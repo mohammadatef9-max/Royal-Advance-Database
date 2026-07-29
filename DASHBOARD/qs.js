@@ -68,6 +68,14 @@ let editScopeMode = false;
 // historical PC state
 let histPCMeta = null;   // {num, date, label, notes}
 let histPCSelections = {}; // key: villa_id+':'+activity_code → true/false
+// The historical grid covers the WHOLE scope family (base + its VOs), not just the selected
+// scope — a rebuilt PC has to bill its variations from the same sheet. These are the merged
+// groups/activities across every scope ticked in the New PC modal; histCodeScope remembers
+// which scope each activity code came from so billed records land on the right scope.
+let histScopes = [];      // [{scope, groups, activities}]
+let histGroups = [];      // flat groups, each tagged with _scopeId/_voRef
+let histActs   = [];      // flat activities, each tagged with _scopeId/_voRef
+let histCodeScope = {};   // activity_code → scope_id
 
 // villa search state
 let vsFoundVilla = null;
@@ -3036,6 +3044,19 @@ async function confirmDeletePC() {
 // NEW PC
 // ══════════════════════════════════════════════
 function openNewPC() {
+  // A VO is billed as a section ON its base scope's certificate — it has no certificates of
+  // its own. Starting one from the VO page created a second, parallel PC for the same period
+  // that no roll-up ever combined, so send the user to the base scope instead.
+  if (selectedScope.is_variation && selectedScope.parent_scope_id) {
+    const base = allScopes.find(s => s.id === selectedScope.parent_scope_id);
+    const baseName = base ? (base.sca_ref || base.scope_title || ('Scope ' + base.id)) : null;
+    if (base) {
+      if (confirm(`${selectedScope.vo_ref || 'This variation'} is billed on ${baseName}'s payment certificates, not on its own.\n\nOpen ${baseName} to create the PC there?`)) selectScope(base.id);
+    } else {
+      alert(`${selectedScope.vo_ref || 'This variation'} has no base scope linked, so it cannot be billed.\n\nEdit the scope and set the base scope it varies.`);
+    }
+    return;
+  }
   document.getElementById('npc-date').value = new Date().toISOString().slice(0,7) + '-01';
   document.getElementById('npc-label').value = '';
   document.getElementById('npc-num').value = '';
@@ -3134,16 +3155,62 @@ function handleNewPC() {
     const msg   = document.getElementById('npc-msg');
     if (!num || !date || !label) { showMsg(msg,'err','PC number, date and label are required.'); return; }
     histPCMeta = { num, date, label, notes: document.getElementById('npc-notes').value.trim() };
-    openHistPCSetup();
+    openHistPCSetup();   // async — loads the family's activity config, then opens the grid
   } else {
     submitNewPC();
   }
 }
 
-function openHistPCSetup() {
+// Load the activity config for every scope on this PC (base + ticked VOs) and merge it into
+// the flat histGroups/histActs the grid renders from. With a single scope this is exactly the
+// old scopeActivityGroups/scopeActivities, so the common path is unchanged.
+async function loadHistScopeFamily() {
+  const ids = [...new Set([selectedScope.id, ...(newPcScopeIds || [])])];
+  const scopes = ids.map(id => allScopes.find(s => s.id === id)).filter(Boolean);
+  histScopes = [];
+  for (const sc of scopes) {
+    const groups = (sc.id === selectedScope.id)
+      ? scopeActivityGroups
+      : await fa(`qs_scope_activity_groups?scope_id=eq.${sc.id}&order=sort_order.asc`);
+    const gIds = groups.map(g => g.id);
+    const activities = (sc.id === selectedScope.id)
+      ? scopeActivities
+      : (gIds.length ? await fa(`qs_scope_activities?group_id=in.(${gIds.join(',')})&order=sort_order.asc`) : []);
+    histScopes.push({ scope: sc, groups, activities });
+  }
+  const tag = (o, sc) => Object.assign({}, o, { _scopeId: sc.id, _voRef: sc.is_variation ? (sc.vo_ref || 'VO') : null });
+  histGroups = []; histActs = []; histCodeScope = {};
+  histScopes.forEach(h => {
+    h.groups.forEach(g => histGroups.push(tag(g, h.scope)));
+    h.activities.forEach(a => {
+      histActs.push(tag(a, h.scope));
+      const code = String(a.activity_code).trim();
+      // First scope to claim a code owns it. A collision across scopes would bill the same
+      // WIR twice, so it is surfaced as a warning after the sheet is parsed.
+      if (!(code in histCodeScope)) histCodeScope[code] = h.scope.id;
+    });
+  });
+}
+
+async function openHistPCSetup() {
   histPCSelections = {};
+  // newPcScopeIds is already the scope family ticked in the New PC modal (openNewPC set it,
+  // the checkboxes edit it) — don't recompute it here or the user's unticks get undone.
+  // A failed VO config fetch must not leave the user staring at a modal that never opens —
+  // fall back to the selected scope alone, which is exactly the old single-scope behaviour.
+  try {
+    await loadHistScopeFamily();
+  } catch (e) {
+    console.warn('[hist PC] could not load the VO scope config:', e.message);
+    histScopes = [{ scope: selectedScope, groups: scopeActivityGroups, activities: scopeActivities }];
+    histGroups = scopeActivityGroups.map(g => ({ ...g, _scopeId: selectedScope.id, _voRef: null }));
+    histActs   = scopeActivities.map(a => ({ ...a, _scopeId: selectedScope.id, _voRef: null }));
+    histCodeScope = {};
+    histActs.forEach(a => { histCodeScope[String(a.activity_code).trim()] = selectedScope.id; });
+  }
   document.getElementById('hist-pc-info-bar').textContent =
-    `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}`;
+    `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}` +
+    (histScopes.length > 1 ? ` · ${histScopes.length} scopes (incl. VOs)` : '');
   const im = document.getElementById('hist-pc-import-msg'); if (im) im.style.display = 'none';
   const ss = document.getElementById('hist-sheet-sel'); if (ss) { ss.style.display='none'; ss.innerHTML=''; }
   const cb = document.querySelector('#modal-hist-pc .btn-amber'); if (cb) { cb.disabled = false; cb.textContent = 'Create Locked PC'; }
@@ -3155,7 +3222,7 @@ function openHistPCSetup() {
 function renderHistGrid() {
   const grid = document.getElementById('hist-pc-grid');
   if (!grid) return;
-  if (!scopeActivities.length) {
+  if (!histActs.length) {
     grid.innerHTML = '<div style="color:var(--tx3);padding:16px">No activities configured for this scope. Set up the scope configuration first.</div>';
     return;
   }
@@ -3170,12 +3237,12 @@ function renderHistGrid() {
   let headCols = '<th style="text-align:left;padding:6px 10px;position:sticky;left:0;background:var(--bg3);z-index:5;min-width:72px">Villa</th>' +
                  '<th style="text-align:center;padding:6px 8px;position:sticky;left:72px;background:var(--bg3);z-index:5;min-width:56px">Cluster</th>' +
                  '<th style="text-align:left;padding:6px 10px;min-width:100px;position:sticky;left:128px;background:var(--bg3);z-index:5">Type</th>';
-  scopeActivityGroups.forEach(grp => {
-    const grpActs = scopeActivities.filter(a => a.group_id === grp.id);
+  histGroups.forEach(grp => {
+    const grpActs = histActs.filter(a => a.group_id === grp.id && a._scopeId === grp._scopeId);
     grpActs.forEach(act => {
       headCols += `<th style="white-space:normal;min-width:72px;padding:5px 8px;text-align:center;vertical-align:top">
         <div style="font-size:11px;font-weight:600;color:var(--tx)">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div>
-        <div style="font-size:10px;color:var(--tx3)">${escH(act.activity_code)}</div>
+        <div style="font-size:10px;color:var(--tx3)">${escH(act.activity_code)}${act._voRef?' <span style="color:var(--accent);font-weight:700">'+escH(act._voRef)+'</span>':''}</div>
         <div style="margin-top:4px">
           <button class="btn btn-ghost btn-sm" style="font-size:9px;padding:2px 6px"
             onclick="histSelectAllAct('${escH(act.activity_code)}', true)">All</button>
@@ -3190,7 +3257,7 @@ function renderHistGrid() {
   // Group villas by cluster for separator rows
   let lastCluster = null;
   let rows = scopeVillas.map(sv => {
-    const totalCols = 3 + scopeActivities.length + 1;
+    const totalCols = 3 + histActs.length + 1;
     let separator = '';
     if (sv.cluster_id !== lastCluster) {
       lastCluster = sv.cluster_id;
@@ -3200,8 +3267,8 @@ function renderHistGrid() {
     let cells = `<td style="font-weight:700;padding:5px 10px;white-space:nowrap;position:sticky;left:0;background:${clusterBg};z-index:2;font-size:13px">VI-${escH(sv.villa_no)}</td>` +
                 `<td style="font-size:12px;font-weight:600;padding:5px 8px;text-align:center;white-space:nowrap;color:var(--accent);position:sticky;left:72px;background:${clusterBg};z-index:2">C${sv.cluster_id ?? '—'}</td>` +
                 `<td style="font-size:11px;padding:5px 10px;white-space:nowrap;color:var(--tx2);position:sticky;left:128px;background:${clusterBg};z-index:2">${escH(sv.villa_type_label)}</td>`;
-    scopeActivityGroups.forEach(grp => {
-      scopeActivities.filter(a => a.group_id === grp.id).forEach(act => {
+    histGroups.forEach(grp => {
+      histActs.filter(a => a.group_id === grp.id && a._scopeId === grp._scopeId).forEach(act => {
         const key = `${sv.villa_id}:${act.activity_code}`;
         const pct = histPct(key);              // 0 = not billed, else fraction billed in this PC
         const on  = pct > 0;
@@ -3291,8 +3358,8 @@ function histSelectAllAct(actCode, val) {
 }
 
 function histSelectRow(villaId) {
-  const allOn = scopeActivities.every(act => histPct(`${villaId}:${act.activity_code}`) > 0);
-  scopeActivities.forEach(act => {
+  const allOn = histActs.every(act => histPct(`${villaId}:${act.activity_code}`) > 0);
+  histActs.forEach(act => {
     const pct = allOn ? 0 : 1;
     histPCSelections[`${villaId}:${act.activity_code}`] = pct;
     _histPaintCell(villaId, act.activity_code, pct);
@@ -3345,7 +3412,7 @@ function _normTxt(s){ return String(s==null?'':s).toLowerCase().replace(/[^a-z]/
 async function handleHistExcel(file) {
   if (!file) return;
   if (typeof XLSX === 'undefined') { showHistImportMsg('err','Spreadsheet library failed to load — check your connection and retry.'); return; }
-  if (!scopeActivities.length) { showHistImportMsg('err','Configure this scope’s activities before importing.'); return; }
+  if (!histActs.length) { showHistImportMsg('err','Configure this scope’s activities before importing.'); return; }
   try {
     showHistImportMsg('busy', 'Reading <strong>'+escH(file.name)+'</strong>…');
     histWB = XLSX.read(await file.arrayBuffer(), { type:'array' });
@@ -3381,10 +3448,10 @@ async function parseHistSheet(sheetName) {
 
     // Group scope activities by BASE code → ordered parts. A normal activity is a base with one
     // part; a split activity (GF/FF) is a base whose parts sit in consecutive BOQ sub-columns.
-    const grpName = {}; scopeActivityGroups.forEach(g => grpName[g.id] = g.group_name);
+    const grpName = {}; histGroups.forEach(g => grpName[g.id] = g.group_name);
     const baseParts = new Map();  // base → [{code, sort}]
     const baseMeta  = new Map();  // base → {name, group}
-    scopeActivities.forEach(a => {
+    histActs.forEach(a => {
       const base = String(a.base_code || a.activity_code).trim();
       if (!baseParts.has(base)) { baseParts.set(base, []); baseMeta.set(base, { name:a.activity_name, group:grpName[a.group_id] }); }
       baseParts.get(base).push({ code:String(a.activity_code).trim(), sort:(a.sort_order||0) });
@@ -3399,7 +3466,7 @@ async function parseHistSheet(sheetName) {
       if (!byName.has(nk)) byName.set(nk, []);
       byName.get(nk).push(base);
     });
-    const groupNorms = new Set(scopeActivityGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
+    const groupNorms = new Set(histGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
 
     // Find the name row (has "Villa No"), the group row, + Villa/Cluster cols
     let nameRow=-1, groupRow=-1, villaCol=-1, clusterCol=-1;
@@ -3468,7 +3535,7 @@ async function parseHistSheet(sheetName) {
     if (nameRow >= 0) {
       const nrow = rows[nameRow] || [];
       const squash = s => _normTxt(s).replace(/[^a-z0-9]/g, '');
-      scopeActivities.forEach(a => {
+      histActs.forEach(a => {
         const code = String(a.activity_code).trim();
         const want = squash(a.activity_name);
         if (!code || want.length < 4 || codeCols.has(code)) return;
@@ -3525,8 +3592,8 @@ async function parseHistSheet(sheetName) {
     if (!codeCols.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
       diag += `<div style="color:var(--tx2);margin-top:4px">${villaCol<0?'<span style="color:var(--amber)">no “Villa No” column</span> · ':''}${!codeCols.size?'<span style="color:var(--amber)">no activity columns matched by name</span>':''}</div>`;
-      diag += `<div style="color:var(--tx3)">Scope groups: ${scopeActivityGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
-      diag += `<div style="color:var(--tx3)">Scope activities: ${scopeActivities.map(a=>escH(a.activity_name)).join(', ')}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope groups: ${histGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope activities: ${histActs.map(a=>escH(a.activity_name)).join(', ')}</div>`;
       diag += `<div style="margin-top:6px;color:var(--tx2)">Top rows seen:</div>`;
       for (let r=0;r<Math.min(rows.length,12);r++){ const vals=(rows[r]||[]).map(v=>String(v==null?'':v).trim()).filter(Boolean); if(vals.length) diag+=`<div style="font-family:monospace;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">r${r+1}: ${escH(vals.slice(0,22).join(' | '))}</div>`; }
       diag += `<div style="margin-top:6px;color:var(--tx3)">Try a different sheet above, or send me this panel.</div>`;
@@ -3589,16 +3656,43 @@ async function parseHistSheet(sheetName) {
     updateClusterFilter();
     renderHistGrid();
 
-    const codeName = {}; scopeActivities.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
+    const codeName = {}; histActs.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
     const lbl = c => escH((codeName[c]||'')+' ['+c+']');
-    const missing = [...new Set(scopeActivities.map(a=>String(a.activity_code).trim()).filter(c=>!codeCols.has(c)))];
+    const missing = [...new Set(histActs.map(a=>String(a.activity_code).trim()).filter(c=>!codeCols.has(c)))];
     // Two scope activities sharing one WIR code bill as a single cell — worth flagging,
     // it is usually why a column "disappears" into another.
-    const dupCodes = [...new Set(scopeActivities.map(a=>String(a.activity_code).trim())
+    const dupCodes = [...new Set(histActs.map(a=>String(a.activity_code).trim())
       .filter(c=>c).filter((c,i,arr)=>arr.indexOf(c)!==i))];
+    // A code claimed by two DIFFERENT scopes in the family is worse than a within-scope
+    // duplicate: only one scope can be billed for it, so say which one won.
+    const crossDup = [];
+    if (histScopes.length > 1) {
+      const seenIn = {};
+      histActs.forEach(a => {
+        const c = String(a.activity_code).trim(); if (!c) return;
+        (seenIn[c] = seenIn[c] || new Set()).add(a._scopeId);
+      });
+      Object.keys(seenIn).forEach(c => { if (seenIn[c].size > 1) crossDup.push(c); });
+    }
+    // Per-scope tally of what actually got ticked, so a VO importing nothing is obvious.
+    const perScope = histScopes.map(h => {
+      const codes = new Set(h.activities.map(a => String(a.activity_code).trim())
+                                        .filter(c => histCodeScope[c] === h.scope.id));
+      const n = Object.keys(histPCSelections)
+        .filter(k => histPct(k) > 0 && codes.has(k.slice(k.lastIndexOf(':') + 1))).length;
+      return { h, n };
+    });
     let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(histWB._fileName||'')} — sheet <strong>${escH(sheetName)}</strong></div>
       <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities billed: <strong>${cellsTicked}</strong>${partialCells ? ` &middot; <span style="color:var(--amber)">of which partial (&lt;100%): <strong>${partialCells}</strong></span>` : ''}</div>
       <div style="color:var(--tx3)">Matched activities: ${[...codeCols.keys()].map(lbl).join(', ')}</div>`;
+    if (histScopes.length > 1) {
+      html += `<div style="color:var(--tx3)">Per scope: ${perScope.map(p =>
+        `${escH(p.h.scope.is_variation ? (p.h.scope.vo_ref||'VO') : (p.h.scope.sca_ref||'Base'))} <strong style="color:${p.n?'var(--green)':'var(--amber)'}">${p.n}</strong>`
+      ).join(' &middot; ')}</div>`;
+      const empty = perScope.filter(p => !p.n && p.h.scope.is_variation);
+      if (empty.length) html += `<div style="color:var(--amber)">⚠ Nothing matched for ${empty.map(p=>escH(p.h.scope.vo_ref||'VO')).join(', ')} — its columns aren’t in this sheet. Tick them by hand below, or untick the VO in the New PC dialog.</div>`;
+    }
+    if (crossDup.length) html += `<div style="color:var(--amber)">⚠ Code${crossDup.length>1?'s':''} ${crossDup.map(escH).join(', ')} exist${crossDup.length>1?'':'s'} in more than one scope of this family — billed against the base scope only, to avoid paying it twice.</div>`;
     if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column: ${missing.map(lbl).join(', ')}</div>`;
     if (dupCodes.length) html += `<div style="color:var(--tx3)">ℹ Code${dupCodes.length>1?'s':''} ${dupCodes.map(escH).join(', ')} ${dupCodes.length>1?'are':'is'} used by more than one activity in this scope — those columns bill as one cell (highest % wins).</div>`;
     if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
@@ -3655,7 +3749,7 @@ async function submitHistPC() {
     // global is shared with the PC grid and can be re-detected underneath us, which would
     // silently save an empty PC.
     const billedItems = [];
-    const validCodes = new Set(scopeActivities.map(a => a.activity_code));
+    const validCodes = new Set(histActs.map(a => String(a.activity_code).trim()));
     Object.keys(histPCSelections).forEach(key => {
       const i = key.lastIndexOf(':');
       if (i < 1) return;
@@ -3664,7 +3758,9 @@ async function submitHistPC() {
       const pct = histPct(key);
       if (!villaId || !validCodes.has(actCode) || pct <= 0) return;
       billedItems.push({
-        scope_id: selectedScope.id,
+        // Bill against the scope that owns this activity code, not the selected one —
+        // otherwise a VO's work is recorded under the base scope and its rates never apply.
+        scope_id: histCodeScope[actCode] || selectedScope.id,
         locked_pc_id: res.id,
         villa_id: villaId,
         activity_code: actCode,
@@ -3680,15 +3776,18 @@ async function submitHistPC() {
       // re-imports. The on_conflict target must name the table's REAL unique constraint
       // (scope, villa, activity, PC — a 3-column target 400s with "no unique or exclusion
       // constraint matching").
-      const existingBilled = await fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&select=villa_id,activity_code,billed_pct`);
+      // Keyed by SCOPE too — the family's scopes bill independently, so a VO must not have
+      // its increment cancelled out by what the base scope already billed for the same villa.
+      const famScopeIds = [...new Set(billedItems.map(b => b.scope_id))];
+      const existingBilled = await fa(`qs_billed_records?scope_id=in.(${famScopeIds.join(',')})&select=scope_id,villa_id,activity_code,billed_pct`);
       const priorPct = {};
       existingBilled.forEach(r => {
-        const k = `${r.villa_id}:${r.activity_code}`;
+        const k = `${r.scope_id}:${r.villa_id}:${r.activity_code}`;
         priorPct[k] = (priorPct[k] || 0) + (r.billed_pct == null ? 1 : Number(r.billed_pct));
       });
       const freshItems = [];
       billedItems.forEach(b => {
-        const prior = priorPct[`${b.villa_id}:${b.activity_code}`] || 0;
+        const prior = priorPct[`${b.scope_id}:${b.villa_id}:${b.activity_code}`] || 0;
         const inc = Math.min(b.billed_pct, 1) - prior;
         if (inc > 1e-6) freshItems.push({ ...b, billed_pct: Math.round(inc * 1e6) / 1e6 });
       });
@@ -3706,6 +3805,36 @@ async function submitHistPC() {
         }
       }
       if (skipped > 0) console.warn(`[hist PC] ${skipped} pair(s) skipped — already fully billed on an earlier PC in this scope`);
+
+      // Register the billed villas against each scope that got rows. A scope's villa list is
+      // detected from its own WIRs plus manual assignments — billed records are NOT a source —
+      // so a VO billed for a villa with no WIR under its codes would render an empty section
+      // and the money would be invisible. Duplicates are ignored by the unique constraint.
+      const villaMeta = {};
+      scopeVillas.forEach(sv => { villaMeta[sv.villa_id] = sv; });
+      const assignRows = [];
+      const seenAssign = new Set();
+      freshItems.forEach(b => {
+        const k = b.scope_id + ':' + b.villa_id;
+        if (seenAssign.has(k)) return;
+        seenAssign.add(k);
+        const m = villaMeta[b.villa_id];
+        assignRows.push({ scope_id: b.scope_id, villa_id: b.villa_id,
+                          villa_no: m ? m.villa_no : null,
+                          villa_type_label: m ? m.villa_type_label : null,
+                          assigned_by: currentUser?.full_name || '' });
+      });
+      if (assignRows.length) {
+        // Non-fatal: the PC and its billed records are already saved, and a missing
+        // assignment only affects which villas the section auto-lists.
+        try {
+          await fetch(`${SB}/rest/v1/qs_scope_villas?on_conflict=scope_id,villa_id`, {
+            method: 'POST',
+            headers: getH({'Prefer':'resolution=ignore-duplicates,return=minimal'}),
+            body: JSON.stringify(assignRows)
+          });
+        } catch(e) { console.warn('[hist PC] villa assignment failed:', e.message); }
+      }
     }
 
     audit('qs_payment_certificates', 'CREATE_HISTORICAL_PC', res.id, { scope: selectedScope.subcontractor_name, pc_number: histPCMeta.num, period_label: histPCMeta.label, billed_activities: billedItems.length });
