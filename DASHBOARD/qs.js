@@ -76,6 +76,13 @@ let histScopes = [];      // [{scope, groups, activities}]
 let histGroups = [];      // flat groups, each tagged with _scopeId/_voRef
 let histActs   = [];      // flat activities, each tagged with _scopeId/_voRef
 let histCodeScope = {};   // activity_code → scope_id
+// Per-scope import: a VO's progress usually lives on its OWN sheet (or file), so each scope
+// on the PC picks the sheet it reads from. These hold that per-scope wiring; the merged
+// histPCSelections/scopeVillas the grid renders from are rebuilt by mergeHistScopes().
+let histScopeSheets = {};  // scopeId → { wb, fileName, sheet }
+let histScopeParsed = {};  // scopeId → { selections, villas, html, kind, cells }
+let histActiveScope = null;// scopeId whose import tab is showing
+let histLastUpload  = null;// { wb, fileName } of the most recent upload — shared as a default
 
 // villa search state
 let vsFoundVilla = null;
@@ -187,7 +194,7 @@ async function loadScopes() {
   // Use explicit is_template filters in the query so the DB does the separation —
   // avoids any risk of templates leaking into the scope list if is_template is
   // ever returned as null/undefined by PostgREST (e.g. column visibility, old cache).
-  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template,is_variation,vo_ref,parent_scope_id';
+  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template,is_variation,vo_ref,parent_scope_id,is_descoped,descoped_at';
   const [realScopes, templates, pcs, vos, pcScopes] = await Promise.all([
     fa(`qs_scopes?select=${SCOPE_COLS}&is_template=eq.false&order=subcontractor_name.asc`),
     fa('qs_scopes?select=id,subcontractor_name,scope_title,is_template&is_template=eq.true&order=subcontractor_name.asc'),
@@ -243,8 +250,9 @@ function renderScopeList() {
       const lp = s.latestPc;
       const badgeClass = lp ? lp.status : 'none';
       const badgeText = lp ? `PC#${lp.pc_number} · ${lp.period_label}` : 'No PCs yet';
+      const descTag = s.is_descoped ? ` <span style="font-size:9px;font-weight:800;letter-spacing:.04em;color:#fff;background:var(--red);border-radius:3px;padding:1px 5px">DESCOPED</span>` : '';
       const label = isVar
-        ? `<span style="color:var(--accent);font-weight:700;font-family:monospace">${escH(s.vo_ref||'VO')}</span> ${escH(s.scope_title||'')}`
+        ? `<span style="color:var(--accent);font-weight:700;font-family:monospace">${escH(s.vo_ref||'VO')}</span> ${escH(s.scope_title||'')}${descTag}`
         : escH(s.scope_title||'(untitled scope)');
       return `<div class="scope-card sub-scope${selectedScope?.id===s.id?' active':''}"${isVar?' style="margin-left:14px;border-left:2px solid var(--accent-soft,#243044)"':''} onclick="event.stopPropagation();selectScope(${s.id})">
         <div class="sc-sub" style="color:var(--tx);font-weight:600">${label}</div>
@@ -639,10 +647,47 @@ async function selectScope(id) {
   // Header sub-line: show the VO ref for variation scopes
   document.getElementById('sh-sub').textContent = (selectedScope.is_variation && selectedScope.vo_ref ? selectedScope.vo_ref + ' · ' : '') + (selectedScope.scope_title || '');
   document.getElementById('btn-config-scope').style.display = canAdmin ? '' : 'none';
-  document.getElementById('btn-new-pc').style.display = (canManage||canAdmin) ? '' : 'none';
+  // A VO is billed only as a tab on its base scope's PCs, so its own page is config-only:
+  // no "New PC", and a Descope / Re-scope toggle instead.
+  const isVO = !!(selectedScope.is_variation && selectedScope.parent_scope_id);
+  document.getElementById('btn-new-pc').style.display = (!isVO && (canManage||canAdmin)) ? '' : 'none';
+  const dbtn = document.getElementById('btn-descope-scope');
+  if (dbtn) {
+    dbtn.style.display = (isVO && (canManage||canAdmin)) ? '' : 'none';
+    dbtn.textContent = selectedScope.is_descoped ? '↩ Re-scope VO' : '⊘ Mark Descoped';
+    dbtn.className = 'btn btn-sm ' + (selectedScope.is_descoped ? 'btn-ghost' : 'btn-danger');
+  }
+  const badge = document.getElementById('sh-badge');
+  if (badge) badge.style.display = selectedScope.is_descoped ? '' : 'none';
   document.getElementById('pc-area').style.display = 'none';
   await loadScopeConfig();
   await loadPCs();
+}
+
+// Descope a VO (remove from contract) or bring it back. Descoping keeps its history on any PC
+// it was already billed on but drops it from every new PC; re-scoping reverses that.
+async function toggleDescope() {
+  if (!selectedScope || !selectedScope.is_variation) return;
+  if (!(canManage || canAdmin)) return;
+  const isD = !!selectedScope.is_descoped;
+  const vo = selectedScope.vo_ref || 'this VO';
+  if (isD) {
+    if (!confirm(`Re-scope ${vo}?\n\nIt will be included again on every NEW payment certificate for this contract.`)) return;
+  } else {
+    if (!confirm(`Mark ${vo} as DESCOPED?\n\nIt stays on the PCs it was already billed on, but will no longer appear on any new PC. You can re-scope it later.`)) return;
+  }
+  const body = isD
+    ? { is_descoped: false, descoped_at: null, descoped_by: null }
+    : { is_descoped: true, descoped_at: new Date().toISOString(), descoped_by: currentUser?.full_name || null };
+  const res = await fpatch(`qs_scopes?id=eq.${selectedScope.id}`, body);
+  if (Array.isArray(res) && res.length) {
+    Object.assign(selectedScope, body);
+    audit('qs_scopes', isD ? 'RESCOPE_VO' : 'DESCOPE_VO', selectedScope.id, body, null);
+    await loadScopes();
+    selectScope(selectedScope.id);
+  } else {
+    alert('Update failed — you may not have permission.');
+  }
 }
 
 async function loadScopeConfig() {
@@ -824,6 +869,21 @@ function extractBedrooms(typeStr) {
 // PAYMENT CERTIFICATES
 // ══════════════════════════════════════════════
 async function loadPCs() {
+  // VO scopes have no certificates of their own — they bill as a tab on the base scope's PCs.
+  // Show a pointer to the base instead of an empty PC bar, and keep this page config-only.
+  if (selectedScope.is_variation && selectedScope.parent_scope_id) {
+    const base = allScopes.find(s => s.id === selectedScope.parent_scope_id);
+    const baseName = base ? escH(base.sca_ref || base.scope_title || base.subcontractor_name || ('Scope ' + base.id)) : '—';
+    document.getElementById('pc-bar').innerHTML =
+      `<span class="pc-none">${escH(selectedScope.vo_ref || 'This variation')} bills as a tab on ${baseName}'s payment certificates` +
+      `${selectedScope.is_descoped ? ' · <strong style="color:var(--red)">DESCOPED</strong> (off new PCs)' : ''}. ` +
+      `Use this page to configure its activities &amp; rates.</span>` +
+      (base ? ` <button class="pc-new-btn" onclick="selectScope(${base.id})">Open ${baseName} →</button>` : '');
+    document.getElementById('pc-area').style.display = 'none';
+    allScopePCs = [];
+    scopeVariations = [];
+    return;
+  }
   const pcs = await fa(`qs_payment_certificates?scope_id=eq.${selectedScope.id}&order=pc_number.asc`);
   allScopePCs = pcs; // cache for running totals in financial section
   // Also load variations so payment summary has them ready
@@ -3043,6 +3103,20 @@ async function confirmDeletePC() {
 // ══════════════════════════════════════════════
 // NEW PC
 // ══════════════════════════════════════════════
+// The scope family that always bills together on one certificate: the base scope plus every
+// VO of it that is still on contract (not descoped). `scope` may be the base or any of its VOs.
+// A descoped VO drops out here, so it stays on the PCs it was already billed on but never
+// appears on a new one.
+function voFamilyIds(scope) {
+  const baseId = (scope.is_variation && scope.parent_scope_id) ? scope.parent_scope_id : scope.id;
+  return allScopes.filter(s =>
+    s.is_active !== false && !s.is_descoped &&
+    (s.id === baseId || (s.is_variation && s.parent_scope_id === baseId)) &&
+    ((scope.subcontractor_id && s.subcontractor_id === scope.subcontractor_id) ||
+     (!scope.subcontractor_id && s.subcontractor_name === scope.subcontractor_name))
+  ).map(s => s.id);
+}
+
 function openNewPC() {
   // A VO is billed as a section ON its base scope's certificate — it has no certificates of
   // its own. Starting one from the VO page created a second, parallel PC for the same period
@@ -3064,41 +3138,13 @@ function openNewPC() {
   document.getElementById('npc-msg').className = 'form-msg';
   document.getElementById('npc-historical').checked = false;
   document.getElementById('npc-submit-btn').textContent = 'Create PC';
-  // Scope multi-select (sibling scopes of the same subcontractor). VO scopes of the current
-  // base scope are auto-included (pre-checked) so its variations appear on every PC.
-  const sib = allScopes.filter(s => s.is_active !== false && (
-    (selectedScope.subcontractor_id && s.subcontractor_id === selectedScope.subcontractor_id) ||
-    (!selectedScope.subcontractor_id && s.subcontractor_name === selectedScope.subcontractor_name)
-  ));
-  // Auto-include the whole family: the base scope plus ALL its VO children — whether the PC
-  // is being created from the base or from one of its VOs — so variations always ride on the
-  // same PC instead of ending up on separate certificates.
-  const baseId = (selectedScope.is_variation && selectedScope.parent_scope_id) ? selectedScope.parent_scope_id : selectedScope.id;
-  const famIds = sib.filter(s => s.id === baseId || (s.is_variation && s.parent_scope_id === baseId)).map(s => s.id);
-  newPcScopeIds = [...new Set([selectedScope.id, ...famIds])];
+  // Every on-contract VO of this base is included automatically and cannot be removed per-PC —
+  // the only way a VO leaves the PC is to Descope it. The old opt-in checklist is gone (the
+  // user found it confusing and it let a VO be forgotten); the row stays hidden.
+  newPcScopeIds = [...new Set([selectedScope.id, ...voFamilyIds(selectedScope)])];
   const row = document.getElementById('npc-scopes-row');
-  const list = document.getElementById('npc-scopes-list');
-  if (sib.length > 1) {
-    row.style.display = '';
-    list.innerHTML = sib.map(s => {
-      const isPrimary = s.id === selectedScope.id;
-      const checked = newPcScopeIds.includes(s.id);
-      const tag = s.is_variation ? `<span style="color:var(--accent);font-weight:700;font-family:monospace">${escH(s.vo_ref||'VO')}</span> ` : '';
-      return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:${isPrimary?'default':'pointer'}">
-        <input type="checkbox" value="${s.id}" ${isPrimary?'checked disabled':(checked?'checked':'')} onchange="toggleNpcScope(${s.id},this.checked)" style="width:14px;height:14px">
-        <span>${tag}<strong>${escH(s.sca_ref||s.scope_title||('Scope '+s.id))}</strong>${(s.scope_title&&s.sca_ref)?' · '+escH(s.scope_title):''}${isPrimary?' <span style="color:var(--tx3)">(current)</span>':''}</span>
-      </label>`;
-    }).join('');
-  } else {
-    row.style.display = 'none';
-    list.innerHTML = '';
-  }
+  if (row) row.style.display = 'none';
   document.getElementById('modal-new-pc').style.display = 'flex';
-}
-function toggleNpcScope(id, on) {
-  id = +id;
-  if (on) { if (!newPcScopeIds.includes(id)) newPcScopeIds.push(id); }
-  else { newPcScopeIds = newPcScopeIds.filter(x => x !== id); }
 }
 
 async function submitNewPC() {
@@ -3140,10 +3186,8 @@ async function submitNewPC() {
 function toggleHistMode(on) {
   const btn = document.getElementById('npc-submit-btn');
   btn.textContent = on ? 'Next: Import Excel →' : 'Create PC';
-  // Historical PCs carry their scope family (base + VOs) too — otherwise a rebuilt PC
-  // leaves its VOs unattached and they show up as separate certificates.
-  const row = document.getElementById('npc-scopes-row');
-  if (row) row.style.display = document.getElementById('npc-scopes-list').children.length ? '' : 'none';
+  // The scope family (base + on-contract VOs) rides on the PC automatically for both live and
+  // historical PCs — nothing to toggle here anymore.
 }
 
 function handleNewPC() {
@@ -3211,12 +3255,105 @@ async function openHistPCSetup() {
   document.getElementById('hist-pc-info-bar').textContent =
     `PC #${histPCMeta.num} · ${histPCMeta.label} · ${selectedScope.subcontractor_name}` +
     (histScopes.length > 1 ? ` · ${histScopes.length} scopes (incl. VOs)` : '');
+  // Fresh import state — one slot per scope, base tab active first.
+  histScopeSheets = {}; histScopeParsed = {}; histLastUpload = null;
+  histActiveScope = selectedScope.id;
   const im = document.getElementById('hist-pc-import-msg'); if (im) im.style.display = 'none';
   const ss = document.getElementById('hist-sheet-sel'); if (ss) { ss.style.display='none'; ss.innerHTML=''; }
   const cb = document.querySelector('#modal-hist-pc .btn-amber'); if (cb) { cb.disabled = false; cb.textContent = 'Create Locked PC'; }
-  histWB = null;
+  renderHistImportTabs();
   renderHistGrid();
   document.getElementById('modal-hist-pc').style.display = 'flex';
+}
+
+// One tab per scope on the PC (base + each VO). Each remembers which sheet it reads from and
+// shows a ✓ with its ticked-cell count once imported. Hidden entirely for a single scope, so
+// the ordinary import looks exactly as it did before.
+function renderHistImportTabs() {
+  const bar = document.getElementById('hist-import-tabs');
+  // Show which scope the "Choose Excel" button will load into (multi-scope only).
+  const lblEl = document.getElementById('hist-upload-scope');
+  if (lblEl) {
+    const ah = histScopes.find(h => h.scope.id === histActiveScope);
+    lblEl.textContent = (histScopes.length > 1 && ah)
+      ? '→ ' + (ah.scope.is_variation ? (ah.scope.vo_ref || 'VO') : 'Base scope') : '';
+  }
+  if (!bar) return;
+  if (histScopes.length <= 1) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = histScopes.map(h => {
+    const sid = h.scope.id;
+    const p = histScopeParsed[sid];
+    const active = sid === histActiveScope;
+    const label = h.scope.is_variation ? (h.scope.vo_ref || 'VO') : 'Base';
+    const sub = escH(h.scope.sca_ref || h.scope.scope_title || h.scope.subcontractor_name || ('Scope ' + sid));
+    const nCells = p ? Object.keys(p.selections).filter(k => histPct(k) > 0).length : 0;
+    const sheet = histScopeSheets[sid] && histScopeSheets[sid].sheet;
+    const badge = p
+      ? `<span style="background:var(--green);color:#012; font-weight:700; border-radius:10px; padding:1px 7px; font-size:10px">✓ ${nCells}</span>`
+      : `<span style="color:var(--tx3); font-size:10px">not imported</span>`;
+    return `<button onclick="setHistImportScope(${sid})" title="${sub}${sheet?' · sheet: '+escH(sheet):''}"
+      style="display:flex; align-items:center; gap:7px; padding:7px 12px; border-radius:8px; cursor:pointer;
+      border:1px solid ${active?'var(--accent)':'var(--bdr)'}; background:${active?'var(--bg2)':'var(--bg3)'};
+      color:var(--tx); font-size:12px; white-space:nowrap">
+      <span style="font-weight:700">${escH(label)}</span>
+      ${h.scope.is_variation?`<span style="color:var(--accent); font-size:10px; font-weight:700">VO</span>`:''}
+      ${badge}${sheet?`<span style="color:var(--tx3); font-size:10px">▸ ${escH(sheet)}</span>`:''}
+    </button>`;
+  }).join('');
+}
+
+// Switch the import tab. A scope with no workbook yet inherits the last uploaded one, so the
+// common case (both sheets in one file) only needs a single upload — pick a sheet per tab.
+function setHistImportScope(sid) {
+  histActiveScope = sid;
+  if (!(histScopeSheets[sid] && histScopeSheets[sid].wb) && histLastUpload && histLastUpload.wb) {
+    histScopeSheets[sid] = { wb: histLastUpload.wb, fileName: histLastUpload.fileName, sheet: null };
+  }
+  renderHistImportTabs();
+  populateHistSheetSelect(sid);
+  const p = histScopeParsed[sid];
+  const m = document.getElementById('hist-pc-import-msg');
+  if (p && p.html) showHistImportMsg(p.kind || 'ok', p.html, true);
+  else if (m) m.style.display = 'none';
+}
+
+function populateHistSheetSelect(sid) {
+  const sel = document.getElementById('hist-sheet-sel');
+  if (!sel) return;
+  const slot = histScopeSheets[sid];
+  if (!slot || !slot.wb) { sel.style.display = 'none'; sel.innerHTML = ''; return; }
+  sel.innerHTML = slot.wb.SheetNames.map(n =>
+    `<option value="${escH(n)}"${n === slot.sheet ? ' selected' : ''}>${escH(n)}</option>`).join('');
+  sel.style.display = '';
+}
+
+function onHistSheetChange(sheetName) {
+  const sid = histActiveScope || selectedScope.id;
+  if (histScopeSheets[sid]) histScopeSheets[sid].sheet = sheetName;
+  parseHistSheet(sheetName, sid);
+}
+
+// Rebuild the grid's histPCSelections + scopeVillas from every scope that has been parsed.
+// A freshly-parsed scope replaces its own selections; manual ticks on scopes not (re)imported
+// this round are preserved.
+function mergeHistScopes() {
+  const parsedIds = new Set(Object.keys(histScopeParsed).map(Number));
+  const next = {};
+  Object.keys(histPCSelections).forEach(key => {
+    const code = key.slice(key.lastIndexOf(':') + 1);
+    if (!parsedIds.has(histCodeScope[code])) next[key] = histPCSelections[key];
+  });
+  parsedIds.forEach(sid => Object.assign(next, histScopeParsed[sid].selections));
+  histPCSelections = next;
+  const vmap = {};
+  parsedIds.forEach(sid => histScopeParsed[sid].villas.forEach(v => { vmap[v.villa_id] = v; }));
+  _histVillasPinned = true;
+  _histRestoreGen++;   // supersede any restore still in flight from an earlier close
+  scopeVillas = Object.values(vmap).sort((a,b)=>((a.cluster_id||0)-(b.cluster_id||0))||((a.villa_no||0)-(b.villa_no||0)));
+  updateClusterFilter();
+  renderHistGrid();
+  renderHistImportTabs();
 }
 
 function renderHistGrid() {
@@ -3379,7 +3516,9 @@ function updateHistCount() {
 // ── Historical PC: import the progress Excel and pre-tick the grid ──
 function histClearAll() {
   histPCSelections = {}; _histLastPct = {};
+  histScopeParsed = {};   // drop every scope's parse; keep uploaded workbooks so sheets stay pickable
   renderHistGrid();
+  renderHistImportTabs();
   const m = document.getElementById('hist-pc-import-msg');
   if (m) m.style.display = 'none';
 }
@@ -3406,39 +3545,48 @@ function showHistImportMsg(kind, html, isHtml) {
   m.innerHTML = isHtml ? html : ('<div style="font-weight:600">'+escH(html)+'</div>');
 }
 
-let histWB = null;  // workbook from the last historical import (for the sheet picker)
 function _normTxt(s){ return String(s==null?'':s).toLowerCase().replace(/[^a-z]/g,''); }  // "DRAINAGE-40%" → "drainage"
 
 async function handleHistExcel(file) {
   if (!file) return;
   if (typeof XLSX === 'undefined') { showHistImportMsg('err','Spreadsheet library failed to load — check your connection and retry.'); return; }
   if (!histActs.length) { showHistImportMsg('err','Configure this scope’s activities before importing.'); return; }
+  const sid = histActiveScope || selectedScope.id;
   try {
     showHistImportMsg('busy', 'Reading <strong>'+escH(file.name)+'</strong>…');
-    histWB = XLSX.read(await file.arrayBuffer(), { type:'array' });
-    histWB._fileName = file.name;
+    const wb = XLSX.read(await file.arrayBuffer(), { type:'array' });
+    wb._fileName = file.name;
+    histLastUpload = { wb, fileName: file.name };   // shared default for tabs not yet given a file
     // Pick a BOQ sheet (prefer one without a "(2)" copy suffix); let the user switch via the picker
     const lc = n => String(n).trim().toLowerCase();
-    const boq = histWB.SheetNames.filter(n => lc(n).includes('boq'));
+    const boq = wb.SheetNames.filter(n => lc(n).includes('boq'));
     const def = boq.find(n => lc(n)==='boq')
              || boq.filter(n => !n.includes('(')).sort((a,b)=>a.length-b.length)[0]
-             || boq[0] || histWB.SheetNames[0];
-    const sel = document.getElementById('hist-sheet-sel');
-    if (sel) {
-      sel.innerHTML = histWB.SheetNames.map(n => `<option value="${escH(n)}"${n===def?' selected':''}>${escH(n)}</option>`).join('');
-      sel.style.display = '';
-    }
-    await parseHistSheet(def);
+             || boq[0] || wb.SheetNames[0];
+    histScopeSheets[sid] = { wb, fileName: file.name, sheet: def };
+    populateHistSheetSelect(sid);
+    await parseHistSheet(def, sid);
   } catch(e) {
     showHistImportMsg('err', 'Failed to read the file: ' + e.message);
   }
 }
 
-// Parse one sheet: match activity columns by GROUP + NAME (the code comes from the scope config)
-async function parseHistSheet(sheetName) {
-  if (!histWB) return;
-  const sheet = histWB.Sheets[sheetName];
+// Parse one sheet for ONE scope: match that scope's activity columns by GROUP + NAME, then
+// merge the result into the shared grid. Other scopes keep whatever they imported.
+async function parseHistSheet(sheetName, scopeId) {
+  scopeId = scopeId || histActiveScope || selectedScope.id;
+  const slot = histScopeSheets[scopeId] || (histLastUpload ? { wb: histLastUpload.wb, fileName: histLastUpload.fileName, sheet: sheetName } : null);
+  const wb = slot && slot.wb;
+  if (!wb) return;
+  if (slot && !histScopeSheets[scopeId]) histScopeSheets[scopeId] = slot;
+  if (histScopeSheets[scopeId]) histScopeSheets[scopeId].sheet = sheetName;
+  const sheet = wb.Sheets[sheetName];
   if (!sheet) { showHistImportMsg('err','Sheet not found: '+escH(sheetName)); return; }
+  // Only THIS scope's activities are matched against its sheet — a VO's codes must not be
+  // hunted for in the base scope's BOQ (they aren't there) and vice-versa.
+  const sActs   = histActs.filter(a => a._scopeId === scopeId);
+  const sGroups = histGroups.filter(g => g._scopeId === scopeId);
+  const scopeObj = (histScopes.find(h => h.scope.id === scopeId) || {}).scope || selectedScope;
   try {
     showHistImportMsg('busy', 'Reading sheet <strong>'+escH(sheetName)+'</strong>…');
     let _maxC=0,_maxR=0;
@@ -3448,10 +3596,10 @@ async function parseHistSheet(sheetName) {
 
     // Group scope activities by BASE code → ordered parts. A normal activity is a base with one
     // part; a split activity (GF/FF) is a base whose parts sit in consecutive BOQ sub-columns.
-    const grpName = {}; histGroups.forEach(g => grpName[g.id] = g.group_name);
+    const grpName = {}; sGroups.forEach(g => grpName[g.id] = g.group_name);
     const baseParts = new Map();  // base → [{code, sort}]
     const baseMeta  = new Map();  // base → {name, group}
-    histActs.forEach(a => {
+    sActs.forEach(a => {
       const base = String(a.base_code || a.activity_code).trim();
       if (!baseParts.has(base)) { baseParts.set(base, []); baseMeta.set(base, { name:a.activity_name, group:grpName[a.group_id] }); }
       baseParts.get(base).push({ code:String(a.activity_code).trim(), sort:(a.sort_order||0) });
@@ -3466,7 +3614,7 @@ async function parseHistSheet(sheetName) {
       if (!byName.has(nk)) byName.set(nk, []);
       byName.get(nk).push(base);
     });
-    const groupNorms = new Set(histGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
+    const groupNorms = new Set(sGroups.map(g => _normTxt(g.group_name)).filter(Boolean));
 
     // Find the name row (has "Villa No"), the group row, + Villa/Cluster cols
     let nameRow=-1, groupRow=-1, villaCol=-1, clusterCol=-1;
@@ -3535,7 +3683,7 @@ async function parseHistSheet(sheetName) {
     if (nameRow >= 0) {
       const nrow = rows[nameRow] || [];
       const squash = s => _normTxt(s).replace(/[^a-z0-9]/g, '');
-      histActs.forEach(a => {
+      sActs.forEach(a => {
         const code = String(a.activity_code).trim();
         const want = squash(a.activity_name);
         if (!code || want.length < 4 || codeCols.has(code)) return;
@@ -3592,8 +3740,8 @@ async function parseHistSheet(sheetName) {
     if (!codeCols.size || villaCol < 0) {
       let diag = `<div style="font-weight:700;color:var(--red)">Couldn’t read sheet “${escH(sheetName)}”.</div>`;
       diag += `<div style="color:var(--tx2);margin-top:4px">${villaCol<0?'<span style="color:var(--amber)">no “Villa No” column</span> · ':''}${!codeCols.size?'<span style="color:var(--amber)">no activity columns matched by name</span>':''}</div>`;
-      diag += `<div style="color:var(--tx3)">Scope groups: ${histGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
-      diag += `<div style="color:var(--tx3)">Scope activities: ${histActs.map(a=>escH(a.activity_name)).join(', ')}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope groups: ${sGroups.map(g=>escH(g.group_name)).join(', ')||'(none)'}</div>`;
+      diag += `<div style="color:var(--tx3)">Scope activities: ${sActs.map(a=>escH(a.activity_name)).join(', ')}</div>`;
       diag += `<div style="margin-top:6px;color:var(--tx2)">Top rows seen:</div>`;
       for (let r=0;r<Math.min(rows.length,12);r++){ const vals=(rows[r]||[]).map(v=>String(v==null?'':v).trim()).filter(Boolean); if(vals.length) diag+=`<div style="font-family:monospace;font-size:10px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">r${r+1}: ${escH(vals.slice(0,22).join(' | '))}</div>`; }
       diag += `<div style="margin-top:6px;color:var(--tx3)">Try a different sheet above, or send me this panel.</div>`;
@@ -3636,67 +3784,53 @@ async function parseHistSheet(sheetName) {
     const vKey={}, vNo={};
     projVillas.forEach(v => { vKey[(v.cluster_id ?? '')+':'+v.villa_no]=v; (vNo[v.villa_no]=vNo[v.villa_no]||[]).push(v); });
 
-    histPCSelections = {};
+    // Build THIS scope's selections/villas into local stores, not the shared globals — the
+    // merge below combines every parsed scope so importing the VO sheet doesn't wipe the base.
+    const selections = {};
     const importedVillas=[]; const seen=new Set(); const unmatched=[]; let cellsTicked=0; let partialCells=0;
     billRows.forEach(br => {
       let v = (br.clusterNo!=null) ? vKey[br.clusterNo+':'+br.villaNo] : undefined;
       if (!v) { const cand=vNo[br.villaNo]; if(cand&&cand.length===1) v=cand[0]; }
       if (!v) { unmatched.push('VI-'+br.villaNo+(br.clusterNo!=null?' (C'+br.clusterNo+')':'')); return; }
       if (!seen.has(v.id)){ seen.add(v.id); importedVillas.push({villa_id:v.id,villa_no:v.villa_no,cluster_id:v.cluster_id,villa_type_label:matchVillaType(v.villa_type),raw_villa_type:v.villa_type}); }
-      br.codes.forEach(c => { histPCSelections[v.id+':'+c.code]=c.pct; cellsTicked++; if (c.pct < 0.999) partialCells++; });
+      br.codes.forEach(c => { selections[v.id+':'+c.code]=c.pct; cellsTicked++; if (c.pct < 0.999) partialCells++; });
     });
 
-    // The Excel defines this PC's villas — show ONLY those that have at least one billed activity.
-    // This pins the GLOBAL scopeVillas for the preview grid, so it MUST be restored via
-    // autoDetectScopeVillas() when the modal closes or the PC is created — otherwise every
-    // later PC in this session only offers the sheet's villas (new WIR villas invisible).
-    _histVillasPinned = true;
-    _histRestoreGen++;   // supersede any restore still in flight from an earlier close
-    scopeVillas = importedVillas.slice().sort((a,b)=>((a.cluster_id||0)-(b.cluster_id||0))||((a.villa_no||0)-(b.villa_no||0)));
-    updateClusterFilter();
-    renderHistGrid();
-
-    const codeName = {}; histActs.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
+    const codeName = {}; sActs.forEach(a=>codeName[String(a.activity_code).trim()]=a.activity_name);
     const lbl = c => escH((codeName[c]||'')+' ['+c+']');
-    const missing = [...new Set(histActs.map(a=>String(a.activity_code).trim()).filter(c=>!codeCols.has(c)))];
+    const missing = [...new Set(sActs.map(a=>String(a.activity_code).trim()).filter(c=>!codeCols.has(c)))];
     // Two scope activities sharing one WIR code bill as a single cell — worth flagging,
     // it is usually why a column "disappears" into another.
-    const dupCodes = [...new Set(histActs.map(a=>String(a.activity_code).trim())
+    const dupCodes = [...new Set(sActs.map(a=>String(a.activity_code).trim())
       .filter(c=>c).filter((c,i,arr)=>arr.indexOf(c)!==i))];
-    // A code claimed by two DIFFERENT scopes in the family is worse than a within-scope
-    // duplicate: only one scope can be billed for it, so say which one won.
-    const crossDup = [];
-    if (histScopes.length > 1) {
-      const seenIn = {};
-      histActs.forEach(a => {
-        const c = String(a.activity_code).trim(); if (!c) return;
-        (seenIn[c] = seenIn[c] || new Set()).add(a._scopeId);
-      });
-      Object.keys(seenIn).forEach(c => { if (seenIn[c].size > 1) crossDup.push(c); });
-    }
-    // Per-scope tally of what actually got ticked, so a VO importing nothing is obvious.
-    const perScope = histScopes.map(h => {
-      const codes = new Set(h.activities.map(a => String(a.activity_code).trim())
-                                        .filter(c => histCodeScope[c] === h.scope.id));
-      const n = Object.keys(histPCSelections)
-        .filter(k => histPct(k) > 0 && codes.has(k.slice(k.lastIndexOf(':') + 1))).length;
-      return { h, n };
-    });
-    let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(histWB._fileName||'')} — sheet <strong>${escH(sheetName)}</strong></div>
+
+    // Build the per-scope summary, store the parse, then rebuild the merged grid.
+    const scopeLabel = scopeObj.is_variation ? (scopeObj.vo_ref || 'VO') : 'Base scope';
+    let html = `<div style="font-weight:700;color:var(--green)">✓ Imported ${escH(slot.fileName||'')} — sheet <strong>${escH(sheetName)}</strong> → <strong>${escH(scopeLabel)}</strong></div>
       <div>Billed villas: <strong>${importedVillas.length}</strong> &middot; Activities billed: <strong>${cellsTicked}</strong>${partialCells ? ` &middot; <span style="color:var(--amber)">of which partial (&lt;100%): <strong>${partialCells}</strong></span>` : ''}</div>
-      <div style="color:var(--tx3)">Matched activities: ${[...codeCols.keys()].map(lbl).join(', ')}</div>`;
-    if (histScopes.length > 1) {
-      html += `<div style="color:var(--tx3)">Per scope: ${perScope.map(p =>
-        `${escH(p.h.scope.is_variation ? (p.h.scope.vo_ref||'VO') : (p.h.scope.sca_ref||'Base'))} <strong style="color:${p.n?'var(--green)':'var(--amber)'}">${p.n}</strong>`
-      ).join(' &middot; ')}</div>`;
-      const empty = perScope.filter(p => !p.n && p.h.scope.is_variation);
-      if (empty.length) html += `<div style="color:var(--amber)">⚠ Nothing matched for ${empty.map(p=>escH(p.h.scope.vo_ref||'VO')).join(', ')} — its columns aren’t in this sheet. Tick them by hand below, or untick the VO in the New PC dialog.</div>`;
-    }
-    if (crossDup.length) html += `<div style="color:var(--amber)">⚠ Code${crossDup.length>1?'s':''} ${crossDup.map(escH).join(', ')} exist${crossDup.length>1?'':'s'} in more than one scope of this family — billed against the base scope only, to avoid paying it twice.</div>`;
-    if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column: ${missing.map(lbl).join(', ')}</div>`;
+      <div style="color:var(--tx3)">Matched activities: ${[...codeCols.keys()].map(lbl).join(', ')||'(none)'}</div>`;
+    if (missing.length) html += `<div style="color:var(--amber)">⚠ Not matched to a column in this sheet: ${missing.map(lbl).join(', ')}</div>`;
     if (dupCodes.length) html += `<div style="color:var(--tx3)">ℹ Code${dupCodes.length>1?'s':''} ${dupCodes.map(escH).join(', ')} ${dupCodes.length>1?'are':'is'} used by more than one activity in this scope — those columns bill as one cell (highest % wins).</div>`;
     if (unmatched.length) html += `<div style="color:var(--amber)">⚠ ${unmatched.length} villa(s) not found in the project (skipped): ${unmatched.slice(0,20).map(escH).join(', ')}${unmatched.length>20?' …':''}</div>`;
+
+    histScopeParsed[scopeId] = { selections, villas: importedVillas, html, kind: 'ok', cells: cellsTicked };
+    mergeHistScopes();
+
+    // Family roll-up: which scopes still have no sheet, so a forgotten VO can't slip through.
+    if (histScopes.length > 1) {
+      const roll = histScopes.map(h => {
+        const pp = histScopeParsed[h.scope.id];
+        const n = pp ? Object.keys(pp.selections).filter(k => histPct(k) > 0).length : 0;
+        return { h, n, imported: !!pp };
+      });
+      html += `<div style="color:var(--tx3);margin-top:4px">All scopes: ${roll.map(r =>
+        `${escH(r.h.scope.is_variation ? (r.h.scope.vo_ref||'VO') : 'Base')} <strong style="color:${r.imported?(r.n?'var(--green)':'var(--amber)'):'var(--tx3)'}">${r.imported?r.n:'—'}</strong>`
+      ).join(' &middot; ')}</div>`;
+      const notYet = roll.filter(r => !r.imported);
+      if (notYet.length) html += `<div style="color:var(--amber)">⚠ Still to import: ${notYet.map(r=>escH(r.h.scope.is_variation?(r.h.scope.vo_ref||'VO'):'Base')).join(', ')} — switch tab above and pick its sheet.</div>`;
+    }
     html += `<div style="color:var(--tx3);margin-top:4px">Review the grid, then click <strong>Create Locked PC</strong>. Wrong sheet? Pick another above.</div>`;
+    histScopeParsed[scopeId].html = html;   // keep the full message for when this tab is reselected
     showHistImportMsg('ok', html, true);
   } catch(e) {
     showHistImportMsg('err', 'Failed to read the sheet: ' + e.message);

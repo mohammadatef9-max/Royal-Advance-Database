@@ -502,7 +502,7 @@ textarea{resize:vertical;min-height:60px}
     <!-- Scope header -->
     <div class="scope-hdr">
       <div class="sh-info">
-        <div class="sh-title" id="sh-title">—</div>
+        <div class="sh-title" id="sh-title">—<span id="sh-badge" style="display:none;margin-left:8px;font-size:10px;font-weight:800;letter-spacing:.05em;color:#fff;background:var(--red);border-radius:4px;padding:2px 7px;vertical-align:middle">DESCOPED</span></div>
         <div class="sh-sub" id="sh-sub">—</div>
         <div class="sh-meta" id="sh-meta">—</div>
       </div>
@@ -512,6 +512,7 @@ textarea{resize:vertical;min-height:60px}
         <button class="btn btn-ghost btn-sm" id="btn-add-scope" onclick="openNewScope(selectedScope.subcontractor_name)" style="display:none">＋ Add Scope</button>
         <button class="btn btn-ghost btn-sm" id="btn-add-vo" onclick="openNewScope(selectedScope.subcontractor_name, selectedScope.is_variation ? (allScopes.find(s=>s.id===selectedScope.parent_scope_id)||selectedScope) : selectedScope)" style="display:none">＋ Add VO</button>
         <button class="btn btn-ghost btn-sm" id="btn-config-scope" onclick="openConfigScope()" style="display:none">⚙ Configure</button>
+        <button class="btn btn-danger btn-sm" id="btn-descope-scope" onclick="toggleDescope()" style="display:none">⊘ Mark Descoped</button>
         <button class="btn btn-primary btn-sm" id="btn-new-pc" onclick="openNewPC()" style="display:none">+ New PC</button>
       </div>
     </div>
@@ -776,16 +777,19 @@ textarea{resize:vertical;min-height:60px}
     <div class="modal-title">Historical PC — Select Billed Activities <button class="modal-close" onclick="closeModal('modal-hist-pc')">✕</button></div>
     <div style="padding:10px 20px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:12px;color:var(--tx2)" id="hist-pc-info-bar">—</div>
     <div style="flex:1;overflow:auto;padding:16px 20px">
+      <!-- One tab per scope on the PC (base + each VO). Shown only when the PC has a VO; each
+           tab imports from its own sheet. -->
+      <div id="hist-import-tabs" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;padding:12px 14px;margin-bottom:12px">
         <div style="flex:1;min-width:220px">
-          <div style="font-weight:700;font-size:13px;color:var(--tx)">📤 Upload the PC's progress Excel</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Reads the <strong>BOQ</strong> sheet, matches each row by <strong>Villa No + Cluster</strong>, then ticks every activity (by code) marked <strong>100%</strong> (WIR approved). Review the grid below, then create the locked PC.</div>
+          <div style="font-weight:700;font-size:13px;color:var(--tx)">📤 Upload the progress Excel <span id="hist-upload-scope" style="color:var(--accent);font-weight:700"></span></div>
+          <div style="font-size:11px;color:var(--tx3);margin-top:2px">Reads the <strong>BOQ</strong> sheet, matches each row by <strong>Villa No + Cluster</strong>, then ticks every activity (by code) marked <strong>100%</strong> (WIR approved). A VO's progress is usually on its own sheet — switch tabs above and pick the right sheet for each.</div>
         </div>
         <label class="btn btn-primary btn-sm" style="cursor:pointer">
           Choose Excel…
           <input type="file" accept=".xlsx,.xls,.csv" style="display:none" onclick="this.value=null" onchange="handleHistExcel(this.files[0])">
         </label>
-        <select id="hist-sheet-sel" onchange="parseHistSheet(this.value)" title="Which sheet to read" style="display:none;padding:6px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;color:var(--tx);font-size:12px;max-width:200px"></select>
+        <select id="hist-sheet-sel" onchange="onHistSheetChange(this.value)" title="Which sheet to read for the active scope" style="display:none;padding:6px 10px;background:var(--bg2);border:1px solid var(--bdr);border-radius:6px;color:var(--tx);font-size:12px;max-width:200px"></select>
         <button class="btn btn-ghost btn-sm" onclick="histClearAll()">Clear all ticks</button>
       </div>
       <div id="hist-pc-import-msg" style="display:none;font-size:12px;border-radius:8px;padding:10px 12px;margin-bottom:12px;line-height:1.6"></div>
@@ -1006,7 +1010,7 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 
-<script src="qs.js?v=26"></script>
+<script src="qs.js?v=27"></script>
 
 </body>
 </html>
