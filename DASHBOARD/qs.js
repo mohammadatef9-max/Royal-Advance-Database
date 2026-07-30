@@ -2172,18 +2172,25 @@ function renderPaymentSummarySingle() {
 // ── Combined certificate for a PC that spans multiple scopes ──
 function renderPaymentSummaryMulti() {
   const sections = pcSections.map(s => ctxSection(s.ctx));
-  // qty_contracted is the TOTAL across all cluster scopes for the same sub — deduplicate
-  // by villa type label so 50×rate is counted once, not once-per-scope.
-  const mergedTypes = {};
-  sections.forEach(sec => {
-    sec.entries.forEach(t => { if (!mergedTypes[t.type.villa_type_label]) mergedTypes[t.type.villa_type_label] = t; });
-  });
-  const totSubcon = Object.values(mergedTypes).reduce((a,t)=>a+t.qty*t.rate, 0);
+  // Each scope on the PC — the base and every VO — is a DISTINCT subcontract, so their
+  // contracted quantities add up (a VO is extra work, not a re-count of the base's villas).
+  // Sum qty_contracted × rate across every scope; never dedupe by villa-type label, which
+  // used to silently drop a VO's lines whenever they shared a label with the base.
+  const scopeContract = s => s.entries.reduce((x,t)=>x + t.qty*t.rate, 0);
+  const totSubcon = sections.reduce((a,s)=>a + scopeContract(s), 0);
   const combPrev  = sections.reduce((a,s)=>a+s.subPrev,0);
   const combCur   = sections.reduce((a,s)=>a+s.subCur,0);
   const combTod   = sections.reduce((a,s)=>a+s.subTod,0);
   const combVOs   = sections.reduce((a,s)=>a+s.approvedVOs,0);
   lastGrossAed = combTod;
+
+  // Contract Position split: the base scope(s) are the Original Contract Value; every VO scope
+  // (plus any qs_variation_orders records) is an Approved Variation on top. This is what keeps
+  // the headline "Original Contract Value" from swallowing the VO or dropping it.
+  const origContract     = sections.filter(s=>!s.scope.is_variation).reduce((a,s)=>a+scopeContract(s),0);
+  const voContractScopes = sections.filter(s=> s.scope.is_variation).reduce((a,s)=>a+scopeContract(s),0);
+  const totalVariations  = voContractScopes + combVOs;
+  const adjustedContract = origContract + totalVariations;
 
   // Advance recovery: each scope's own % applied to its section, then summed
   let advTod = 0, advPrev = 0, anyAdv = false;
@@ -2228,19 +2235,21 @@ function renderPaymentSummaryMulti() {
     const label = (sc.is_variation && sc.vo_ref ? escH(sc.vo_ref)+': ' : (sc.sca_ref ? escH(sc.sca_ref)+': ' : '')) + escH(sc.scope_title || sc.subcontractor_name || ('Scope '+(si+1)));
     bodyRows += `<tr class="section-row"><td class="center">${si+1}</td><td colspan="14">${label}</td></tr>`;
     sec.entries.forEach(t => {
-      // Per cluster/scope: show detected villas in this scope (not total qty_contracted)
-      const dq = t.detectedQty;
+      // Show the FULL contracted quantity for this scope (like the single-scope summary),
+      // not just villas that happen to have billing yet — otherwise the contract columns
+      // read as "per PC" and shrink below the real subcontract.
+      const cq = t.qty;
       bodyRows += `<tr>
         <td class="center"></td><td>${escH(t.type.villa_type_label)}</td><td class="center">${escH(t.type.unit||'Villa')}</td>
-        <td class="center">${dq}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(dq*t.rate)}</td>
+        <td class="center">${cq}</td><td class="right">${fmtAED(t.rate)}</td><td class="right bold">${fmtAED(cq*t.rate)}</td>
         <td class="center">${fmtQty(t.prev)}</td><td class="center">${fmtQty(t.current)}</td><td class="center bold">${fmtQty(t.toDate)}</td>
-        <td class="center">${fmtPct(t.prev/Math.max(dq,1))}</td><td class="right">${fmtAED(t.prevAed)}</td>
-        <td class="center">${fmtPct(t.current/Math.max(dq,1))}</td><td class="right">${fmtAED(t.curAed)}</td>
-        <td class="center bold">${fmtPct(t.toDate/Math.max(dq,1))}</td><td class="right bold">${fmtAED(t.todAed)}</td>
+        <td class="center">${fmtPct(t.prev/Math.max(cq,1))}</td><td class="right">${fmtAED(t.prevAed)}</td>
+        <td class="center">${fmtPct(t.current/Math.max(cq,1))}</td><td class="right">${fmtAED(t.curAed)}</td>
+        <td class="center bold">${fmtPct(t.toDate/Math.max(cq,1))}</td><td class="right bold">${fmtAED(t.todAed)}</td>
       </tr>`;
     });
-    const sQty = sec.entries.reduce((a,t)=>a+t.detectedQty,0);
-    const sContract = sec.entries.reduce((a,t)=>a+t.detectedQty*t.rate,0);
+    const sQty = sec.entries.reduce((a,t)=>a+t.qty,0);
+    const sContract = scopeContract(sec);
     bodyRows += `<tr class="total-row">
       <td colspan="2" class="bold">SUB TOTAL</td><td></td><td class="center bold">${sQty}</td><td></td>
       <td class="right bold">${fmtAED(sContract)}</td><td></td><td></td><td></td>
@@ -2249,8 +2258,8 @@ function renderPaymentSummaryMulti() {
       <td class="center bold">${fmtPct(sec.subTod/Math.max(sContract,1))}</td><td class="right bold">${fmtAED(sec.subTod)}</td>
     </tr>`;
   });
-  // GROSS TOTAL uses total qty_contracted (deduped across sibling scopes)
-  const grossTotQty = Object.values(mergedTypes).reduce((a,t)=>a+t.qty, 0);
+  // GROSS TOTAL sums every scope's contracted qty (base + each VO) — additive, not deduped.
+  const grossTotQty = sections.reduce((a,s)=>a + s.entries.reduce((x,t)=>x+t.qty,0), 0);
   bodyRows += `<tr class="total-row" style="border-top:3px double var(--bdr2)">
     <td colspan="2" class="bold gold">GROSS TOTAL</td><td></td><td class="center bold">${grossTotQty}</td><td></td>
     <td class="right bold">${fmtAED(totSubcon)}</td><td></td><td></td><td></td>
@@ -2324,15 +2333,18 @@ function renderPaymentSummaryMulti() {
       </div>
     </div>
 
-    ${(totSubcon>0||combVOs>0) ? `
+    ${(origContract>0||totalVariations>0) ? `
     <div class="psum-section-title">Contract Position (Combined)</div>
     <div class="pos-block">
-      <div class="pos-row"><span class="pos-label">Original Contract Value (all scopes)</span><span class="pos-val">${fmtAED(totSubcon)}</span></div>
-      ${combVOs>0?`<div class="pos-row"><span class="pos-label" style="font-weight:700">Approved Variations</span><span class="pos-val accent">+ ${fmtAED(combVOs)}</span></div>
-      <div class="pos-row"><span class="pos-label" style="font-weight:700;color:var(--tx)">Adjusted Contract Value</span><span class="pos-val" style="font-size:13px">${fmtAED(totSubcon+combVOs)}</span></div>`:''}
+      <div class="pos-row"><span class="pos-label">Original Contract Value${sections.some(s=>!s.scope.is_variation && sections.filter(x=>!x.scope.is_variation).length>1)?' (base scopes)':''}</span><span class="pos-val">${fmtAED(origContract)}</span></div>
+      ${totalVariations>0?`
+      ${sections.filter(s=>s.scope.is_variation).map(s=>`
+      <div class="pos-row" style="padding-left:14px"><span class="pos-label" style="color:var(--tx3);font-size:11px">${escH(s.scope.vo_ref||'VO')} · ${escH(s.scope.scope_title||'Variation')}</span><span class="pos-val accent" style="font-size:11px">+ ${fmtAED(scopeContract(s))}</span></div>`).join('')}
+      <div class="pos-row"><span class="pos-label" style="font-weight:700">Approved Variations</span><span class="pos-val accent">+ ${fmtAED(totalVariations)}</span></div>
+      <div class="pos-row"><span class="pos-label" style="font-weight:700;color:var(--tx)">Adjusted Contract Value</span><span class="pos-val" style="font-size:13px">${fmtAED(adjustedContract)}</span></div>`:''}
       <div class="pos-divider"></div>
-      <div class="pos-row"><span class="pos-label">Work Done to Date</span><span class="pos-val green">${fmtAED(combTod)}${(totSubcon+combVOs) > 0 ? `<span class="pos-pct">${((combTod/(totSubcon+combVOs))*100).toFixed(1)}%</span>` : ''}</span></div>
-      ${(totSubcon+combVOs) > 0 ? `<div class="pos-row"><span class="pos-label">Remaining Contract</span><span class="pos-val ${(totSubcon+combVOs-combTod) < 0 ? 'red' : ''}">${fmtAED(totSubcon+combVOs-combTod)}</span></div>` : ''}
+      <div class="pos-row"><span class="pos-label">Work Done to Date</span><span class="pos-val green">${fmtAED(combTod)}${adjustedContract > 0 ? `<span class="pos-pct">${((combTod/adjustedContract)*100).toFixed(1)}%</span>` : ''}</span></div>
+      ${adjustedContract > 0 ? `<div class="pos-row"><span class="pos-label">Remaining Contract</span><span class="pos-val ${(adjustedContract-combTod) < 0 ? 'red' : ''}">${fmtAED(adjustedContract-combTod)}</span></div>` : ''}
       <div class="pos-row"><span class="pos-label" style="color:var(--tx3)">Certified to Date <span style="font-size:11px">(after retention)</span></span><span class="pos-val">${fmtAED(certTod)}</span></div>
     </div>` : ''}
 
