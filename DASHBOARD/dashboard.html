@@ -202,6 +202,9 @@ body.in-shell .topbar{display:none!important}
 <script>
 // SB and KEY are provided by shared.js
 const CLS=['C1','C2','C3','C4','C5','C6','C7'];
+// Key WIR activity codes tracked per priority tier in the Priority Villas section.
+const PRI_ACTS=['3150','3190','3162','3200','3520'];
+const _esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 function getH(x){
   let t=window.__MEP_TOKEN__;
@@ -426,10 +429,46 @@ function renderPriority(data){
   };
   host.innerHTML=`
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">${card(1,'var(--rejected)')}${card(2,'var(--progress)')}</div>
+    <div id="pri-acts"></div>
     <div id="pri-breakdown"></div>`;
+  renderPriActs();
   renderPriBreakdown();
 }
 function setPriTier(t){ priTier=t; renderPriority(priData); }
+// Key activity codes (3150, 3190, …) for the selected tier — one card each: how many of the
+// tier's villas that have that WIR have it approved. WIR mode only (these are WIR codes).
+function renderPriActs(){
+  const host=document.getElementById('pri-acts'); if(!host) return;
+  if(mode!=='wir'){ host.innerHTML=''; return; }
+  const pmap=window._priorityMap||{};
+  const keyOf=r=>r.raw_cluster+'_'+r.raw_villa_no;
+  const inTier=r=>{ const p=pmap[keyOf(r)]; return !!(p && (priTier===1?p.p1:p.p2)); };
+  const rows=priData.filter(inTier);
+  const cards=PRI_ACTS.map(code=>{
+    const ar=rows.filter(r=>String(r.raw_activity_code).trim()===code);
+    const name=ar.length?(ar[0].raw_activity_name||code):code;
+    const t=ar.length, ap=ar.filter(r=>r.normalised_status==='approved').length;
+    const rj=ar.filter(r=>r.normalised_status==='rejected').length;
+    const ur=ar.filter(r=>r.normalised_status==='under_review').length;
+    const pct=t?Math.round(ap/t*100):0;
+    const col=t===0?'var(--text-dim)':pct>=80?'var(--approved)':pct>=50?'var(--progress)':'var(--rejected)';
+    return `<div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:148px;flex:1">
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:8px;min-width:0">
+        <span style="font-size:12px;font-weight:800;font-family:var(--mono);color:var(--accent-text);flex-shrink:0">${code}</span>
+        <span style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${_esc(name)}">${_esc(name)}</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:9px">
+        <div style="font-size:22px;font-weight:700;font-family:var(--mono);line-height:1;color:${col}">${t?pct+'%':'—'}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${ap} / ${t} villas</div>
+      </div>
+      <div style="margin-top:8px;background:var(--border);border-radius:3px;height:4px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${col}"></div></div>
+      ${(rj||ur)?`<div style="font-size:10px;margin-top:5px">${rj?`<span style="color:var(--rejected)">✗ ${rj} rejected</span>`:''}${rj&&ur?' · ':''}${ur?`<span style="color:var(--review)">⏳ ${ur} review</span>`:''}</div>`:''}
+    </div>`;
+  }).join('');
+  host.innerHTML=`
+    <div style="font-size:11px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em;margin:2px 0 8px">Key Activities · Priority ${priTier}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">${cards}</div>`;
+}
 function renderPriBreakdown(){
   const host=document.getElementById('pri-breakdown');
   if(!host) return;
