@@ -155,6 +155,9 @@ body.in-shell .topbar{display:none!important}
   <div class="kpi-strip" id="kpi-strip"></div>
   <div id="disc-kpi-row" style="display:none;gap:12px;padding:0 16px 12px;flex-shrink:0"></div>
 
+  <div class="sec" id="sec-priority" style="display:none">Priority Villas <span class="sec-hint">— P1 &amp; P2 progress</span></div>
+  <div id="priority-section"></div>
+
   <div class="sec">By Cluster</div>
   <div class="charts-row">
     <div class="card">
@@ -245,17 +248,27 @@ async function init(){
     msg('Loading villa types…');
     try{
       const [vRows,cRows]=await Promise.all([
-        fetchAll('villas?select=villa_no,villa_type,cluster_id&order=id'),
+        fetchAll('villas?select=villa_no,villa_type,cluster_id,is_priority,is_priority2&is_active=eq.true&order=id'),
         fetchAll('clusters?select=id,code&order=id')
       ]);
       const cMap={};cRows.forEach(c=>{cMap[c.id]=c.code;});
       window._villaTypeMap={};
+      // Priority-1 / Priority-2 flags, keyed the same way the WIR rows key villas
+      // (raw_cluster + '_' + raw_villa_no), plus a no-"C" variant for civil-style keys.
+      window._priorityMap={};window._priorityCounts={p1:0,p2:0};
       vRows.forEach(v=>{
         const code=String(cMap[v.cluster_id]||''),t=v.villa_type||'';
         window._villaTypeMap[code+'_'+v.villa_no]=t;                       // 'C3_42'
         window._villaTypeMap[code.replace(/^C/i,'')+'_'+v.villa_no]=t;    // '3_42'
+        const rec={p1:!!v.is_priority,p2:!!v.is_priority2};
+        if(rec.p1||rec.p2){
+          window._priorityMap[code+'_'+v.villa_no]=rec;
+          window._priorityMap[code.replace(/^C/i,'')+'_'+v.villa_no]=rec;
+          if(rec.p1)window._priorityCounts.p1++;
+          if(rec.p2)window._priorityCounts.p2++;
+        }
       });
-    }catch(e){window._villaTypeMap={};}
+    }catch(e){window._villaTypeMap={};window._priorityMap={};window._priorityCounts={p1:0,p2:0};}
     msg('Rendering…');renderAll();hideLoad();
   }catch(e){msg('Error: '+e.message);}
 }
@@ -283,7 +296,7 @@ function renderAll(){
   document.getElementById('sec-kpi').textContent='Overall · '+(mode==='wir'?'WIR':'Clearance');
   const discSel=document.getElementById('f-disc');
   if(discSel) discSel.style.display=(mode==='wir'&&WS!=='civil')?'':'none';
-  renderKPIs(data);renderCharts(data);renderClusters(data);populateF(data);applyF();
+  renderKPIs(data);renderPriority(data);renderCharts(data);renderClusters(data);populateF(data);applyF();
 }
 
 function renderKPIs(data){
@@ -350,6 +363,101 @@ function renderKPIs(data){
       discKpiEl.style.display='none';
     }
   }
+}
+
+// ── Priority villas (P1 / P2) overview ──
+let priData=[];   // last dataset, so the P1/P2 toggle can re-render without a refetch
+let priTier=1;    // which tier the villa breakdown grid is showing
+function renderPriority(data){
+  const sec=document.getElementById('sec-priority');
+  const host=document.getElementById('priority-section');
+  if(!host) return;
+  const pmap=window._priorityMap||{}, counts=window._priorityCounts||{p1:0,p2:0};
+  if(!counts.p1 && !counts.p2){ if(sec)sec.style.display='none'; host.style.display='none'; host.innerHTML=''; return; }
+  if(sec)sec.style.display=''; host.style.display='';
+  priData=data;
+  const apk=APK(),rjk=RJK(),urk=URK();
+  const keyOf=r=>r.raw_cluster+'_'+r.raw_villa_no;
+  const inTier=(r,tier)=>{ const p=pmap[keyOf(r)]; return !!(p && (tier===1?p.p1:p.p2)); };
+  const stats=tier=>{
+    const rows=data.filter(r=>inTier(r,tier));
+    const villas={};
+    rows.forEach(r=>{ const k=keyOf(r); (villas[k]=villas[k]||{ap:0,t:0}); villas[k].t++; if(r.normalised_status===apk)villas[k].ap++; });
+    const keys=Object.keys(villas);
+    const t=rows.length, ap=rows.filter(r=>r.normalised_status===apk).length;
+    return {
+      t, ap,
+      rj:rows.filter(r=>r.normalised_status===rjk).length,
+      ur:rows.filter(r=>r.normalised_status===urk).length,
+      pct:t?Math.round(ap/t*100):0,
+      withRecords:keys.length,
+      done:keys.filter(k=>villas[k].t>0 && villas[k].ap===villas[k].t).length,
+      total:tier===1?counts.p1:counts.p2
+    };
+  };
+  const card=(tier,accent)=>{
+    const s=stats(tier);
+    const col=s.pct>=80?'var(--approved)':s.pct>=50?'var(--progress)':'var(--rejected)';
+    const active=tier===priTier;
+    return `<div onclick="setPriTier(${tier})" title="Show the Priority ${tier} villa breakdown below"
+      style="cursor:pointer;flex:1;min-width:240px;background:var(--bg-elev);border:1px solid ${active?accent:'var(--border)'};border-left:4px solid ${accent};border-radius:12px;padding:16px 18px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:11px;font-weight:800;letter-spacing:.05em;color:#fff;background:${accent};border-radius:5px;padding:2px 9px">P${tier}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">Priority ${tier}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-dim)">${s.total.toLocaleString()} villas</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:30px;font-weight:700;font-family:var(--mono);line-height:1;color:${col}">${s.pct}%</div>
+          <div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;margin-top:3px">${mode==='wir'?'WIR':'Clearance'} approved</div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">
+          <div><div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--approved)">${s.done}</div>complete</div>
+          <div><div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--text)">${s.withRecords}</div>active</div>
+          <div><div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--rejected)">${s.rj.toLocaleString()}</div>rejected</div>
+          <div><div style="font-size:17px;font-weight:700;font-family:var(--mono);color:var(--review)">${s.ur.toLocaleString()}</div>${mode==='wir'?'review':'pending'}</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:${s.pct}%;height:100%;background:${col};border-radius:3px;transition:width .4s"></div>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-top:6px">${s.ap.toLocaleString()} of ${s.t.toLocaleString()} records approved</div>
+    </div>`;
+  };
+  host.innerHTML=`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px">${card(1,'var(--rejected)')}${card(2,'var(--progress)')}</div>
+    <div id="pri-breakdown"></div>`;
+  renderPriBreakdown();
+}
+function setPriTier(t){ priTier=t; renderPriority(priData); }
+function renderPriBreakdown(){
+  const host=document.getElementById('pri-breakdown');
+  if(!host) return;
+  const pmap=window._priorityMap||{}, apk=APK();
+  const keyOf=r=>r.raw_cluster+'_'+r.raw_villa_no;
+  const inTier=r=>{ const p=pmap[keyOf(r)]; return !!(p && (priTier===1?p.p1:p.p2)); };
+  const villas={};
+  priData.filter(inTier).forEach(r=>{ const k=keyOf(r); (villas[k]=villas[k]||{ap:0,t:0}); villas[k].t++; if(r.normalised_status===apk)villas[k].ap++; });
+  const list=Object.keys(villas).map(k=>{ const v=villas[k]; return {k,pct:v.t?Math.round(v.ap/v.t*100):0,ap:v.ap,t:v.t}; })
+    .sort((a,b)=>a.pct-b.pct || a.k.localeCompare(b.k,undefined,{numeric:true}));   // least-complete first
+  if(!list.length){ host.innerHTML=`<div style="font-size:12px;color:var(--text-dim);padding:8px 4px">No ${mode==='wir'?'WIR':'clearance'} records for Priority ${priTier} villas in this workspace.</div>`; return; }
+  const chip=v=>{
+    const col=v.pct>=80?'var(--approved)':v.pct>=50?'var(--progress)':'var(--rejected)';
+    const label=v.k.replace('_','-');
+    return `<div title="${label} · ${v.ap} of ${v.t} approved" style="background:var(--bg-elev);border:1px solid var(--border);border-left:3px solid ${col};border-radius:8px;padding:7px 9px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+        <span style="font-size:12px;font-weight:700;color:var(--text)">${label}</span>
+        <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${col}">${v.pct}%</span>
+      </div>
+      <div style="margin-top:5px;background:var(--border);border-radius:2px;height:3px;overflow:hidden"><div style="width:${v.pct}%;height:100%;background:${col}"></div></div>
+    </div>`;
+  };
+  host.innerHTML=`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:var(--text)">Priority ${priTier} villas</span>
+      <span style="font-size:11px;color:var(--text-dim)">${list.length} with records · least complete first</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:8px;max-height:264px;overflow:auto;padding:2px">${list.map(chip).join('')}</div>`;
 }
 
 function renderCharts(data){
