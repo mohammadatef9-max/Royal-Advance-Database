@@ -2809,7 +2809,13 @@ async function confirmLock() {
     // Locking now covers submitting: 'submitted' did nothing except reveal the Lock button,
     // so the two were collapsed into one action. Stamp submitted_at when it was never set
     // (locking straight from draft) so the audit trail still records a submission time.
-    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString(), submitted_at: selectedPC.submitted_at || new Date().toISOString(), gross_aed: lastGrossAed });
+    // Clear any prior frozen snapshot so the post-lock view recaptures it fresh from the
+    // billing that was just written. Without this, a PC that was locked, reopened, edited and
+    // re-locked kept showing the OLD snapshot in the summary while the progress sheet (always
+    // live) showed the new figures — the two disagreed until the next reopen.
+    await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { status:'locked', locked_at: new Date().toISOString(), submitted_at: selectedPC.submitted_at || new Date().toISOString(), gross_aed: lastGrossAed, summary_snapshot: null });
+    selectedPC.summary_snapshot = null;
+    { const _c = (allScopePCs||[]).find(p => p.id === selectedPC.id); if (_c) _c.summary_snapshot = null; }
 
     // 2b. Per-scope locked snapshots → correct dashboard roll-up of combined PCs
     const effRetPct = (selectedPC.retention_pct_override!=null && selectedPC.retention_pct_override!=='')
@@ -2863,10 +2869,14 @@ async function confirmReopen() {
         method: 'DELETE', headers: getH()
       });
     }
-    // 2. Reset PC to draft, clear locked snapshot fields
+    // 2. Reset PC to draft, clear locked snapshot fields. The frozen summary_snapshot MUST be
+    //    cleared too — otherwise a later re-lock reuses this stale snapshot and the summary
+    //    stops matching the (live) progress sheet.
     await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, {
-      status: 'draft', gross_aed: null, locked_at: null
+      status: 'draft', gross_aed: null, locked_at: null, summary_snapshot: null
     });
+    selectedPC.summary_snapshot = null;
+    { const _c = (allScopePCs||[]).find(p => p.id === selectedPC.id); if (_c) _c.summary_snapshot = null; }
     audit('qs_payment_certificates', 'REOPEN_PC', selectedPC.id, {
       scope: selectedScope.subcontractor_name,
       pc_number: selectedPC.pc_number,
