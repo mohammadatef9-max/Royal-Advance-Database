@@ -143,7 +143,8 @@ body.in-shell{height:100vh}
 .act-cell.override-on{background:#78350f;color:#fde68a}
 .act-cell.override-off{background:#4c0519;color:#fca5a5}
 .act-cell.cross-billed{background:#451a03;color:#fbbf24;border:1px solid #f59e0b}
-.act-cell.prev-billed{background:#1e3a5f;color:#93c5fd;cursor:default}
+.act-cell.prev-billed{background:#1e3a5f;color:#93c5fd}
+.act-cell.reversal{background:#450a0a;color:#fca5a5;border:1px solid #f43f5e}
 .act-cell.readonly{cursor:default}
 
 /* workdone columns */
@@ -352,6 +353,7 @@ textarea{resize:vertical;min-height:60px}
   .act-cell.override-on{background:#555!important;color:#fff!important}
   .act-cell.override-off{background:#fff!important;color:#bbb!important;border:1px dashed #aaa}
   .act-cell.prev-billed{background:#ddd!important;color:#555!important}
+  .act-cell.reversal{background:#fff!important;color:#b00020!important;border:1.5px solid #b00020!important;font-weight:800!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .ps-table tr.ps-total-row td{background:#e8e8e8!important;color:#000!important;font-weight:800!important;border-top:2.5px solid #000!important}
   /* status cells billed THIS period — green highlight (print only) so they're easy to scan */
   .ps-table .act-cell.cur-progress{background:#1f9d4d!important;color:#fff!important;border:1px solid #137a39!important;font-weight:800!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -894,8 +896,20 @@ textarea{resize:vertical;min-height:60px}
           <option value="1">✓ Complete — pay in full (100%)</option>
           <option value="partial">◐ Partial payment — pay part of this WIR</option>
           <option value="void">⊘ Void — skip this PC (bill in a later PC)</option>
+          <option value="reverse">⊖ Reverse / back-charge — deduct work billed in an earlier PC</option>
           <option value="0">✗ Not Complete (override WIR as rejected)</option>
         </select>
+      </div>
+      <!-- Reversal controls (shown only when "Reverse / back-charge" is selected) -->
+      <div id="ov-reverse" style="display:none;background:rgba(244,63,94,.08);border:1px solid #f43f5e55;border-radius:6px;padding:10px 12px;margin-bottom:10px">
+        <div id="ov-rev-ctx" style="font-size:11px;color:var(--tx3);margin-bottom:8px"></div>
+        <div class="form-row" style="margin-bottom:0">
+          <label>% to reverse now</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input id="ov-rev-pct" type="number" min="0" max="100" step="1" value="100" style="width:90px">
+            <span style="font-size:12px;color:var(--tx2)">% &nbsp;·&nbsp; posts as a negative deduction this PC</span>
+          </div>
+        </div>
       </div>
       <!-- Partial-payment controls (shown only when "Partial payment" is selected) -->
       <div id="ov-partial" style="display:none;background:var(--bg3);border:1px solid var(--bdr);border-radius:6px;padding:10px 12px;margin-bottom:10px">
@@ -1010,7 +1024,7 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 
-<script src="qs.js?v=28"></script>
+<script src="qs.js?v=29"></script>
 
 </body>
 </html>

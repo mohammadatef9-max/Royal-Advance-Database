@@ -1037,7 +1037,7 @@ async function loadPCData() {
 
   const [wirRows, overrideRows, billedRows, pcSigs] = await Promise.all([
     fa(`v_latest_wir_by_sub?villa_id=in.(${villaIdsStr})&raw_activity_code=in.(${baseCodesStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
-    fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason,payment_pct,carry_remainder`),
+    fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,override_reason,payment_pct,carry_remainder,reverse_pct`),
     fa(`qs_billed_records?scope_id=eq.${selectedScope.id}&villa_id=in.(${villaIdsStr})&select=villa_id,activity_code,locked_pc_id,billed_pct,carry_remainder`),
     fa(`qs_pc_signatories?pc_id=eq.${selectedPC.id}&order=sort_order.asc`),
   ]);
@@ -1186,9 +1186,15 @@ function computeCellBilling(billedList, override, wirApproved, locked, wirPct, b
   const autoTarget = (wirPct != null && wirPct > 0) ? clamp01(wirPct) : 1;
   const target = (override && override.payment_pct != null) ? clamp01(Number(override.payment_pct)) : autoTarget;
 
+  // Reversal / back-charge: an explicit override that deducts work certified in an earlier PC.
+  // Bills a NEGATIVE current (up to what was billed before), bringing the cell's to-date down.
+  const isReversal = override !== undefined && override.reverse_pct != null && Number(override.reverse_pct) > 1e-9;
+
   let curPct = 0;
   if (locked) {
-    curPct = nowRec ? (nowRec.pct || 0) : 0;
+    curPct = nowRec ? (nowRec.pct || 0) : 0;   // stored increment may itself be negative (a locked reversal)
+  } else if (isReversal) {
+    curPct = -Math.min(clamp01(Number(override.reverse_pct)), prevPct);   // never claw back more than was billed
   } else if (billedOnly) {
     if (override !== undefined) {
       // Manual edit on an Excel-exact PC: an "on" override bills its % (default full remaining);
@@ -1220,10 +1226,11 @@ function computeCellBilling(billedList, override, wirApproved, locked, wirPct, b
   const isPartial     = (curPct > 1e-9 && curPct < remaining - 1e-9) || todPct < 1 - 1e-9 && (wasBilledPrev || curPct > 1e-9);
 
   let source;
-  if (override !== undefined) source = override.is_complete ? (isPartial ? 'override-partial' : 'override-on') : 'override-off';
+  if (isReversal) source = 'reversal';
+  else if (override !== undefined) source = override.is_complete ? (isPartial ? 'override-partial' : 'override-on') : 'override-off';
   else source = isCompleteToDate ? 'approved' : 'not-approved';
 
-  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source,
+  return { isCompleteToDate, wasBilledPrev, isBilledNow, billedLater, source, isReversal,
            prevPct, curPct, todPct, withheldPct, remaining, isPartial };
 }
 
@@ -1336,7 +1343,7 @@ async function buildScopeCtx(scope) {
     const subQ = subClause ? '&' + subClause : '';
     const [wirRows, ovRows, bRows] = await Promise.all([
       fa(`v_latest_wir_by_sub?villa_id=in.(${vStr})&raw_activity_code=in.(${aStr})${subQ}&select=villa_id,raw_activity_code,normalised_status,response_date`),
-      fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,payment_pct,carry_remainder`),
+      fa(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&select=villa_id,activity_code,is_complete,payment_pct,carry_remainder,reverse_pct`),
       fa(`qs_billed_records?scope_id=eq.${scope.id}&villa_id=in.(${vStr})&select=villa_id,activity_code,locked_pc_id,billed_pct,carry_remainder`),
     ]);
     // Fold floor variants into their base, then require every part approved (see loadPCData)
@@ -1494,18 +1501,27 @@ function buildProgressSheetHtml(sec) {
         const st = statusOf(sv.villa_id, act.activity_code);
         const { prevPct, curPct, withheldPct, isCompleteToDate, source } = st;
         const pP = Math.round(prevPct * 100), pC = Math.round(curPct * 100);
+        // Editable in a draft PC. Fully-billed cells are now clickable too, so a previously
+        // certified activity can be reversed / back-charged (the only way to click was blocked before).
+        const editable = canEdit && (prevPct > 1e-9 || prevPct < 1 - 1e-9);
         let cls = 'act-cell', label = '—', tip = act.activity_name;
-        if (curPct > 1e-9) {
+        if (curPct < -1e-9) {
+          // Reversal / back-charge in THIS PC — deducting from what earlier PCs billed.
+          const rP = Math.abs(pC);
+          cls += ' reversal' + (effLocked ? ' readonly' : '');
+          label = '⊖' + rP + '%';
+          tip += ` — reversing ${rP}% of the ${pP}% billed in earlier PCs (back-charge)`;
+        } else if (curPct > 1e-9) {
           // Billing in THIS PC (current). Full → ✓; partial / top-up → show the % billed now.
           const full = pC >= 100 && prevPct < 1e-9;
           cls += ' approved cur-progress' + (effLocked ? ' readonly' : '');
           label = full ? '✓' : pC + '%';
           tip += prevPct > 1e-9 ? ` — +${pC}% this PC (${pP}% billed before)` : (full ? '' : ` — ${pC}% this PC`);
         } else if (prevPct > 1e-9) {
-          // Already billed in earlier PC(s), nothing new now
-          cls += ' prev-billed readonly';
+          // Already billed in earlier PC(s), nothing new now. Still clickable in a draft to reverse it.
+          cls += ' prev-billed' + (editable ? '' : ' readonly');
           label = pP >= 100 ? '✓ₚ' : pP + '%ₚ';
-          tip += ` — ${pP}% billed in earlier PCs`;
+          tip += ` — ${pP}% billed in earlier PCs` + (editable ? ' · click to reverse / back-charge' : '');
         } else if (withheldPct > 1e-9) {
           cls += ' override-off'; label = '⊘'; tip += ' — approved but withheld this PC';
         } else if (source === 'override-off') {
@@ -1523,8 +1539,6 @@ function buildProgressSheetHtml(sec) {
         } else {
           cls += ' not-approved'; label = '—';
         }
-        // Editable in a draft PC unless the cell is already fully billed
-        const editable = canEdit && prevPct < 1 - 1e-9;
         const click = editable ? `onclick="openOverride(${sv.villa_id},'${escH(act.activity_code)}','${escH(sv.villa_no)}','${escH(act.activity_name)}')"` : '';
         actCells += `<td style="text-align:center;vertical-align:middle;padding:5px 8px"><div class="${cls}" ${click} title="${escH(tip)}">${label}</div></td>`;
       });
@@ -2543,8 +2557,10 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
   ovPending.prevPct = st.prevPct || 0;
   const prevTxt = st.prevPct > 1e-9 ? ` (${Math.round(st.prevPct*100)}% already billed in earlier PCs)` : '';
 
+  const existRev = ovExisting && ovExisting.reverse_pct != null && Number(ovExisting.reverse_pct) > 1e-9;
   let ovTxt;
   if (!ovExisting) ovTxt = 'None (using WIR data)';
+  else if (existRev) ovTxt = `⊖ Reversal — deducting ${Math.round(Number(ovExisting.reverse_pct)*100)}% billed earlier`;
   else if (!ovExisting.is_complete) ovTxt = '⊘ Void / Not complete this PC';
   else if (ovExisting.payment_pct != null && Number(ovExisting.payment_pct) < 1)
     ovTxt = `◐ Partial — ${Math.round(Number(ovExisting.payment_pct)*100)}% paid, remainder ${ovExisting.carry_remainder!==false?'carries to next PC':'withheld'}`;
@@ -2560,12 +2576,17 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
   // Preselect the mode from the existing override
   let mode = 'wir';
   if (ovExisting) {
-    if (!ovExisting.is_complete) mode = 'void';
+    if (existRev) mode = 'reverse';
+    else if (!ovExisting.is_complete) mode = 'void';
     else if (ovExisting.payment_pct != null && Number(ovExisting.payment_pct) < 1) mode = 'partial';
     else mode = '1';
   }
   document.getElementById('ov-complete').value = mode;
   document.getElementById('ov-pct').value = ovExisting?.payment_pct != null ? Math.round(Number(ovExisting.payment_pct)*100) : 100;
+  // Reverse control defaults to clawing back the FULL amount billed in earlier PCs, capped at it.
+  const revMax = Math.round((ovPending.prevPct || 0) * 100);
+  const revEl = document.getElementById('ov-rev-pct');
+  if (revEl) { revEl.max = revMax; revEl.value = existRev ? Math.round(Number(ovExisting.reverse_pct)*100) : revMax; }
   const carry = !ovExisting || ovExisting.carry_remainder !== false;
   document.querySelector(`input[name="ov-carry"][value="${carry?'carry':'withhold'}"]`).checked = true;
   document.getElementById('ov-reason').value = '';
@@ -2577,6 +2598,15 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
 function onOvModeChange() {
   const mode = document.getElementById('ov-complete').value;
   document.getElementById('ov-partial').style.display = mode === 'partial' ? '' : 'none';
+  const revBox = document.getElementById('ov-reverse');
+  if (revBox) revBox.style.display = mode === 'reverse' ? '' : 'none';
+  if (mode === 'reverse') {
+    const maxP = Math.round((ovPending?.prevPct || 0) * 100);
+    const ctx = document.getElementById('ov-rev-ctx');
+    if (ctx) ctx.textContent = maxP > 0
+      ? `${maxP}% was billed for this activity in earlier PCs. Enter how much to reverse now (max ${maxP}%) — it posts as a negative in this PC.`
+      : 'Nothing was billed for this activity in earlier PCs, so there is nothing to reverse.';
+  }
   if (mode === 'partial') {
     document.getElementById('ov-partial-ctx').textContent = ovPending && ovPending.prevPct > 1e-9
       ? `${Math.round(ovPending.prevPct*100)}% of this WIR was billed in earlier PCs. Enter the TOTAL % paid to date.`
@@ -2602,9 +2632,17 @@ async function submitOverride() {
   if (val !== 'wir' && !reason) { showMsg(msg, 'err', 'Reason is required for an override.'); return; }
 
   // Resolve the override fields from the selected mode
-  let is_complete = true, payment_pct = null, carry_remainder = true;
+  let is_complete = true, payment_pct = null, carry_remainder = true, reverse_pct = null;
   if (val === '1') { is_complete = true; payment_pct = null; }
   else if (val === 'void' || val === '0') { is_complete = false; payment_pct = null; }
+  else if (val === 'reverse') {
+    const prev = ovPending.prevPct || 0;
+    if (prev <= 1e-9) { showMsg(msg, 'err', 'Nothing was billed for this activity in earlier PCs, so there is nothing to reverse.'); return; }
+    let rp = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-rev-pct').value) || 0)) / 100;
+    rp = Math.min(rp, prev);   // never claw back more than was billed
+    if (rp <= 1e-9) { showMsg(msg, 'err', 'Enter a reversal amount greater than 0%.'); return; }
+    is_complete = false; payment_pct = null; reverse_pct = Math.round(rp * 1e6) / 1e6;
+  }
   else if (val === 'partial') {
     is_complete = true;
     const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-pct').value) || 0)) / 100;
@@ -2627,7 +2665,7 @@ async function submitOverride() {
       delete pcOverrides[key];
       pcSections.forEach(s => { delete s.ctx.overrides[key]; });
     } else {
-      const fields = { is_complete, override_reason: reason, payment_pct, carry_remainder };
+      const fields = { is_complete, override_reason: reason, payment_pct, carry_remainder, reverse_pct };
       if (existing) {
         await fpatch(`qs_pc_overrides?pc_id=eq.${selectedPC.id}&villa_id=eq.${ovPending.villa_id}&activity_code=eq.${ovPending.activity_code}`, fields);
       } else {
@@ -2662,7 +2700,9 @@ function collectBillableItems() {
   // A cell is billable in this PC when it has a positive current fraction (curPct). The fraction
   // and the carry flag (from the override) are persisted so partial/carried balances roll forward.
   const push = (scope_id, sv, act, st, carry) => {
-    if (st.curPct > 1e-9)
+    // Non-zero in EITHER direction: a positive bill or a negative reversal both persist so the
+    // locked certificate records the increment (including a back-charge).
+    if (st.curPct > 1e-9 || st.curPct < -1e-9)
       items.push({ scope_id, villa_id: sv.villa_id, activity_code: act.activity_code, villa_no: sv.villa_no,
                    billed_pct: Math.round(st.curPct * 1e6) / 1e6, carry_remainder: carry });
   };
