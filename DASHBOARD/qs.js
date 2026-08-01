@@ -154,6 +154,10 @@ function fmtPct(n) {
   if (n === null || n === undefined || isNaN(n)) return '—';
   return (n * 100).toFixed(2) + '%';
 }
+// A percent number (no % sign) that keeps up to 2 decimals but drops trailing zeros:
+// 0.13→"13", 0.125→"12.5", 0.1255→"12.55". Used wherever a fraction is shown as a % so
+// values like 12.5% aren't rounded to 13%.
+function pctNum(frac) { return String(+((frac || 0) * 100).toFixed(2)); }
 function fmtQty(n) {
   if (!n) return '-';
   return Number(n).toFixed(2);
@@ -1500,27 +1504,27 @@ function buildProgressSheetHtml(sec) {
       grpActs.forEach(act => {
         const st = statusOf(sv.villa_id, act.activity_code);
         const { prevPct, curPct, withheldPct, isCompleteToDate, source } = st;
-        const pP = Math.round(prevPct * 100), pC = Math.round(curPct * 100);
+        // Display strings keep decimals (12.5% stays 12.5%, not 13%); logic uses the raw fractions.
+        const pP = pctNum(prevPct), pC = pctNum(Math.abs(curPct));
         // Editable in a draft PC. Fully-billed cells are now clickable too, so a previously
         // certified activity can be reversed / back-charged (the only way to click was blocked before).
         const editable = canEdit && (prevPct > 1e-9 || prevPct < 1 - 1e-9);
         let cls = 'act-cell', label = '—', tip = act.activity_name;
         if (curPct < -1e-9) {
           // Reversal / back-charge in THIS PC — deducting from what earlier PCs billed.
-          const rP = Math.abs(pC);
           cls += ' reversal' + (effLocked ? ' readonly' : '');
-          label = '⊖' + rP + '%';
-          tip += ` — reversing ${rP}% of the ${pP}% billed in earlier PCs (back-charge)`;
+          label = '⊖' + pC + '%';
+          tip += ` — reversing ${pC}% of the ${pP}% billed in earlier PCs (back-charge)`;
         } else if (curPct > 1e-9) {
           // Billing in THIS PC (current). Full → ✓; partial / top-up → show the % billed now.
-          const full = pC >= 100 && prevPct < 1e-9;
+          const full = curPct >= 1 - 1e-9 && prevPct < 1e-9;
           cls += ' approved cur-progress' + (effLocked ? ' readonly' : '');
           label = full ? '✓' : pC + '%';
           tip += prevPct > 1e-9 ? ` — +${pC}% this PC (${pP}% billed before)` : (full ? '' : ` — ${pC}% this PC`);
         } else if (prevPct > 1e-9) {
           // Already billed in earlier PC(s), nothing new now. Still clickable in a draft to reverse it.
           cls += ' prev-billed' + (editable ? '' : ' readonly');
-          label = pP >= 100 ? '✓ₚ' : pP + '%ₚ';
+          label = prevPct >= 1 - 1e-9 ? '✓ₚ' : pP + '%ₚ';
           tip += ` — ${pP}% billed in earlier PCs` + (editable ? ' · click to reverse / back-charge' : '');
         } else if (withheldPct > 1e-9) {
           cls += ' override-off'; label = '⊘'; tip += ' — approved but withheld this PC';
@@ -2555,18 +2559,18 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
     : getActivityStatus(villa_id, activity_code);
   // Stash the cell's prior-billed share so the partial controls can show context & validate
   ovPending.prevPct = st.prevPct || 0;
-  const prevTxt = st.prevPct > 1e-9 ? ` (${Math.round(st.prevPct*100)}% already billed in earlier PCs)` : '';
+  const prevTxt = st.prevPct > 1e-9 ? ` (${pctNum(st.prevPct)}% already billed in earlier PCs)` : '';
 
   const existRev = ovExisting && ovExisting.reverse_pct != null && Number(ovExisting.reverse_pct) > 1e-9;
   let ovTxt;
   if (!ovExisting) ovTxt = 'None (using WIR data)';
-  else if (existRev) ovTxt = `⊖ Reversal — deducting ${Math.round(Number(ovExisting.reverse_pct)*100)}% billed earlier`;
+  else if (existRev) ovTxt = `⊖ Reversal — deducting ${pctNum(Number(ovExisting.reverse_pct))}% billed earlier`;
   else if (!ovExisting.is_complete) ovTxt = '⊘ Void / Not complete this PC';
   else if (ovExisting.payment_pct != null && Number(ovExisting.payment_pct) < 1)
-    ovTxt = `◐ Partial — ${Math.round(Number(ovExisting.payment_pct)*100)}% paid, remainder ${ovExisting.carry_remainder!==false?'carries to next PC':'withheld'}`;
+    ovTxt = `◐ Partial — ${pctNum(Number(ovExisting.payment_pct))}% paid, remainder ${ovExisting.carry_remainder!==false?'carries to next PC':'withheld'}`;
   else ovTxt = '✓ Complete (full payment)';
 
-  const crossTxt = st.crossBilled ? `<br><b style="color:#f59e0b">⚠ Already billed under "${escH(st.crossBilled.name)}"</b> (${Math.round(st.crossBilled.pct*100)}%) — excluded from this PC unless you override below.` : '';
+  const crossTxt = st.crossBilled ? `<br><b style="color:#f59e0b">⚠ Already billed under "${escH(st.crossBilled.name)}"</b> (${pctNum(st.crossBilled.pct)}%) — excluded from this PC unless you override below.` : '';
   document.getElementById('ov-info').innerHTML = `
     <b>Villa:</b> VI-${escH(villa_no)} &nbsp;|&nbsp; <b>Activity:</b> ${escH(activity_code)} — ${escH(act_name)}<br>
     <b>WIR Status:</b> ${st.wir?.approved ? '✓ Approved' : '— Not approved'}${prevTxt}<br>
@@ -2582,11 +2586,11 @@ function openOverride(villa_id, activity_code, villa_no, act_name) {
     else mode = '1';
   }
   document.getElementById('ov-complete').value = mode;
-  document.getElementById('ov-pct').value = ovExisting?.payment_pct != null ? Math.round(Number(ovExisting.payment_pct)*100) : 100;
+  document.getElementById('ov-pct').value = ovExisting?.payment_pct != null ? +(Number(ovExisting.payment_pct)*100).toFixed(2) : 100;
   // Reverse control defaults to clawing back the FULL amount billed in earlier PCs, capped at it.
-  const revMax = Math.round((ovPending.prevPct || 0) * 100);
+  const revMax = +((ovPending.prevPct || 0) * 100).toFixed(2);
   const revEl = document.getElementById('ov-rev-pct');
-  if (revEl) { revEl.max = revMax; revEl.value = existRev ? Math.round(Number(ovExisting.reverse_pct)*100) : revMax; }
+  if (revEl) { revEl.max = revMax; revEl.value = existRev ? +(Number(ovExisting.reverse_pct)*100).toFixed(2) : revMax; }
   const carry = !ovExisting || ovExisting.carry_remainder !== false;
   document.querySelector(`input[name="ov-carry"][value="${carry?'carry':'withhold'}"]`).checked = true;
   document.getElementById('ov-reason').value = '';
@@ -2601,15 +2605,15 @@ function onOvModeChange() {
   const revBox = document.getElementById('ov-reverse');
   if (revBox) revBox.style.display = mode === 'reverse' ? '' : 'none';
   if (mode === 'reverse') {
-    const maxP = Math.round((ovPending?.prevPct || 0) * 100);
+    const maxP = pctNum(ovPending?.prevPct || 0);
     const ctx = document.getElementById('ov-rev-ctx');
-    if (ctx) ctx.textContent = maxP > 0
+    if (ctx) ctx.textContent = (ovPending?.prevPct || 0) > 1e-9
       ? `${maxP}% was billed for this activity in earlier PCs. Enter how much to reverse now (max ${maxP}%) — it posts as a negative in this PC.`
       : 'Nothing was billed for this activity in earlier PCs, so there is nothing to reverse.';
   }
   if (mode === 'partial') {
     document.getElementById('ov-partial-ctx').textContent = ovPending && ovPending.prevPct > 1e-9
-      ? `${Math.round(ovPending.prevPct*100)}% of this WIR was billed in earlier PCs. Enter the TOTAL % paid to date.`
+      ? `${pctNum(ovPending.prevPct)}% of this WIR was billed in earlier PCs. Enter the TOTAL % paid to date.`
       : 'Enter how much of this WIR’s value to pay in this PC.';
     onOvPctInput();
   }
@@ -2617,10 +2621,12 @@ function onOvModeChange() {
 
 function onOvPctInput() {
   const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-pct').value) || 0));
-  const prevPctNum = Math.round((ovPending?.prevPct || 0) * 100);
+  const prevPctNum = (ovPending?.prevPct || 0) * 100;
   const thisPc = Math.max(0, pct - prevPctNum);
   const hint = document.getElementById('ov-pct-hint');
-  if (hint) hint.textContent = `bills ${thisPc}% now, ${Math.max(0,100-pct)}% remaining`;
+  // Trim to 2 decimals, dropping trailing zeros, so 12.5 shows as 12.5 not 12.50 or 13.
+  const trim = n => String(+n.toFixed(2));
+  if (hint) hint.textContent = `bills ${trim(thisPc)}% now, ${trim(Math.max(0,100-pct))}% remaining`;
 }
 
 async function submitOverride() {
@@ -2647,7 +2653,7 @@ async function submitOverride() {
     is_complete = true;
     const pct = Math.max(0, Math.min(100, parseFloat(document.getElementById('ov-pct').value) || 0)) / 100;
     const prev = ovPending.prevPct || 0;
-    if (pct <= prev + 1e-9) { showMsg(msg, 'err', `Enter a % greater than what's already billed (${Math.round(prev*100)}%).`); return; }
+    if (pct <= prev + 1e-9) { showMsg(msg, 'err', `Enter a % greater than what's already billed (${pctNum(prev)}%).`); return; }
     if (pct >= 1 - 1e-9) { showMsg(msg, 'err', 'Use “Complete — pay in full” for 100%.'); return; }
     payment_pct = pct;
     carry_remainder = (document.querySelector('input[name="ov-carry"]:checked')?.value || 'carry') === 'carry';
@@ -2768,7 +2774,7 @@ async function openLock() {
   const billItems = collectBillableItems();
   const count = billItems.length;
   const summary = billItems.map(it => {
-    const pctTxt = it.billed_pct < 0.999 ? ` · <b>${Math.round(it.billed_pct*100)}%</b>${it.carry_remainder ? ' (rest carries)' : ' (rest withheld)'}` : '';
+    const pctTxt = it.billed_pct < 0.999 ? ` · <b>${pctNum(it.billed_pct)}%</b>${it.carry_remainder ? ' (rest carries)' : ' (rest withheld)'}` : '';
     return `<div>VI-${escH(it.villa_no)} · ${escH(it.activity_code)}${pctTxt}</div>`;
   }).join('');
 
@@ -3467,7 +3473,7 @@ function renderHistGrid() {
           <input type="checkbox" ${chk} style="width:15px;height:15px;accent-color:var(--green);cursor:pointer;vertical-align:middle"
             onchange="histToggle('${sv.villa_id}','${escH(act.activity_code)}',this.checked)"
             id="hpk_${sv.villa_id}_${escH(act.activity_code)}">
-          <input type="number" min="1" max="100" step="1" value="${on ? +(pct*100).toFixed(2) : ''}" ${on?'':'disabled'}
+          <input type="number" min="1" max="100" step="0.01" value="${on ? +(pct*100).toFixed(2) : ''}" ${on?'':'disabled'}
             title="% billed in this PC — the remainder carries to a later PC"
             style="width:42px;font-size:10px;padding:1px 3px;margin-left:3px;vertical-align:middle;text-align:center;background:var(--bg2);border:1px solid ${partial?'var(--amber)':'var(--bdr2)'};border-radius:3px;color:${partial?'var(--amber)':'var(--tx2)'}"
             onchange="histSetPct('${sv.villa_id}','${escH(act.activity_code)}',this.value)"

@@ -906,7 +906,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="form-row" style="margin-bottom:0">
           <label>% to reverse now</label>
           <div style="display:flex;align-items:center;gap:8px">
-            <input id="ov-rev-pct" type="number" min="0" max="100" step="1" value="100" style="width:90px">
+            <input id="ov-rev-pct" type="number" min="0" max="100" step="0.01" value="100" style="width:90px">
             <span style="font-size:12px;color:var(--tx2)">% &nbsp;·&nbsp; posts as a negative deduction this PC</span>
           </div>
         </div>
@@ -917,7 +917,7 @@ textarea{resize:vertical;min-height:60px}
         <div class="form-row" style="margin-bottom:8px">
           <label>% paid for this WIR (to date)</label>
           <div style="display:flex;align-items:center;gap:8px">
-            <input id="ov-pct" type="number" min="0" max="100" step="1" value="50" style="width:90px" oninput="onOvPctInput()">
+            <input id="ov-pct" type="number" min="0" max="100" step="0.01" value="50" style="width:90px" oninput="onOvPctInput()">
             <span style="font-size:12px;color:var(--tx2)">% &nbsp;·&nbsp; <span id="ov-pct-hint">—</span></span>
           </div>
         </div>
@@ -1024,7 +1024,7 @@ textarea{resize:vertical;min-height:60px}
 </div>
 
 
-<script src="qs.js?v=29"></script>
+<script src="qs.js?v=30"></script>
 
 </body>
 </html>
