@@ -479,6 +479,10 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
         <span class="nl">WIR Viewer</span>
       </div>
+      <div class="nav perm-gate" id="nav-wir_submittal" data-label="WIR Submittal" data-perm="raise_wir|dc_mechanical|dc_electrical" onclick="go('wir_submittal')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9z"/></svg></span>
+        <span class="nl">WIR Submittal</span>
+      </div>
       <div class="nav perm-gate" id="nav-ncr_sor" data-label="NCR / SOR Tracker" data-perm="view_ncr" onclick="go('ncr_sor')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
         <span class="nl">NCR / SOR</span>
@@ -637,6 +641,7 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-notification_rules" title="Notifications"></iframe>
       <iframe id="frame-user_management"   title="User Management"></iframe>
       <iframe id="frame-audit_log"          title="Audit Log"></iframe>
+      <iframe id="frame-wir_submittal"      title="WIR Submittal"></iframe>
       <iframe id="frame-ncr_sor"            title="NCR / SOR Tracker"></iframe>
       <iframe id="frame-qs"                 title="QS Payment Certificates"></iframe>
       <iframe id="frame-obs"               title="OBS Labour Tracker"></iframe>
@@ -676,7 +681,7 @@ let allowedWorkspaces = [];     // workspace keys this user may enter (live only
 const PAGE_WS = {
   ncr_sor:['mep'], target_list:['mep'],
   obs:['mep'], obs_config:['mep'], qs:['mep'], progress_entry:['mep'],
-  clearance_release:['mep'],
+  clearance_release:['mep'], wir_submittal:['mep'],
   // Dashboard + Cluster Tracker + Keyplans are shared — they scope their KPIs/grid/overlay to the
   // active workspace (Civil shows civil-only totals; its Cluster Tracker starts empty until configured).
 };
@@ -693,6 +698,7 @@ const PAGES = {
   dashboard:         { title:'Dashboard',            desc:'Project overview & live stats',          file:'dashboard.html',          built:true },
   cluster_tracker:   { title:'Cluster Tracker',      desc:'WIR & progress by villa',                file:'cluster_tracker.html',    built:true },
   wir_viewer:        { title:'WIR Viewer',           desc:'All WIRs — filter by date, status, cluster, revision', file:'wir_viewer.html', built:true },
+  wir_submittal:     { title:'WIR Submittal',        desc:'Raise WIRs to the DC (Telegram + tracking)', file:'wir_submittal.html', built:true },
   target_list:       { title:'Weekly Target List',   desc:'Weekly villa targets & WIR status',      file:'target_list.html',        built:true },
   clearance_viewer:  { title:'Clearance Viewer',     desc:'Clearance status by villa & activity',   file:'clearance_viewer.html',   built:true },
   clearance_release: { title:'Release Requests',     desc:'Clearance release & rejection workflow', file:'clearance_release.html',  built:true },

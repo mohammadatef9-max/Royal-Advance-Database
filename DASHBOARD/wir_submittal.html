@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<script src="shared.js?v=3"></script>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>WIR Submittal</title>
+<style>
+:root{
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --green:#6ee2a3;--green-bg:rgba(110,226,163,.12);--green-bd:rgba(110,226,163,.3);
+  --amber:#f4c95a;--amber-bg:rgba(244,201,90,.12);--amber-bd:rgba(244,201,90,.3);
+  --red:#ff8a99;--red-bg:rgba(255,138,153,.12);--red-bd:rgba(255,138,153,.3);
+  --font:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",monospace;
+}
+[data-theme="light"]{
+  --bg:#f5f6f8;--bg-elev:#fff;--bg-panel:#fff;--bg-input:#fff;--bg-hover:#f0f3f7;
+  --border:#e3e7ee;--border-strong:#cdd4de;
+  --text:#1e293b;--text-muted:#64748b;--text-dim:#94a3b8;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,.08);--accent-text:#1d4ed8;
+  --green:#16a34a;--green-bg:rgba(22,163,74,.08);--green-bd:rgba(22,163,74,.25);
+  --amber:#d97706;--amber-bg:rgba(217,119,6,.08);--amber-bd:rgba(217,119,6,.25);
+  --red:#dc2626;--red-bg:rgba(220,38,38,.08);--red-bd:rgba(220,38,38,.25);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px}
+.wrap{max-width:1080px;margin:0 auto;padding:16px}
+h1{font-size:18px;font-weight:800;margin:0 0 2px}
+.sub{color:var(--text-dim);font-size:12px;margin-bottom:14px}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:8px 14px;cursor:pointer;border-radius:8px 8px 0 0;font-weight:600;color:var(--text-muted);border:1px solid transparent;border-bottom:none}
+.tab.active{color:var(--text);background:var(--bg-elev);border-color:var(--border)}
+.tab .cnt{display:inline-block;min-width:18px;text-align:center;background:var(--accent);color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:6px}
+.card{background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;padding:16px}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.fld{flex:1;min-width:160px}
+label{display:block;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+input,select{width:100%;padding:8px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;color:var(--text);font:inherit}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+.btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text);font:inherit;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--bg-hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.green{background:var(--green-bg);border-color:var(--green-bd);color:var(--green)}
+.btn.red{background:var(--red-bg);border-color:var(--red-bd);color:var(--red)}
+.btn.amber{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:12px}
+.gate{border-radius:8px;padding:9px 12px;font-size:12px;margin-top:8px;display:flex;align-items:flex-start;gap:8px}
+.gate.ok{background:var(--green-bg);border:1px solid var(--green-bd);color:var(--green)}
+.gate.bad{background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red)}
+.gate.warn{background:var(--amber-bg);border:1px solid var(--amber-bd);color:var(--amber)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:8px 10px;color:var(--text-muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+td{padding:8px 10px;border-bottom:1px solid var(--border)}
+tr:hover td{background:var(--bg-hover)}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.pill.pending{background:var(--amber-bg);color:var(--amber)}
+.pill.info_requested{background:var(--accent-soft);color:var(--accent-text)}
+.pill.submitted{background:var(--green-bg);color:var(--green)}
+.pill.rejected{background:var(--red-bg);color:var(--red)}
+.pill.recalled{background:var(--bg-panel);color:var(--text-dim)}
+.pill.failed{background:var(--red-bg);color:var(--red)}
+.mono{font-family:var(--mono)}
+.muted{color:var(--text-dim)}
+.empty{padding:30px;text-align:center;color:var(--text-dim)}
+.hidden{display:none!important}
+.msg{padding:10px 12px;border-radius:8px;font-size:12px;margin-top:10px}
+.msg.err{background:var(--red-bg);border:1px solid var(--red-bd);color:var(--red)}
+.msg.ok{background:var(--green-bg);border:1px solid var(--green-bd);color:var(--green)}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.thumbs a{display:block}
+.thumbs img{width:44px;height:44px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>WIR Submittal</h1>
+  <div class="sub">Raise a WIR to the DC — the request is routed to the discipline's DC on Telegram and here. WIR approval status still comes from the daily DC-log import.</div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" id="tab-raise" onclick="showTab('raise')">Raise WIR</div>
+    <div class="tab" id="tab-mine" onclick="showTab('mine')">My Submittals</div>
+    <div class="tab" id="tab-inc" onclick="showTab('inc')">Incoming (DC) <span class="cnt hidden" id="inc-cnt">0</span></div>
+  </div>
+
+  <!-- RAISE -->
+  <div id="pane-raise">
+    <div class="card">
+      <div class="row">
+        <div class="fld" style="max-width:120px"><label>Cluster</label>
+          <select id="r-cluster" onchange="onVillaChange()"></select></div>
+        <div class="fld" style="max-width:140px"><label>Villa No</label>
+          <input id="r-villa" type="number" min="1" placeholder="e.g. 406" oninput="onVillaChange()"></div>
+        <div class="fld"><label>Activity</label>
+          <select id="r-activity" onchange="onActivityChange()"><option value="">Select activity…</option></select></div>
+      </div>
+      <div class="row">
+        <div class="fld"><label>Subcontractor <span class="muted" style="text-transform:none">(prefilled — editable)</span></label>
+          <input id="r-sub" placeholder="Subcontractor name"></div>
+        <div class="fld"><label>Photos / Docs <span class="muted" style="text-transform:none">(optional)</span></label>
+          <input id="r-photos" type="file" accept="image/*,application/pdf" multiple></div>
+      </div>
+      <div id="gate-box"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button class="btn primary" id="r-btn" onclick="raiseWir()" disabled>Raise WIR</button>
+        <span id="r-hint" class="muted"></span>
+      </div>
+      <div id="r-msg"></div>
+    </div>
+  </div>
+
+  <!-- MY SUBMITTALS -->
+  <div id="pane-mine" class="hidden">
+    <div class="card" style="padding:0;overflow:auto">
+      <table><thead><tr>
+        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>Status</th><th></th>
+      </tr></thead><tbody id="mine-body"><tr><td colspan="6" class="empty"><span class="spin"></span></td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- INCOMING (DC) -->
+  <div id="pane-inc" class="hidden">
+    <div class="card" style="padding:0;overflow:auto">
+      <table><thead><tr>
+        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>By</th><th>Photos</th><th>Status</th><th>Actions</th>
+      </tr></thead><tbody id="inc-body"><tr><td colspan="8" class="empty"><span class="spin"></span></td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+// SB and KEY from shared.js
+function getH(){
+  var t=window.__MEP_TOKEN__;
+  if(!t){try{var s=localStorage.getItem('mep_session');if(s){var j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)t=j.access_token;}}catch(e){}}
+  return{'apikey':KEY,'Content-Type':'application/json','Authorization':'Bearer '+(t||KEY),'Prefer':'count=none'};
+}
+function hasAuthToken(){ if(window.__MEP_TOKEN__)return true; try{const s=localStorage.getItem('mep_session');if(s){const j=JSON.parse(s);if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000)return true;}}catch(e){} return false; }
+async function fa(path){ const r=await fetch(`${SB}/rest/v1/${path}`,{headers:getH()}); const d=await r.json().catch(()=>[]); return Array.isArray(d)?d:[]; }
+async function fp(path,body){ if(!hasAuthToken())throw new Error('Session not ready — refresh and sign in.'); const r=await fetch(`${SB}/rest/v1/${path}`,{method:'POST',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>null); if(!r.ok)throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText)); return d; }
+async function fpatch(path,body){ if(!hasAuthToken())throw new Error('Session not ready — refresh and sign in.'); const r=await fetch(`${SB}/rest/v1/${path}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>null); if(!r.ok)throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText)); return d; }
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtDate(s){ if(!s)return '—'; const d=new Date(s); if(isNaN(d))return esc(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+
+// ── STATE ──
+let me=null, perms=[], canRaise=false, dcMech=false, dcElec=false, isDC=false, isAdmin=false;
+let myDisc=[];              // ['mechanical','electrical'] for a DC user
+let clusterCode={}, villas=[], villaByKey={};
+let acts=[], actByCode={};
+let prereqs={};            // activity_code -> [prereq_activity_code]
+let villaWir=null, villaNcr=null, villaOpenSubs=null;   // cached for the selected villa
+let curTab='raise';
+
+async function init(){
+  me = window.__MEP_USER__ || {};
+  perms = me.permissions || [];
+  isAdmin = perms.includes('manage_users') && perms.includes('manage_system');
+  canRaise = isAdmin || perms.includes('raise_wir');
+  dcMech = perms.includes('dc_mechanical');
+  dcElec = perms.includes('dc_electrical');
+  isDC = dcMech || dcElec || isAdmin;
+  myDisc = isAdmin ? ['mechanical','electrical'] : [].concat(dcMech?['mechanical']:[], dcElec?['electrical']:[]);
+
+  // tab visibility
+  document.getElementById('tab-raise').classList.toggle('hidden', !canRaise);
+  document.getElementById('tab-mine').classList.toggle('hidden', !canRaise);
+  document.getElementById('tab-inc').classList.toggle('hidden', !isDC);
+
+  // reference data
+  const [cl, vl, ac, pq] = await Promise.all([
+    fa('clusters?select=id,code&order=id'),
+    faAll('villas?select=id,villa_no,cluster_id&is_active=eq.true&order=id'),
+    fa('activities?select=activity_code,activity_name,discipline&is_active=eq.true&discipline=in.(mechanical,electrical)&order=activity_code'),
+    fa('wir_prerequisites?select=activity_code,prereq_activity_code'),
+  ]);
+  cl.forEach(c=>clusterCode[c.id]=c.code);
+  villas=vl; vl.forEach(v=>{ villaByKey[(clusterCode[v.cluster_id]||'')+'_'+v.villa_no]=v; });
+  acts=ac; ac.forEach(a=>actByCode[a.activity_code]=a);
+  pq.forEach(p=>{ (prereqs[p.activity_code]=prereqs[p.activity_code]||[]).push(p.prereq_activity_code); });
+
+  // populate cluster + activity selects (clear first so a re-init doesn't duplicate)
+  const cs=document.getElementById('r-cluster'); cs.innerHTML='';
+  ['C1','C2','C3','C4','C5','C6','C7'].forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; cs.appendChild(o); });
+  const asl=document.getElementById('r-activity'); asl.innerHTML='<option value="">Select activity…</option>';
+  acts.forEach(a=>{ const o=document.createElement('option'); o.value=a.activity_code; o.textContent=a.activity_code+' — '+(a.activity_name||''); asl.appendChild(o); });
+
+  // land on a sensible tab
+  showTab(canRaise ? 'raise' : 'inc');
+  if(canRaise) loadMine();
+  if(isDC) loadIncoming();
+}
+// paged fetch for villas (>1000)
+async function faAll(path){ let out=[],off=0; while(true){ const r=await fa(`${path}&limit=1000&offset=${off}`); out=out.concat(r); if(r.length<1000)break; off+=1000; } return out; }
+
+function showTab(t){
+  curTab=t;
+  ['raise','mine','inc'].forEach(k=>{ document.getElementById('tab-'+k).classList.toggle('active',k===t); document.getElementById('pane-'+k).classList.toggle('hidden',k!==t); });
+  if(t==='mine') loadMine();
+  if(t==='inc') loadIncoming();
+}
+
+// ── RAISE: villa selection loads that villa's WIR / NCR / open-submittal context ──
+async function onVillaChange(){
+  const v=resolveVilla();
+  document.getElementById('gate-box').innerHTML='';
+  document.getElementById('r-sub').value='';
+  villaWir=villaNcr=villaOpenSubs=null;
+  setRaise(false,'');
+  if(!v){ if(document.getElementById('r-villa').value) setHint('Villa not found in this cluster.'); return; }
+  setHint('<span class="spin"></span> loading villa context…');
+  try{
+    const [w,n,s]=await Promise.all([
+      fa(`v_latest_wir_status?villa_id=eq.${v.id}&select=raw_activity_code,normalised_status,raw_subcontractor,discipline&order=id`),
+      fa(`ncr_sor_records?villa_id=eq.${v.id}&select=activity_code,status&is_active=eq.true&status=neq.closed`),
+      fa(`wir_submittals?villa_id=eq.${v.id}&select=activity_code,status&status=in.(pending,info_requested,submitted)`),
+    ]);
+    villaWir=w; villaNcr=n; villaOpenSubs=s;
+  }catch(e){ setHint('Could not load villa context: '+e.message); return; }
+  setHint('');
+  onActivityChange();
+}
+function resolveVilla(){ const c=document.getElementById('r-cluster').value; const no=document.getElementById('r-villa').value; if(!c||!no)return null; return villaByKey[c+'_'+no]||null; }
+
+// latest WIR status for an activity code on the selected villa
+function latestStatus(code){ if(!villaWir)return null; const rows=villaWir.filter(r=>String(r.raw_activity_code).trim()===code); return rows.length?rows[rows.length-1].normalised_status:null; }
+
+function onActivityChange(){
+  const box=document.getElementById('gate-box');
+  const v=resolveVilla(); const code=document.getElementById('r-activity').value;
+  if(!v||!code){ box.innerHTML=''; setRaise(false,''); return; }
+  if(!villaWir){ onVillaChange(); return; }
+  const act=actByCode[code]||{};
+  // prefill subcontractor from the latest WIR for this villa+activity, else any WIR for the villa
+  const subEl=document.getElementById('r-sub');
+  if(!subEl.value){
+    const exact=(villaWir.filter(r=>String(r.raw_activity_code).trim()===code).slice(-1)[0]||{}).raw_subcontractor;
+    const anyw=(villaWir.slice(-1)[0]||{}).raw_subcontractor;
+    subEl.value=exact||anyw||'';
+  }
+  // ── gates ──
+  const issues=[]; let ok=true;
+  // 1) prerequisites
+  const reqs=prereqs[code]||[];
+  const missing=reqs.filter(pc=>latestStatus(pc)!=='approved');
+  if(missing.length){ ok=false; issues.push(`<b>Prerequisite not approved:</b> ${missing.map(m=>esc(m)+(actByCode[m]?' ('+esc(actByCode[m].activity_name)+')':'')).join(', ')} — must be approved first.`); }
+  // 2) open NCR on the same activity
+  const ncr=(villaNcr||[]).filter(r=>String(r.activity_code||'').trim()===code);
+  if(ncr.length){ ok=false; issues.push(`<b>Open NCR on this activity</b> — resolve it before raising.`); }
+  // 3) duplicate / already approved
+  if(latestStatus(code)==='approved'){ ok=false; issues.push(`This WIR is already <b>approved</b> for this villa — no need to raise.`); }
+  const openSub=(villaOpenSubs||[]).find(r=>String(r.activity_code||'').trim()===code);
+  if(openSub){ ok=false; issues.push(`A submittal for this villa+activity is already <b>${esc(openSub.status)}</b>.`); }
+
+  if(ok){
+    box.innerHTML=`<div class="gate ok">✓ Ready to raise — prerequisites clear, no blocking NCR.</div>`;
+  }else{
+    box.innerHTML=issues.map(i=>`<div class="gate bad">⛔ ${i}</div>`).join('');
+  }
+  setRaise(ok,'');
+}
+function setRaise(on,msg){ const b=document.getElementById('r-btn'); b.disabled=!on; if(msg)document.getElementById('r-msg').innerHTML=msg; }
+function setHint(h){ document.getElementById('r-hint').innerHTML=h; }
+
+async function raiseWir(){
+  const v=resolveVilla(); const code=document.getElementById('r-activity').value;
+  const act=actByCode[code]||{}; const sub=document.getElementById('r-sub').value.trim();
+  const msg=document.getElementById('r-msg');
+  if(!v||!code){ return; }
+  const btn=document.getElementById('r-btn'); btn.disabled=true; btn.textContent='Raising…';
+  try{
+    // upload photos (optional)
+    let photos=[];
+    const files=document.getElementById('r-photos').files;
+    for(let i=0;i<files.length;i++){
+      const f=files[i]; const path=`${v.id}/${Date.now()}_${i}_${f.name.replace(/[^\w.\-]/g,'_')}`;
+      const up=await fetch(`${SB}/storage/v1/object/wir-photos/${path}`,{method:'POST',headers:{apikey:KEY,'Authorization':getH().Authorization},body:f});
+      if(up.ok) photos.push(`${SB}/storage/v1/object/public/wir-photos/${path}`);
+    }
+    const body={
+      villa_id:v.id, villa_no:v.villa_no, cluster:clusterCode[v.cluster_id]||'',
+      activity_code:code, activity_name:act.activity_name||'', discipline:act.discipline||'',
+      subcontractor_name:sub||null, raised_by:me.id||null, raised_by_name:me.full_name||me.email||'',
+      status:'pending', photos:photos
+    };
+    await fp('wir_submittals',body);
+    msg.className='msg ok'; msg.textContent=`✓ Raised — the ${act.discipline||''} DC has been notified.`;
+    // reset
+    document.getElementById('r-activity').value=''; document.getElementById('r-photos').value=''; document.getElementById('r-sub').value='';
+    document.getElementById('gate-box').innerHTML=''; villaOpenSubs=null;
+    onVillaChange();
+    loadMine();
+  }catch(e){ msg.className='msg err'; msg.textContent='Failed: '+e.message; }
+  btn.textContent='Raise WIR';
+}
+
+// ── MY SUBMITTALS ──
+async function loadMine(){
+  if(!canRaise) return;
+  const body=document.getElementById('mine-body');
+  try{
+    const rows=await fa(`wir_submittals?raised_by=eq.${me.id}&select=*&order=raised_at.desc&limit=200`);
+    if(!rows.length){ body.innerHTML=`<tr><td colspan="6" class="empty">No submittals yet.</td></tr>`; return; }
+    body.innerHTML=rows.map(r=>`<tr>
+      <td class="muted">${fmtDate(r.raised_at)}</td>
+      <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
+      <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
+      <td>${esc(r.subcontractor_name||'—')}</td>
+      <td>${statusPill(r)}</td>
+      <td>${r.status==='pending'?`<button class="btn sm red" onclick="recall(${r.id})">Recall</button>`:''}</td>
+    </tr>`).join('');
+  }catch(e){ body.innerHTML=`<tr><td colspan="6" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+}
+function statusPill(r){
+  const lbl={pending:'Pending DC',info_requested:'Docs Requested',submitted:'Submitted',rejected:'Rejected',recalled:'Recalled',failed:'Failed to submit'}[r.status]||r.status;
+  let extra='';
+  if(r.status==='rejected'&&r.reject_reason) extra=`<div class="muted" style="font-size:11px;margin-top:3px">${esc(r.reject_reason)}</div>`;
+  if(r.status==='info_requested'&&r.info_note) extra=`<div class="muted" style="font-size:11px;margin-top:3px">📎 ${esc(r.info_note)}</div>`;
+  return `<span class="pill ${r.status}">${lbl}</span>${extra}`;
+}
+async function recall(id){
+  if(!confirm('Recall this WIR submittal? Only possible while the DC hasn\'t actioned it.')) return;
+  try{ await fpatch(`wir_submittals?id=eq.${id}&status=eq.pending`,{status:'recalled',updated_at:new Date().toISOString()}); loadMine(); }
+  catch(e){ alert('Recall failed (the DC may have already actioned it): '+e.message); loadMine(); }
+}
+
+// ── INCOMING (DC) ──
+async function loadIncoming(){
+  if(!isDC) return;
+  const body=document.getElementById('inc-body');
+  const discF = myDisc.length? `&discipline=in.(${myDisc.join(',')})` : '';
+  try{
+    const rows=await fa(`wir_submittals?status=in.(pending,info_requested)${discF}&select=*&order=raised_at.asc&limit=300`);
+    const cnt=document.getElementById('inc-cnt');
+    cnt.textContent=rows.length; cnt.classList.toggle('hidden',!rows.length);
+    if(!rows.length){ body.innerHTML=`<tr><td colspan="8" class="empty">No pending submittals. 🎉</td></tr>`; return; }
+    body.innerHTML=rows.map(r=>{
+      const ph=(r.photos||[]).map(u=>`<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" onerror="this.replaceWith(document.createTextNode('📎'))"></a>`).join('');
+      return `<tr>
+        <td class="muted">${fmtDate(r.raised_at)}</td>
+        <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
+        <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
+        <td>${esc(r.subcontractor_name||'—')}</td>
+        <td class="muted">${esc(r.raised_by_name||'')}</td>
+        <td><div class="thumbs">${ph||'<span class="muted">—</span>'}</div></td>
+        <td>${statusPill(r)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn sm green" onclick="dcAction(${r.id},'submitted')">Submitted</button>
+          <button class="btn sm amber" onclick="dcAction(${r.id},'info_requested')">Docs</button>
+          <button class="btn sm red" onclick="dcAction(${r.id},'rejected')">Reject</button>
+        </td>
+      </tr>`;
+    }).join('');
+  }catch(e){ body.innerHTML=`<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+}
+async function dcAction(id,status){
+  const patch={ status, dc_actioned_by:me.id||null, dc_actioned_by_name:me.full_name||me.email||'', dc_actioned_at:new Date().toISOString(), updated_at:new Date().toISOString() };
+  if(status==='rejected'){ patch.reject_reason=(prompt('Reason for rejection (optional — leave blank if none):')||'').trim()||null; }
+  if(status==='info_requested'){ const note=(prompt('What additional documents / photos are needed?')||'').trim(); if(!note)return; patch.info_note=note; patch.status='info_requested'; }
+  try{ await fpatch(`wir_submittals?id=eq.${id}`,patch); loadIncoming(); }
+  catch(e){ alert('Action failed: '+e.message); }
+}
+
+// ── SESSION BRIDGE ──
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t||'dark');try{localStorage.setItem('mep_theme',t);}catch(e){}}
+var _initCalled=false;
+function _tryInit(){ if(_initCalled)return; if(window.self!==window.top && !window.__MEP_USER__)return; _initCalled=true; init(); }
+window.addEventListener('message',function(e){
+  if(!e.data||typeof e.data!=='object')return;
+  if(e.data.type==='theme')applyTheme(e.data.theme);
+  if(e.data.type==='session'){window.__MEP_TOKEN__=e.data.token;window.__MEP_USER__=e.data.user;_tryInit();}
+  if(e.data.type==='data_updated'){ if(curTab==='inc')loadIncoming(); if(curTab==='mine')loadMine(); }
+});
+try{ const s=localStorage.getItem('mep_theme'); if(s)applyTheme(s); }catch(e){}
+if(window.self!==window.top){
+  try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+  var _st=0,_poll=setInterval(function(){ if(_initCalled||window.__MEP_USER__){clearInterval(_poll);_tryInit();return;} if(++_st>=24){clearInterval(_poll);_initCalled=true;init();return;} try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){} },500);
+}else{_tryInit();}
+</script>
+</body>
+</html>
