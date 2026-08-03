@@ -1028,45 +1028,48 @@ function enterWorkspace(ws) {
   if (!currentPage || !pageInWorkspace(currentPage, ws)) go(workspaceLanding(ws));
 }
 
-// ── PRELOAD all iframes silently in background after login ──
-// Staggered so dashboard gets priority and network isn't hammered all at once
+// ── Silent background preload — SEQUENTIAL, one page at a time ──
+// Only the common, frequently-used pages preload. The heavy ones (7 keyplans) and the
+// occasional admin pages load on demand, so a slow site connection isn't spent downloading
+// pages nobody opens. Loading one-at-a-time means the pipe is never split — the page you
+// actually click always loads at full speed (it also pauses this queue while it loads).
+const PRELOAD_PAGES = ['cluster_tracker','wir_viewer','target_list','clearance_viewer','clearance_release','progress_entry'];
+let _preloadQueue = [];
+let _preloadBusy = false;   // a background preload is currently in flight
+let _userLoadBusy = false;  // a page the user clicked is loading → hold the preloader
+
 function preloadAllFrames() {
-  const order = [
-    'cluster_tracker',
-    'wir_viewer',
-    'target_list',
-    'clearance_viewer',
-    'clearance_release',
-    'progress_entry',
-    'csv_import_tool',
-    'reference_data',
-    'user_management',
-    'audit_log',
-    'keyplan_c1','keyplan_c2','keyplan_c3',
-    'keyplan_c4','keyplan_c5','keyplan_c6','keyplan_c7',
-  ];
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-
-  order.forEach((pageId, i) => {
-    const page = PAGES[pageId];
-    if (!page || !page.built || !page.file || loaded[pageId]) return;
-
-    setTimeout(() => {
-      if (loaded[pageId]) return; // already loaded if user navigated there first
-      const frame = document.getElementById('frame-' + pageId);
-      if (!frame) return;
-
-      loaded[pageId] = true;
-      frame.src = page.file;
-      frame.onload = () => {
-        // Push theme + session into silently preloaded iframe
-        try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
-        if (accessToken && currentUser) {
-          try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
-        }
-      };
-    }, 800 + (i * 400)); // stagger: 800ms, 1200ms, 1600ms... so dashboard loads first
+  _preloadQueue = PRELOAD_PAGES.filter(id => {
+    const page = PAGES[id];
+    if (!page || !page.built || !page.file || loaded[id]) return false;
+    if (activeWorkspace && !pageInWorkspace(id, activeWorkspace)) return false;   // wrong workspace
+    const nav = document.getElementById('nav-' + id);
+    if (nav && nav.classList.contains('perm-hidden')) return false;               // no access — don't waste the connection
+    return true;
   });
+  setTimeout(preloadNext, 1200);   // let the landing page (dashboard) grab the pipe first
+}
+
+function preloadNext() {
+  if (_preloadBusy || _userLoadBusy) return;   // busy — resumes when the current load finishes
+  let pageId;
+  while ((pageId = _preloadQueue.shift()) != null && loaded[pageId]) { /* skip ones already opened */ }
+  if (pageId == null) return;                  // queue drained
+  const page = PAGES[pageId];
+  const frame = document.getElementById('frame-' + pageId);
+  if (!page || !frame) return preloadNext();
+  _preloadBusy = true;
+  loaded[pageId] = true;
+  const done = () => { _preloadBusy = false; setTimeout(preloadNext, 250); };
+  frame.onload = () => {
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
+    if (accessToken && currentUser) { try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {} }
+    if (activeWorkspace) { try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {} }
+    done();
+  };
+  frame.onerror = done;
+  frame.src = page.file;
 }
 
 function formatRole(r) {
@@ -1167,11 +1170,15 @@ function go(pageId) {
   if (!frame) return;
   frame.classList.add('active');
   currentPage = pageId;
+  hideRefreshChip();
 
   if (!loaded[pageId]) {
-    // Not yet loaded — show loader and load it now (user navigated before preload finished)
+    // Not yet loaded — load it now. Hold the background preloader so the whole connection
+    // goes to the page the user actually asked for (matters most on slow site internet).
     loaded[pageId] = true;
+    _userLoadBusy = true;
     showLoader('Loading ' + page.title + '…');
+    const resume = () => { _userLoadBusy = false; setTimeout(preloadNext, 200); };
     frame.src = page.file;
     frame.onload = () => {
       hideLoader();
@@ -1180,34 +1187,58 @@ function go(pageId) {
       if (accessToken && currentUser) {
         try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
       }
+      if (activeWorkspace) { try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {} }
+      resume();
     };
     frame.onerror = () => {
       hideLoader();
       document.getElementById('page-hint').textContent = '⚠ Could not load ' + page.file;
-    };
-  } else if (staleFrames.has(pageId)) {
-    // Data changed while this page sat in the background — silently reload it now
-    staleFrames.delete(pageId);
-    showLoader('Refreshing ' + page.title + '…');
-    try {
-      const base = (frame.src || '').split('?')[0];
-      frame.src = (base || page.file) + '?_r=' + Date.now();
-    } catch(e) { try { frame.contentWindow.location.reload(); } catch(e2) {} }
-    frame.onload = () => {
-      hideLoader();
-      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-      try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
-      if (accessToken && currentUser) {
-        try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {}
-      }
-      if (activeWorkspace) {
-        try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {}
-      }
+      resume();
     };
   } else {
-    // Already preloaded — instant switch, no loader needed
+    // Already loaded → INSTANT switch, never block on a reload. If its data changed in the
+    // background and the page can't live-patch itself, show a one-tap refresh chip instead of
+    // auto-reloading — reloading a page you're just glancing at wastes a slow connection.
     hideLoader();
+    if (staleFrames.has(pageId)) showRefreshChip(pageId);
   }
+}
+
+// One-tap "new data" chip for a stale, non-live page — the user refreshes only if they want to.
+function showRefreshChip(pageId) {
+  let c = document.getElementById('refresh-chip');
+  if (!c) {
+    c = document.createElement('button');
+    c.id = 'refresh-chip';
+    c.onclick = doRefreshChip;
+    c.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:1200;padding:9px 15px;border-radius:999px;border:none;background:#2563eb;color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)';
+    document.body.appendChild(c);
+  }
+  c.textContent = '↻ New data — tap to refresh';
+  c.dataset.page = pageId;
+  c.style.display = '';
+}
+function hideRefreshChip() { const c = document.getElementById('refresh-chip'); if (c) c.style.display = 'none'; }
+function doRefreshChip() {
+  const c = document.getElementById('refresh-chip');
+  const pageId = c ? c.dataset.page : currentPage;
+  hideRefreshChip();
+  if (pageId !== currentPage) return;
+  const page = PAGES[pageId]; const frame = document.getElementById('frame-' + pageId);
+  if (!page || !frame) return;
+  staleFrames.delete(pageId);
+  showLoader('Refreshing ' + page.title + '…');
+  frame.onload = () => {
+    hideLoader();
+    const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+    try { frame.contentWindow.postMessage({ type: 'theme', theme }, FRAME_TGT); } catch(e) {}
+    if (accessToken && currentUser) { try { frame.contentWindow.postMessage({ type: 'session', token: accessToken, user: currentUser }, FRAME_TGT); } catch(e) {} }
+    if (activeWorkspace) { try { frame.contentWindow.postMessage({ type: 'workspace', workspace: activeWorkspace }, FRAME_TGT); } catch(e) {} }
+  };
+  try {
+    const base = (frame.src || '').split('?')[0];
+    frame.src = (base || page.file) + '?_r=' + Date.now();
+  } catch(e) { try { frame.contentWindow.location.reload(); } catch(e2) {} }
 }
 
 function showLoader(msg) {
@@ -1319,6 +1350,9 @@ function showUpdateBanner(dataType, uploadedBy) {
     if (!f.id || !f.src || f.id.indexOf('frame-') !== 0) return;
     try { f.contentWindow.postMessage({ type: 'data_updated', domain: dataType, uploadedBy: uploadedBy || '' }, FRAME_TGT); } catch(e) {}
   });
+  // If the page you're looking at right now can't live-patch and just went stale, offer the
+  // one-tap refresh chip immediately (rather than waiting until you navigate away and back).
+  if (typeof currentPage !== 'undefined' && currentPage && staleFrames.has(currentPage)) showRefreshChip(currentPage);
   if (dataType === 'wir' || dataType === 'clearance') {
     lastWirToast = Date.now();
     const t = document.getElementById('dv-toast');
