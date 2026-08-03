@@ -2561,6 +2561,17 @@ function renderCoverPage() {
   const box = (title, inner) => `<div style="border:1px solid #333;border-top:none">
     <div style="background:#e9edf3;font-weight:700;font-size:11px;padding:3px 8px;border-bottom:1px solid #333;text-transform:none">${title}</div>${inner}</div>`;
   const kv = (label, valHtml, w) => `<div style="display:flex;font-size:11px;padding:2px 8px;gap:6px"><div style="min-width:${w||'150px'};color:#333">${esc(label)}</div><div style="flex:1;font-weight:600">${valHtml}</div></div>`;
+  // one row of 3 signature cells (role label + name + date, all editable)
+  const sigDef = { pm:'Engr. Ravi Kumar', mep:'Engr. Marwan Maksoud' };
+  const sigRow = roles => `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px">
+    ${roles.map(([role,k],i)=>`
+      <div style="padding:8px 8px 18px;${i<2?'border-right:1px solid #ddd':''}">
+        <div style="font-weight:700;margin-bottom:24px">${ti(sig[k+'_role']!=null?sig[k+'_role']:role, "coverEditPC('sig."+k+"_role', this.value)", '100%', canMeta)}</div>
+        <div style="border-top:1px solid #333;padding-top:2px;color:#666">Signature</div>
+        <div style="margin-top:8px">Name: ${ti(sig[k+'_name']!=null?sig[k+'_name']:(sigDef[k]||''), "coverEditPC('sig."+k+"_name', this.value)", '140px', canMeta)}</div>
+        <div style="margin-top:6px">Date: ${ti(sig[k+'_date'], "coverEditPC('sig."+k+"_date', this.value)", '100px', canMeta)}</div>
+      </div>`).join('')}
+  </div>`;
 
   const vP=cf.variations||{}, clP=cf.claims||{}, apP=cf.adv_payment||{}, prP=cf.perf_ret||{}, plP=cf.perf_rel||{}, vmP=cf.vat_material||{}, vaP=cf.vat_adv_payment||{};
 
@@ -2585,20 +2596,20 @@ function renderCoverPage() {
     </div>
 
     ${box('Project Details',
-      `<div style="display:grid;grid-template-columns:1fr 1fr">
+      `<div>${kv('Project', ti(S.project, "coverEditSettings('project', this.value)", '100%', canMeta))}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1px solid #eee">
         <div style="border-right:1px solid #ddd">
-          ${kv('Project', ti(S.project, "coverEditSettings('project', this.value)", '100%', canMeta))}
           ${kv('Employer', ti(S.employer, "coverEditSettings('employer', this.value)", '100%', canMeta))}
           ${kv('Consultant', ti(S.consultant, "coverEditSettings('consultant', this.value)", '100%', canMeta))}
           ${kv('Contractor', ti(S.contractor, "coverEditSettings('contractor', this.value)", '100%', canMeta))}
           ${kv('Subcontractor', '<b>'+esc(selectedScope.subcontractor_name)+'</b>')}
-          ${kv('Scope of Works', esc(selectedScope.scope_title||''))}
         </div>
         <div>
-          ${kv('Main Contractor TRN', ti(S.main_trn, "coverEditSettings('main_trn', this.value)", '100%', canMeta), '170px')}
-          ${kv('Subcontractor TRN', ti(meta.sub_trn, "coverEditScope('sub_trn', this.value)", '100%', canMeta), '170px')}
+          ${kv('Main Contractor TRN', ti(S.main_trn, "coverEditSettings('main_trn', this.value)", '100%', canMeta), '150px')}
+          ${kv('Subcontractor TRN', ti(meta.sub_trn, "coverEditScope('sub_trn', this.value)", '100%', canMeta), '150px')}
         </div>
-      </div>`)}
+      </div>
+      <div style="border-top:1px solid #eee">${kv('Scope of Works', esc(selectedScope.scope_title||''))}</div>`)}
 
     ${box('Contract Details',
       `<div style="display:grid;grid-template-columns:1fr 1fr">
@@ -2665,16 +2676,8 @@ function renderCoverPage() {
         </tbody>
       </table>`)}
 
-    ${box('Certification',
-      `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px">
-        ${[['Project QS','qs'],['Project Manager','pm'],['MEP Project Director','mep']].map(([role,k],i)=>`
-          <div style="padding:8px 8px 18px;${i<2?'border-right:1px solid #ddd':''}">
-            <div style="font-weight:700;margin-bottom:24px">${ti(sig[k+'_role']!=null?sig[k+'_role']:role, "coverEditPC('sig.${k}_role', this.value)", '100%', canMeta)}</div>
-            <div style="border-top:1px solid #333;padding-top:2px;color:#666">Signature</div>
-            <div style="margin-top:8px">Name: ${ti(sig[k+'_name']!=null?sig[k+'_name']:(k==='pm'?'Engr. Ravi Kumar':k==='mep'?'Engr. Marwan Maksoud':''), "coverEditPC('sig.${k}_name', this.value)", '140px', canMeta)}</div>
-            <div style="margin-top:6px">Date: ${ti(sig[k+'_date'], "coverEditPC('sig.${k}_date', this.value)", '100px', canMeta)}</div>
-          </div>`).join('')}
-      </div>`)}
+    ${box('Site Management Certification', sigRow([['Project QS','qs'],['Project Manager','pm'],['MEP Project Director','mep']]))}
+    ${box('Head Office Certification', sigRow([['QS Manager','qsm'],['CEO-RA','ceo'],['Contracts & Claims Manager','ccm']]))}
   </div>`;
 }
 
