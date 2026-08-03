@@ -1463,9 +1463,9 @@ function buildProgressSheetHtml(sec) {
   let thActs = ''; // Sr/Villa/Type/Cluster are rowspan=2 in thGroups — no placeholder cells needed in row 2
   shGroups.forEach(grp => {
     const grpActs = shActs.filter(a => a.group_id === grp.id);
-    thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${(grp.group_weight*100).toFixed(0)}%)</th>`;
+    thGroups += `<th class="group-hdr" colspan="${grpActs.length}">${escH(grp.group_name)} (${pctNum(grp.group_weight)}%)</th>`;
     grpActs.forEach(act => {
-      const wLabel = act.use_fixed_rate ? 'FIXED' : (act.activity_weight*100).toFixed(0)+'%';
+      const wLabel = act.use_fixed_rate ? 'FIXED' : pctNum(act.activity_weight)+'%';
       thActs += `<th style="white-space:normal;min-width:70px;vertical-align:top;padding:7px 10px;text-align:center"><div style="font-size:12px;font-weight:600;color:var(--tx);line-height:1.3;margin-bottom:3px">${escH(act.activity_name)}${act.part_label?' <span style="color:var(--accent,#4f8cff)">('+escH(act.part_label)+')</span>':''}</div><div style="font-size:11px;font-weight:700;color:var(--tx2);white-space:nowrap">${escH(act.activity_code)}</div><div style="font-size:11px;color:var(--gold);margin-top:2px">${wLabel}</div></th>`;
     });
   });
@@ -2668,11 +2668,11 @@ function renderCoverPage() {
     ${box('Certification',
       `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px">
         ${[['Project QS','qs'],['Project Manager','pm'],['MEP Project Director','mep']].map(([role,k],i)=>`
-          <div style="padding:10px 10px 26px;${i<2?'border-right:1px solid #ddd':''}">
-            <div style="font-weight:700;margin-bottom:26px">${role}</div>
+          <div style="padding:8px 8px 18px;${i<2?'border-right:1px solid #ddd':''}">
+            <div style="font-weight:700;margin-bottom:24px">${ti(sig[k+'_role']!=null?sig[k+'_role']:role, "coverEditPC('sig.${k}_role', this.value)", '100%', canMeta)}</div>
             <div style="border-top:1px solid #333;padding-top:2px;color:#666">Signature</div>
-            <div style="margin-top:8px">Name: ${ti(sig[k+'_name']!=null?sig[k+'_name']:(k==='pm'?'Engr. Ravi Kumar':k==='mep'?'Engr. Marwan Maksoud':''), "coverEditPC('sig.${k}_name', this.value)", '150px', canMeta)}</div>
-            <div style="margin-top:6px">Date: ${ti(sig[k+'_date'], "coverEditPC('sig.${k}_date', this.value)", '110px', canMeta)}</div>
+            <div style="margin-top:8px">Name: ${ti(sig[k+'_name']!=null?sig[k+'_name']:(k==='pm'?'Engr. Ravi Kumar':k==='mep'?'Engr. Marwan Maksoud':''), "coverEditPC('sig.${k}_name', this.value)", '140px', canMeta)}</div>
+            <div style="margin-top:6px">Date: ${ti(sig[k+'_date'], "coverEditPC('sig.${k}_date', this.value)", '100px', canMeta)}</div>
           </div>`).join('')}
       </div>`)}
   </div>`;
@@ -2684,14 +2684,20 @@ function printCover() {
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Payment Certificate — ${escH(selectedScope.subcontractor_name||'')} PC${escH(selectedPC.pc_number||'')}</title>
     <style>
-      @page{size:A4 portrait;margin:12mm}
-      body{font-family:'Inter',Arial,sans-serif;color:#111;margin:0}
-      input{border:none!important;background:transparent!important;font:inherit;color:#111;padding:0}
-      input[type=date]::-webkit-calendar-picker-indicator{display:none}
-      table{border-collapse:collapse;width:100%}
+      @page{ size:A4 portrait; margin:7mm }
+      *{ box-sizing:border-box }
+      html,body{ margin:0; padding:0 }
+      body{ font-family:'Inter',Arial,sans-serif; color:#111; font-size:8pt; line-height:1.18 }
+      /* A4 printable width (210mm − 2×7mm) so the whole certificate fits one page */
+      #cover-doc{ width:196mm; border:1px solid #333 }
+      #cover-doc > div:first-child{ font-size:11.5pt; padding:4px }
+      input{ border:none!important; background:transparent!important; font:inherit; color:#111; padding:0 }
+      input[type=date]::-webkit-calendar-picker-indicator{ display:none }
+      table{ border-collapse:collapse; width:100% }
+      td,th{ padding:1.2px 6px!important }
     </style></head><body>${doc.outerHTML}</body></html>`);
   w.document.close();
-  setTimeout(()=>{ w.focus(); w.print(); }, 300);
+  setTimeout(()=>{ w.focus(); w.print(); }, 350);
 }
 
 // ══════════════════════════════════════════════
