@@ -119,6 +119,7 @@ tr:hover td{background:var(--bg-hover)}
 
   <!-- MY SUBMITTALS -->
   <div id="pane-mine" class="hidden">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" onclick="loadMine()">↻ Refresh</button></div>
     <div class="card" style="padding:0;overflow:auto">
       <table><thead><tr>
         <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>Status</th><th></th>
@@ -128,6 +129,7 @@ tr:hover td{background:var(--bg-hover)}
 
   <!-- INCOMING (DC) -->
   <div id="pane-inc" class="hidden">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" onclick="loadIncoming()">↻ Refresh</button></div>
     <div class="card" style="padding:0;overflow:auto">
       <table><thead><tr>
         <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>By</th><th>Photos</th><th>Status</th><th>Actions</th>
@@ -149,6 +151,8 @@ async function fp(path,body){ if(!hasAuthToken())throw new Error('Session not re
 async function fpatch(path,body){ if(!hasAuthToken())throw new Error('Session not ready — refresh and sign in.'); const r=await fetch(`${SB}/rest/v1/${path}`,{method:'PATCH',headers:{...getH(),'Prefer':'return=representation'},body:JSON.stringify(body)}); const d=await r.json().catch(()=>null); if(!r.ok)throw new Error('['+r.status+'] '+((d&&d.message)||r.statusText)); return d; }
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function fmtDate(s){ if(!s)return '—'; const d=new Date(s); if(isNaN(d))return esc(s); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+// stable identifier for the signed-in user (users.id, not the auth uuid)
+function uid(){ return me && me.id!=null ? String(me.id) : ((me&&me.email)||''); }
 
 // ── STATE ──
 let me=null, perms=[], canRaise=false, dcMech=false, dcElec=false, isDC=false, isAdmin=false;
@@ -287,7 +291,7 @@ async function raiseWir(){
     const body={
       villa_id:v.id, villa_no:v.villa_no, cluster:clusterCode[v.cluster_id]||'',
       activity_code:code, activity_name:act.activity_name||'', discipline:act.discipline||'',
-      subcontractor_name:sub||null, raised_by:me.id||null, raised_by_name:me.full_name||me.email||'',
+      subcontractor_name:sub||null, raised_by:uid()||null, raised_by_name:me.full_name||me.email||'',
       status:'pending', photos:photos
     };
     await fp('wir_submittals',body);
@@ -306,7 +310,7 @@ async function loadMine(){
   if(!canRaise) return;
   const body=document.getElementById('mine-body');
   try{
-    const rows=await fa(`wir_submittals?raised_by=eq.${me.id}&select=*&order=raised_at.desc&limit=200`);
+    const rows=await fa(`wir_submittals?raised_by=eq.${encodeURIComponent(uid())}&select=*&order=raised_at.desc&limit=200`);
     if(!rows.length){ body.innerHTML=`<tr><td colspan="6" class="empty">No submittals yet.</td></tr>`; return; }
     body.innerHTML=rows.map(r=>`<tr>
       <td class="muted">${fmtDate(r.raised_at)}</td>
@@ -361,7 +365,8 @@ async function loadIncoming(){
   }catch(e){ body.innerHTML=`<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`; }
 }
 async function dcAction(id,status){
-  const patch={ status, dc_actioned_by:me.id||null, dc_actioned_by_name:me.full_name||me.email||'', dc_actioned_at:new Date().toISOString(), updated_at:new Date().toISOString() };
+  if(!isDC){ alert('Only the DC can accept or reject WIR requests.'); return; }
+  const patch={ status, dc_actioned_by:uid()||null, dc_actioned_by_name:me.full_name||me.email||'', dc_actioned_at:new Date().toISOString(), updated_at:new Date().toISOString() };
   if(status==='rejected'){ patch.reject_reason=(prompt('Reason for rejection (optional — leave blank if none):')||'').trim()||null; }
   if(status==='info_requested'){ const note=(prompt('What additional documents / photos are needed?')||'').trim(); if(!note)return; patch.info_note=note; patch.status='info_requested'; }
   try{ await fpatch(`wir_submittals?id=eq.${id}`,patch); loadIncoming(); }
