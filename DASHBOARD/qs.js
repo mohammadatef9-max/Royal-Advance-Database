@@ -48,6 +48,9 @@ let allPCsGlobal = [];      // all PCs across all scopes (for dashboard)
 let allVOsGlobal = [];      // all VOs across all scopes (for dashboard)
 let lastGrossAed = 0;       // totTodAmt captured from last renderPaymentSummary() call
 let lockedBilledMissing = false; // locked PC has no billed records (legacy) → fall back to to-date view so the grid isn't blank
+let qsTab = 'progress';     // active QS tab: progress | summary | cover
+let certFin = null;         // certified figures captured by renderPaymentSummary for the Cover Page
+let qsSettings = {};        // project-wide cover-page constants (employer, consultant, TRN…)
 
 // cfg modal state
 let cfgVillaTypes = [];
@@ -198,7 +201,7 @@ async function loadScopes() {
   // Use explicit is_template filters in the query so the DB does the separation —
   // avoids any risk of templates leaking into the scope list if is_template is
   // ever returned as null/undefined by PostgREST (e.g. column visibility, old cache).
-  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template,is_variation,vo_ref,parent_scope_id,is_descoped,descoped_at';
+  const SCOPE_COLS = 'id,subcontractor_name,display_name,scope_title,sca_ref,package,project,contract_value_aed,retention_pct,advance_amount_aed,advance_recovery_pct,is_template,is_variation,vo_ref,parent_scope_id,is_descoped,descoped_at,cover_meta';
   const [realScopes, templates, pcs, vos, pcScopes] = await Promise.all([
     fa(`qs_scopes?select=${SCOPE_COLS}&is_template=eq.false&order=subcontractor_name.asc`),
     fa('qs_scopes?select=id,subcontractor_name,scope_title,is_template&is_template=eq.true&order=subcontractor_name.asc'),
@@ -1859,6 +1862,18 @@ function renderPaymentSummarySingle() {
     .reduce((a,v) => a + (parseFloat(v.value_aed)||0), 0);
   const adjustedContract = contractValue + approvedVOsTotal;
 
+  // Snapshot the certified figures for the Cover Page tab (same numbers, formal-certificate layout).
+  certFin = {
+    vr, retPct,
+    workPrev: totPrevAmt, workCur: totCurAmt, workTod: totTodAmt,
+    retPrev, retCur, retTod: ret,
+    advPrev, advCur, advTod: adv,
+    dedPrev: 0, dedCur: ded, dedTod: ded,
+    netPrev, netCur, netTod: net,
+    contractValue, adjustedContract, variationsTod: approvedVOsTotal
+  };
+  if (typeof renderCoverPage === 'function' && qsTab === 'cover') renderCoverPage();
+
   // Retention and advance recovery are already TO-DATE figures, not per-period ones:
   // both are computed from totTodAmt (cumulative gross), and that running total is what
   // gets stored on each PC at lock time. So "held to date" is simply the latest
@@ -2241,6 +2256,18 @@ function renderPaymentSummaryMulti() {
   const vatCur  = vatTod - vatPrev;
   const netCur  = netTod - netPrev;
 
+  // Snapshot the combined certified figures for the Cover Page tab.
+  certFin = {
+    vr, retPct: effRetPct,
+    workPrev: combPrev, workCur: combCur, workTod: combTod,
+    retPrev, retCur, retTod,
+    advPrev, advCur, advTod,
+    dedPrev: 0, dedCur: ded, dedTod: ded,
+    netPrev, netCur, netTod,
+    contractValue: origContract, adjustedContract, variationsTod: totalVariations
+  };
+  if (typeof renderCoverPage === 'function' && qsTab === 'cover') renderCoverPage();
+
   const isLocked = selectedPC.status === 'locked';
   const canEditFin = !isLocked || canAdmin;
   const canEditSigs = canManage || canAdmin;
@@ -2428,13 +2455,255 @@ function resetRetAuto() {
 }
 
 // ══════════════════════════════════════════════
+// COVER PAGE — formal Subcontractor's Payment Certificate
+// ══════════════════════════════════════════════
+async function loadQsSettings() {
+  try { const rows = await fa('qs_settings?id=eq.1&select=data'); qsSettings = Object.assign({}, (rows[0] && rows[0].data) || {}, { _loaded:true }); }
+  catch(e) { qsSettings = { _loaded:true }; }
+}
+async function coverEditSettings(key, val) {
+  qsSettings[key] = val;
+  const data = Object.assign({}, qsSettings); delete data._loaded;
+  try { await fpatch('qs_settings?id=eq.1', { data, updated_at:new Date().toISOString() }); } catch(e){ console.warn('cover settings save', e.message); }
+}
+async function coverEditScope(key, val) {
+  const m = Object.assign({}, selectedScope.cover_meta||{}); m[key] = val;
+  selectedScope.cover_meta = m;
+  const sc = allScopes.find(s => s.id === selectedScope.id); if (sc) sc.cover_meta = m;
+  try { await fpatch(`qs_scopes?id=eq.${selectedScope.id}`, { cover_meta:m }); } catch(e){ console.warn('cover scope save', e.message); }
+}
+async function coverEditPC(path, val, rerender) {
+  const cd = JSON.parse(JSON.stringify(selectedPC.cover_data || {}));
+  const parts = path.split('.'); let o = cd;
+  for (let i=0;i<parts.length-1;i++){ if (typeof o[parts[i]] !== 'object' || o[parts[i]]==null) o[parts[i]] = {}; o = o[parts[i]]; }
+  o[parts[parts.length-1]] = val;
+  selectedPC.cover_data = cd;
+  const cached = (allScopePCs||[]).find(p => p.id === selectedPC.id); if (cached) cached.cover_data = cd;
+  try { await fpatch(`qs_payment_certificates?id=eq.${selectedPC.id}`, { cover_data:cd }); } catch(e){ console.warn('cover pc save', e.message); }
+  if (rerender) renderCoverPage();
+}
+
+function renderCoverPage() {
+  const host = document.getElementById('cover-inner');
+  if (!host) return;
+  if (!selectedScope || !selectedPC) { host.innerHTML = '<div style="padding:24px;color:var(--tx3)">Open a payment certificate to see its cover page.</div>'; return; }
+  if (!qsSettings || !qsSettings._loaded) { host.innerHTML = '<div class="loading-row"><span class="spin"></span></div>'; loadQsSettings().then(renderCoverPage); return; }
+  if (!certFin) { renderPaymentSummary(); }   // populates certFin
+  const S = qsSettings, meta = selectedScope.cover_meta || {}, cd = selectedPC.cover_data || {}, cf = cd.fin || {}, sig = cd.sig || {};
+  const fin = certFin || {}, vr = fin.vr || 0.05, retPct = fin.retPct || 0;
+  const ret5 = Math.abs(retPct - 0.05) <= Math.abs(retPct - 0.10);
+  const locked = selectedPC.status === 'locked';
+  const canMeta = (canManage || canAdmin);
+  const canFin  = (canManage || canAdmin) && (!locked || canAdmin);
+
+  const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const fnum = n => Math.abs(Math.round((n||0)*100)/100).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const cfmt = n => { n = Math.round((n||0)*100)/100; return Math.abs(n) < 0.005 ? '-' : (n<0 ? '('+fnum(n)+')' : fnum(n)); };
+  // editable extra line → signed {p,c,m}; sign −1 for deduction lines
+  const ed = (key, sign) => { const o = cf[key]||{}; const p = num(o.p)*(sign||1), c = num(o.c)*(sign||1); return { p, c, m:p+c, key, sign:sign||1, rawP:num(o.p), rawC:num(o.c) }; };
+  const au = (p,c,m) => ({ p:p||0, c:c||0, m:(m!=null?m:(p||0)+(c||0)) });
+
+  // ── financial lines (signed contributions) ──
+  const L = {
+    work:    au(fin.workPrev, fin.workCur, fin.workTod),
+    varia:   ed('variations'),
+    claims:  ed('claims'),
+    advPay:  ed('adv_payment'),
+    advRec:  au(-fin.advPrev, -fin.advCur, -fin.advTod),
+    ret5:    ret5  ? au(-fin.retPrev,-fin.retCur,-fin.retTod) : au(0,0,0),
+    ret10:   !ret5 ? au(-fin.retPrev,-fin.retCur,-fin.retTod) : au(0,0,0),
+    perfRet: ed('perf_ret', -1),
+    perfRel: ed('perf_rel'),
+    otherDed:au(-fin.dedPrev, -fin.dedCur, -fin.dedTod),
+    vatWork: au(0,0,0),   // set below from Sub-total 1 so it covers work + variations + claims
+    vatMat:  ed('vat_material'),
+    vatAdvP: ed('vat_adv_payment'),
+    vatAdvR: au(-fin.advPrev*vr, -fin.advCur*vr, -fin.advTod*vr),
+    vatRet:  au(-fin.retPrev*vr, -fin.retCur*vr, -fin.retTod*vr),
+    vatDed:  au(-fin.dedPrev*vr, -fin.dedCur*vr, -fin.dedTod*vr),
+  };
+  const st1 = k => L.work[k] + L.varia[k] + L.claims[k];
+  L.vatWork = { p: st1('p')*vr, c: st1('c')*vr, m: st1('m')*vr };   // VAT on all work done (incl. variations)
+  const st2 = k => L.advPay[k] + L.advRec[k] + L.ret5[k] + L.ret10[k] + L.perfRet[k] + L.perfRel[k] + L.otherDed[k];
+  const st3 = k => st1(k) + st2(k);
+  const st5 = k => L.vatWork[k] + L.vatMat[k] + L.vatAdvP[k] + L.vatAdvR[k] + L.vatRet[k] + L.vatDed[k];
+  const net = k => st3(k) + st5(k);
+
+  // ── field input helpers ──
+  const esc = s => escH(s==null?'':String(s));
+  const ti = (val, oc, w, en) => `<input value="${esc(val)}" ${en===false?'disabled':''} onchange="${oc}" style="border:none;border-bottom:1px dotted #b7b7b7;background:transparent;font:inherit;color:inherit;width:${w||'100%'};padding:1px 2px;box-sizing:border-box">`;
+  const di = (val, oc, en) => `<input type="date" value="${esc(val)}" ${en===false?'disabled':''} onchange="${oc}" style="border:none;border-bottom:1px dotted #b7b7b7;background:transparent;font:inherit;color:inherit;padding:1px 2px">`;
+  // numeric input for an editable cert cell (raw magnitude)
+  const ni = (raw, path) => `<input type="number" step="0.01" value="${raw?raw:''}" ${canFin?'':'disabled'} onchange="coverEditPC('${path}', this.value, true)" style="border:1px solid #d0d0d0;background:#fffef2;font:inherit;text-align:right;width:78px;padding:1px 3px;box-sizing:border-box">`;
+
+  const appDate = cd.application_date || '';
+  const terms = cd.payment_terms_days != null ? cd.payment_terms_days : 30;
+  const period = selectedPC.period_date || '';
+  const dueDate = (appDate && terms) ? (()=>{ const d=new Date(appDate); if(isNaN(d))return ''; d.setDate(d.getDate()+Number(terms)); return d.toISOString().slice(0,10); })() : '';
+
+  // row for the certification table: label, prev, cur, cum cells (cells are strings)
+  const R = (lbl, pCell, cCell, mCell, opt) => {
+    opt = opt || {};
+    const lblStyle = opt.bold ? 'font-weight:700' : '';
+    const pad = opt.indent ? 'padding-left:22px' : '';
+    return `<tr style="${opt.total?'background:#f3f4f6;font-weight:700':''}">
+      <td style="padding:3px 8px;${lblStyle};${pad}">${opt.tag?`<span style="display:inline-block;width:52px;color:#666">${opt.tag}</span>`:''}${esc(lbl)}</td>
+      <td style="text-align:right;padding:3px 8px;border-left:1px solid #e2e2e2">${pCell}</td>
+      <td style="text-align:right;padding:3px 8px;border-left:1px solid #e2e2e2">${cCell}</td>
+      <td style="text-align:right;padding:3px 8px;border-left:1px solid #e2e2e2">${mCell}</td>
+    </tr>`;
+  };
+  // auto money cell
+  const A = (line,k) => cfmt(line[k]);
+  // editable money cells (prev, cur) + computed cum
+  const edCells = (line, key) => [ ni(line.rawP, 'fin.'+key+'.p'), ni(line.rawC, 'fin.'+key+'.c'), cfmt(line.m) ];
+
+  const box = (title, inner) => `<div style="border:1px solid #333;border-top:none">
+    <div style="background:#e9edf3;font-weight:700;font-size:11px;padding:3px 8px;border-bottom:1px solid #333;text-transform:none">${title}</div>${inner}</div>`;
+  const kv = (label, valHtml, w) => `<div style="display:flex;font-size:11px;padding:2px 8px;gap:6px"><div style="min-width:${w||'150px'};color:#333">${esc(label)}</div><div style="flex:1;font-weight:600">${valHtml}</div></div>`;
+
+  const vP=cf.variations||{}, clP=cf.claims||{}, apP=cf.adv_payment||{}, prP=cf.perf_ret||{}, plP=cf.perf_rel||{}, vmP=cf.vat_material||{}, vaP=cf.vat_adv_payment||{};
+
+  host.innerHTML = `
+  <div class="cov-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:10px">
+    <button class="btn btn-primary btn-sm" onclick="printCover()">🖨 Print Certificate</button>
+    ${locked?'<span style="font-size:11px;color:var(--amber);align-self:center">🔒 Locked — figures frozen</span>':''}
+  </div>
+  <div id="cover-doc" style="background:#fff;color:#111;border:1px solid #333;font-family:'Inter',Arial,sans-serif;font-size:11px;line-height:1.35">
+    <div style="text-align:center;font-weight:800;font-size:14px;letter-spacing:.02em;padding:8px;border-bottom:1px solid #333">SUBCONTRACTOR'S PAYMENT CERTIFICATE</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr">
+      <div style="border-right:1px solid #333">
+        ${box('Certificate Details', kv('Certificate No.', '<b>'+esc(selectedPC.pc_number)+'</b>') + kv('Certificate Type', ti(cd.certificate_type||'Interim Payment', "coverEditPC('certificate_type', this.value)", '160px', canMeta)))}
+      </div>
+      <div>
+        ${box('Period', kv('For Period Ending', period ? esc(period) : '—', '190px')
+          + kv('Application / Invoice Date', di(appDate, "coverEditPC('application_date', this.value, true)", canMeta), '190px')
+          + kv('Payment Terms (days)', ti(terms, "coverEditPC('payment_terms_days', this.value, true)", '60px', canMeta), '190px')
+          + kv('Payment due on or before', dueDate ? esc(dueDate) : '—', '190px'))}
+      </div>
+    </div>
+
+    ${box('Project Details',
+      `<div style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="border-right:1px solid #ddd">
+          ${kv('Project', ti(S.project, "coverEditSettings('project', this.value)", '100%', canMeta))}
+          ${kv('Employer', ti(S.employer, "coverEditSettings('employer', this.value)", '100%', canMeta))}
+          ${kv('Consultant', ti(S.consultant, "coverEditSettings('consultant', this.value)", '100%', canMeta))}
+          ${kv('Contractor', ti(S.contractor, "coverEditSettings('contractor', this.value)", '100%', canMeta))}
+          ${kv('Subcontractor', '<b>'+esc(selectedScope.subcontractor_name)+'</b>')}
+          ${kv('Scope of Works', esc(selectedScope.scope_title||''))}
+        </div>
+        <div>
+          ${kv('Main Contractor TRN', ti(S.main_trn, "coverEditSettings('main_trn', this.value)", '100%', canMeta), '170px')}
+          ${kv('Subcontractor TRN', ti(meta.sub_trn, "coverEditScope('sub_trn', this.value)", '100%', canMeta), '170px')}
+        </div>
+      </div>`)}
+
+    ${box('Contract Details',
+      `<div style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="border-right:1px solid #ddd">
+          ${kv('SCA Reference', esc(selectedScope.sca_ref||''))}
+          ${kv('Buildsmart P.O', ti(meta.po, "coverEditScope('po', this.value)", '100%', canMeta))}
+          ${kv('Candy Activity / Cost Code', ti(meta.cost_code, "coverEditScope('cost_code', this.value)", '100%', canMeta))}
+          ${kv('Contract Price (AED)', '<b>'+fnum(fin.contractValue)+'</b> (Excl. VAT)')}
+          ${kv('Variations & Claims (AED)', fnum(num(fin.variationsTod)))}
+          ${kv('Revised Contract Price (AED)', '<b>'+fnum(num(fin.contractValue)+num(fin.variationsTod))+'</b> (Excl. VAT)')}
+        </div>
+        <div>
+          ${kv('Contract Type', ti(meta.contract_type||'Remeasurable', "coverEditScope('contract_type', this.value)", '160px', canMeta), '160px')}
+          ${kv('Commencement date', di(meta.commencement, "coverEditScope('commencement', this.value)", canMeta), '160px')}
+          ${kv('Time for completion', ti(meta.time_completion, "coverEditScope('time_completion', this.value)", '160px', canMeta), '160px')}
+          ${kv('Original Completion date', ti(meta.orig_completion||'As per Program', "coverEditScope('orig_completion', this.value)", '160px', canMeta), '160px')}
+          ${kv('Extension of Time', ti(meta.eot||'0', "coverEditScope('eot', this.value)", '90px', canMeta), '160px')}
+          ${kv('Revised Completion Date', di(meta.rev_completion, "coverEditScope('rev_completion', this.value)", canMeta), '160px')}
+        </div>
+      </div>`)}
+
+    ${box('Bonds & Guarantees',
+      `<div style="display:grid;grid-template-columns:1fr 1fr">
+        <div style="border-right:1px solid #ddd">
+          ${kv('Performance Guarantee (AED)', ti(meta.perf_guarantee, "coverEditScope('perf_guarantee', this.value)", '120px', canMeta))}
+          ${kv('Advance Payment Guarantee (AED)', ti(meta.adv_guarantee, "coverEditScope('adv_guarantee', this.value)", '120px', canMeta))}
+        </div>
+        <div>
+          ${kv('Expiry Date', di(meta.perf_expiry, "coverEditScope('perf_expiry', this.value)", canMeta), '110px')}
+          ${kv('Expiry Date', di(meta.adv_expiry, "coverEditScope('adv_expiry', this.value)", canMeta), '110px')}
+        </div>
+      </div>`)}
+
+    ${box('Payment Certification Details',
+      `<table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#eef1f5">
+          <th style="text-align:left;padding:4px 8px">&nbsp;</th>
+          <th style="text-align:right;padding:4px 8px;border-left:1px solid #ccc;width:110px">Previous<br><span style="font-weight:400;color:#666">AED</span></th>
+          <th style="text-align:right;padding:4px 8px;border-left:1px solid #ccc;width:110px">Current<br><span style="font-weight:400;color:#666">AED</span></th>
+          <th style="text-align:right;padding:4px 8px;border-left:1px solid #ccc;width:110px">Cumulative<br><span style="font-weight:400;color:#666">AED</span></th>
+        </tr></thead>
+        <tbody>
+          ${R('1. Cumulative value of work done (BOQ items)', A(L.work,'p'), A(L.work,'c'), A(L.work,'m'))}
+          ${R('2. Variations [including Dayworks]', ...edCells(L.varia,'variations'))}
+          ${R('3. Claims', ...edCells(L.claims,'claims'))}
+          ${R('Total Cumulative Value of Work Done (1+2+3)', cfmt(st1('p')), cfmt(st1('c')), cfmt(st1('m')), {bold:true,tag:'Sub-total 1'})}
+          ${R('Advance Payment', ...edCells(L.advPay,'adv_payment'), {indent:true,tag:'Add'})}
+          ${R('Advance Payment - recovery', A(L.advRec,'p'), A(L.advRec,'c'), A(L.advRec,'m'), {indent:true,tag:'Deduct'})}
+          ${R('Retention money - 5 %', A(L.ret5,'p'), A(L.ret5,'c'), A(L.ret5,'m'), {indent:true,tag:'Deduct'})}
+          ${R('Retention money - 10 %', A(L.ret10,'p'), A(L.ret10,'c'), A(L.ret10,'m'), {indent:true,tag:'Deduct'})}
+          ${R('Performance sec. Retention - 10 %', ...edCells(L.perfRet,'perf_ret'), {indent:true,tag:'Deduct'})}
+          ${R('Release of Performance Sec. Retention', ...edCells(L.perfRel,'perf_rel'), {indent:true,tag:'Add'})}
+          ${R('Other Deduction / Contra Charges', A(L.otherDed,'p'), A(L.otherDed,'c'), A(L.otherDed,'m'), {indent:true,tag:'Deduct'})}
+          ${R('Sub-total 2 (Deductions)', cfmt(st2('p')), cfmt(st2('c')), cfmt(st2('m')), {bold:true,tag:'Sub-total 2'})}
+          ${R('Sub-total 3 (before VAT)', cfmt(st3('p')), cfmt(st3('c')), cfmt(st3('m')), {bold:true,tag:'Sub-total 3'})}
+          ${R('5% VAT on Work Done', A(L.vatWork,'p'), A(L.vatWork,'c'), A(L.vatWork,'m'), {indent:true,tag:'Add'})}
+          ${R('5% VAT on Material on Site', ...edCells(L.vatMat,'vat_material'), {indent:true,tag:'Adjust'})}
+          ${R('5% VAT on Advance Payment', ...edCells(L.vatAdvP,'vat_adv_payment'), {indent:true})}
+          ${R('5% VAT on Advance Recovery', A(L.vatAdvR,'p'), A(L.vatAdvR,'c'), A(L.vatAdvR,'m'), {indent:true})}
+          ${R('5% VAT on Retention', A(L.vatRet,'p'), A(L.vatRet,'c'), A(L.vatRet,'m'), {indent:true})}
+          ${R('5% VAT on Deduction / Contra Charges', A(L.vatDed,'p'), A(L.vatDed,'c'), A(L.vatDed,'m'), {indent:true})}
+          ${R('Sub-total 5 (VAT Applicable)', cfmt(st5('p')), cfmt(st5('c')), cfmt(st5('m')), {bold:true,tag:'Sub-total 5'})}
+          ${R('NET AMOUNT CERTIFIED FOR PAYMENT (INCL. VAT)', cfmt(net('p')), cfmt(net('c')), cfmt(net('m')), {total:true})}
+        </tbody>
+      </table>`)}
+
+    ${box('Certification',
+      `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;font-size:11px">
+        ${[['Project QS','qs'],['Project Manager','pm'],['MEP Project Director','mep']].map(([role,k],i)=>`
+          <div style="padding:10px 10px 26px;${i<2?'border-right:1px solid #ddd':''}">
+            <div style="font-weight:700;margin-bottom:26px">${role}</div>
+            <div style="border-top:1px solid #333;padding-top:2px;color:#666">Signature</div>
+            <div style="margin-top:8px">Name: ${ti(sig[k+'_name']!=null?sig[k+'_name']:(k==='pm'?'Engr. Ravi Kumar':k==='mep'?'Engr. Marwan Maksoud':''), "coverEditPC('sig.${k}_name', this.value)", '150px', canMeta)}</div>
+            <div style="margin-top:6px">Date: ${ti(sig[k+'_date'], "coverEditPC('sig.${k}_date', this.value)", '110px', canMeta)}</div>
+          </div>`).join('')}
+      </div>`)}
+  </div>`;
+}
+
+function printCover() {
+  const doc = document.getElementById('cover-doc');
+  if (!doc) return;
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Payment Certificate — ${escH(selectedScope.subcontractor_name||'')} PC${escH(selectedPC.pc_number||'')}</title>
+    <style>
+      @page{size:A4 portrait;margin:12mm}
+      body{font-family:'Inter',Arial,sans-serif;color:#111;margin:0}
+      input{border:none!important;background:transparent!important;font:inherit;color:#111;padding:0}
+      input[type=date]::-webkit-calendar-picker-indicator{display:none}
+      table{border-collapse:collapse;width:100%}
+    </style></head><body>${doc.outerHTML}</body></html>`);
+  w.document.close();
+  setTimeout(()=>{ w.focus(); w.print(); }, 300);
+}
+
+// ══════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════
 function switchTab(t) {
+  qsTab = t;
   document.querySelectorAll('.qs-tab').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.qs-tab-content').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-'+t).classList.add('active');
-  document.getElementById('tc-'+t).classList.add('active');
+  const tab = document.getElementById('tab-'+t); if (tab) tab.classList.add('active');
+  const tc  = document.getElementById('tc-'+t);  if (tc)  tc.classList.add('active');
+  if (t === 'cover') renderCoverPage();
 }
 function showTab(t) { switchTab(t); }
 
