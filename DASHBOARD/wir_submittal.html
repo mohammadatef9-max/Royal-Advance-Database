@@ -119,11 +119,20 @@ tr:hover td{background:var(--bg-hover)}
 
   <!-- MY SUBMITTALS -->
   <div id="pane-mine" class="hidden">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" onclick="loadMine()">↻ Refresh</button></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <select id="mine-scope" style="width:auto;display:none" onchange="mineScope=this.value;loadMine()">
+        <option value="mine">My submittals</option><option value="all">Everyone</option>
+      </select>
+      <select id="mine-date" style="width:auto" onchange="mineDate=this.value;loadMine()">
+        <option value="all">All time</option><option value="today">Today</option><option value="7">Last 7 days</option>
+      </select>
+      <div style="flex:1"></div>
+      <button class="btn sm" onclick="loadMine()">↻ Refresh</button>
+    </div>
     <div class="card" style="padding:0;overflow:auto">
       <table><thead><tr>
-        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>Status</th><th></th>
-      </tr></thead><tbody id="mine-body"><tr><td colspan="6" class="empty"><span class="spin"></span></td></tr></tbody></table>
+        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th id="mine-by-h" style="display:none">By</th><th>Status</th><th></th>
+      </tr></thead><tbody id="mine-body"><tr><td colspan="7" class="empty"><span class="spin"></span></td></tr></tbody></table>
     </div>
   </div>
 
@@ -155,8 +164,9 @@ function fmtDate(s){ if(!s)return '—'; const d=new Date(s); if(isNaN(d))return
 function uid(){ return me && me.id!=null ? String(me.id) : ((me&&me.email)||''); }
 
 // ── STATE ──
-let me=null, perms=[], canRaise=false, dcMech=false, dcElec=false, isDC=false, isAdmin=false;
+let me=null, perms=[], canRaise=false, dcMech=false, dcElec=false, isDC=false, isAdmin=false, canViewAll=false;
 let myDisc=[];              // ['mechanical','electrical'] for a DC user
+let mineScope='mine', mineDate='all', mineRows=[];
 let clusterCode={}, villas=[], villaByKey={};
 let acts=[], actByCode={};
 let prereqs={};            // activity_code -> [prereq_activity_code]
@@ -171,12 +181,18 @@ async function init(){
   dcMech = perms.includes('dc_mechanical');
   dcElec = perms.includes('dc_electrical');
   isDC = dcMech || dcElec || isAdmin;
+  canViewAll = isAdmin || perms.includes('view_all_submittals');
   myDisc = isAdmin ? ['mechanical','electrical'] : [].concat(dcMech?['mechanical']:[], dcElec?['electrical']:[]);
+  if(canViewAll) mineScope='all';   // managers default to seeing everyone
 
-  // tab visibility
+  // tab visibility — the "Submittals" list is shown to raisers AND managers
   document.getElementById('tab-raise').classList.toggle('hidden', !canRaise);
-  document.getElementById('tab-mine').classList.toggle('hidden', !canRaise);
+  document.getElementById('tab-mine').classList.toggle('hidden', !(canRaise||canViewAll));
+  document.getElementById('tab-mine').textContent = canViewAll ? 'Submittals' : 'My Submittals';
   document.getElementById('tab-inc').classList.toggle('hidden', !isDC);
+  // scope toggle only for managers
+  const st=document.getElementById('mine-scope'); if(st) st.style.display=canViewAll?'':'none';
+  if(st) st.value=mineScope;
 
   // reference data
   const [cl, vl, ac, pq] = await Promise.all([
@@ -295,32 +311,63 @@ async function raiseWir(){
       status:'pending', photos:photos
     };
     await fp('wir_submittals',body);
-    msg.className='msg ok'; msg.textContent=`✓ Raised — the ${act.discipline||''} DC has been notified.`;
-    // reset
+    // reset the form cleanly so the just-raised (now pending) cell doesn't re-show as a block
     document.getElementById('r-activity').value=''; document.getElementById('r-photos').value=''; document.getElementById('r-sub').value='';
-    document.getElementById('gate-box').innerHTML=''; villaOpenSubs=null;
-    onVillaChange();
-    loadMine();
+    document.getElementById('gate-box').innerHTML=''; document.getElementById('r-btn').disabled=true;
+    villaWir=villaNcr=villaOpenSubs=null;
+    msg.className='msg ok'; msg.textContent=`✓ Raised — the ${act.discipline||''} DC has been notified. See it under My Submittals.`;
+    loadMine(); showTab('mine');
   }catch(e){ msg.className='msg err'; msg.textContent='Failed: '+e.message; }
   btn.textContent='Raise WIR';
 }
 
 // ── MY SUBMITTALS ──
 async function loadMine(){
-  if(!canRaise) return;
+  if(!(canRaise||canViewAll)) return;
   const body=document.getElementById('mine-body');
+  const showBy = (mineScope==='all' && canViewAll);
+  document.getElementById('mine-by-h').style.display = showBy?'':'none';
+  let q='wir_submittals?select=*&order=raised_at.desc&limit=400';
+  if(!showBy) q+=`&raised_by=eq.${encodeURIComponent(uid())}`;   // only mine
+  if(mineDate==='today'){ const d=new Date(); d.setHours(0,0,0,0); q+=`&raised_at=gte.${d.toISOString()}`; }
+  else if(mineDate==='7'){ const d=new Date(Date.now()-7*864e5); q+=`&raised_at=gte.${d.toISOString()}`; }
   try{
-    const rows=await fa(`wir_submittals?raised_by=eq.${encodeURIComponent(uid())}&select=*&order=raised_at.desc&limit=200`);
-    if(!rows.length){ body.innerHTML=`<tr><td colspan="6" class="empty">No submittals yet.</td></tr>`; return; }
-    body.innerHTML=rows.map(r=>`<tr>
-      <td class="muted">${fmtDate(r.raised_at)}</td>
-      <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
-      <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
-      <td>${esc(r.subcontractor_name||'—')}</td>
-      <td>${statusPill(r)}</td>
-      <td>${r.status==='pending'?`<button class="btn sm red" onclick="recall(${r.id})">Recall</button>`:''}</td>
-    </tr>`).join('');
-  }catch(e){ body.innerHTML=`<tr><td colspan="6" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+    const rows=await fa(q); mineRows=rows;
+    const cols = showBy?7:6;
+    if(!rows.length){ body.innerHTML=`<tr><td colspan="${cols}" class="empty">No submittals.</td></tr>`; return; }
+    body.innerHTML=rows.map(r=>{
+      const mine = String(r.raised_by)===uid();
+      let act='';
+      if(mine && (r.status==='pending'||r.status==='info_requested')) act+=`<button class="btn sm red" onclick="recall(${r.id})">Recall</button> `;
+      if(mine && r.status==='info_requested') act+=`<button class="btn sm amber" onclick="attachDocs(${r.id})">Add Docs</button>`;
+      return `<tr>
+        <td class="muted">${fmtDate(r.raised_at)}</td>
+        <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
+        <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
+        <td>${esc(r.subcontractor_name||'—')}</td>
+        ${showBy?`<td class="muted">${esc(r.raised_by_name||'')}</td>`:''}
+        <td>${statusPill(r)}</td>
+        <td style="white-space:nowrap">${act}</td>
+      </tr>`;
+    }).join('');
+  }catch(e){ body.innerHTML=`<tr><td colspan="7" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+}
+// Raiser attaches additional documents when the DC requested them → back to Pending.
+function attachDocs(id){
+  const sub=mineRows.find(r=>r.id===id); if(!sub)return;
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*,application/pdf'; inp.multiple=true;
+  inp.onchange=async()=>{
+    if(!inp.files.length)return;
+    let photos=(sub.photos||[]).slice();
+    try{
+      for(let i=0;i<inp.files.length;i++){ const f=inp.files[i]; const path=`${sub.villa_id}/${Date.now()}_${i}_${f.name.replace(/[^\w.\-]/g,'_')}`;
+        const up=await fetch(`${SB}/storage/v1/object/wir-photos/${path}`,{method:'POST',headers:{apikey:KEY,'Authorization':getH().Authorization},body:f});
+        if(up.ok) photos.push(`${SB}/storage/v1/object/public/wir-photos/${path}`); }
+      await fpatch(`wir_submittals?id=eq.${id}`,{photos,status:'pending',info_note:null,updated_at:new Date().toISOString()});
+      loadMine();
+    }catch(e){ alert('Could not attach documents: '+e.message); }
+  };
+  inp.click();
 }
 function statusPill(r){
   const lbl={pending:'Pending DC',info_requested:'Docs Requested',submitted:'Submitted',rejected:'Rejected',recalled:'Recalled',failed:'Failed to submit'}[r.status]||r.status;
@@ -330,9 +377,9 @@ function statusPill(r){
   return `<span class="pill ${r.status}">${lbl}</span>${extra}`;
 }
 async function recall(id){
-  if(!confirm('Recall this WIR submittal? Only possible while the DC hasn\'t actioned it.')) return;
-  try{ await fpatch(`wir_submittals?id=eq.${id}&status=eq.pending`,{status:'recalled',updated_at:new Date().toISOString()}); loadMine(); }
-  catch(e){ alert('Recall failed (the DC may have already actioned it): '+e.message); loadMine(); }
+  if(!confirm('Recall this WIR submittal?')) return;
+  try{ await fpatch(`wir_submittals?id=eq.${id}&status=in.(pending,info_requested)`,{status:'recalled',updated_at:new Date().toISOString()}); loadMine(); }
+  catch(e){ alert('Recall failed (the DC may have already submitted it): '+e.message); loadMine(); }
 }
 
 // ── INCOMING (DC) ──
