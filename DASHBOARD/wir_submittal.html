@@ -171,6 +171,7 @@ let clusterCode={}, villas=[], villaByKey={};
 let acts=[], actByCode={};
 let prereqs={};            // activity_code -> [prereq_activity_code]
 let villaWir=null, villaNcr=null, villaOpenSubs=null;   // cached for the selected villa
+let villaProgSub=null;     // activity_id -> subcontractor, from the villa's site-progress entries
 let curTab='raise';
 
 async function init(){
@@ -198,7 +199,7 @@ async function init(){
   const [cl, vl, ac, pq] = await Promise.all([
     fa('clusters?select=id,code&order=id'),
     faAll('villas?select=id,villa_no,cluster_id&is_active=eq.true&order=id'),
-    fa('activities?select=activity_code,activity_name,discipline&is_active=eq.true&discipline=in.(mechanical,electrical)&order=activity_code'),
+    fa('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true&discipline=in.(mechanical,electrical)&order=activity_code'),
     fa('wir_prerequisites?select=activity_code,prereq_activity_code'),
   ]);
   cl.forEach(c=>clusterCode[c.id]=c.code);
@@ -232,17 +233,20 @@ async function onVillaChange(){
   const v=resolveVilla();
   document.getElementById('gate-box').innerHTML='';
   document.getElementById('r-sub').value='';
-  villaWir=villaNcr=villaOpenSubs=null;
+  villaWir=villaNcr=villaOpenSubs=villaProgSub=null;
   setRaise(false,'');
   if(!v){ if(document.getElementById('r-villa').value) setHint('Villa not found in this cluster.'); return; }
   setHint('<span class="spin"></span> loading villa context…');
   try{
-    const [w,n,s]=await Promise.all([
+    const [w,n,s,p]=await Promise.all([
       fa(`v_latest_wir_status?villa_id=eq.${v.id}&select=raw_activity_code,normalised_status,raw_subcontractor,discipline&order=id`),
       fa(`ncr_sor_records?villa_id=eq.${v.id}&select=activity_code,status&is_active=eq.true&status=neq.closed`),
       fa(`wir_submittals?villa_id=eq.${v.id}&select=activity_code,status&status=in.(pending,info_requested,submitted)`),
+      fa(`progress_updates?villa_id=eq.${v.id}&select=activity_id,subcontractor&is_current=eq.true&is_deleted=eq.false`),
     ]);
     villaWir=w; villaNcr=n; villaOpenSubs=s;
+    // Subcontractor comes from what site progress recorded for this villa+activity.
+    villaProgSub={}; (p||[]).forEach(r=>{ if(r.subcontractor) villaProgSub[r.activity_id]=r.subcontractor; });
   }catch(e){ setHint('Could not load villa context: '+e.message); return; }
   setHint('');
   onActivityChange();
@@ -258,13 +262,10 @@ function onActivityChange(){
   if(!v||!code){ box.innerHTML=''; setRaise(false,''); return; }
   if(!villaWir){ onVillaChange(); return; }
   const act=actByCode[code]||{};
-  // prefill subcontractor from the latest WIR for this villa+activity, else any WIR for the villa
+  // Prefill subcontractor from site progress for this exact villa+activity only.
+  // No fallback guess — if progress has no subcontractor recorded, leave it blank.
   const subEl=document.getElementById('r-sub');
-  if(!subEl.value){
-    const exact=(villaWir.filter(r=>String(r.raw_activity_code).trim()===code).slice(-1)[0]||{}).raw_subcontractor;
-    const anyw=(villaWir.slice(-1)[0]||{}).raw_subcontractor;
-    subEl.value=exact||anyw||'';
-  }
+  subEl.value=(act.id && villaProgSub) ? (villaProgSub[act.id]||'') : '';
   // ── gates ──
   const issues=[]; let ok=true;
   // 1) prerequisites
