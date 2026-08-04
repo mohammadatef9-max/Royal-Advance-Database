@@ -1863,9 +1863,12 @@ function renderPaymentSummarySingle() {
   const adjustedContract = contractValue + approvedVOsTotal;
 
   // Snapshot the certified figures for the Cover Page tab (same numbers, formal-certificate layout).
+  // A PC billed on a VO scope belongs on the certificate's "Variations" line, not under BOQ items.
+  const soloVO = !!selectedScope.is_variation;
   certFin = {
     vr, retPct,
-    workPrev: totPrevAmt, workCur: totCurAmt, workTod: totTodAmt,
+    workPrev: soloVO?0:totPrevAmt, workCur: soloVO?0:totCurAmt, workTod: soloVO?0:totTodAmt,
+    voPrev:   soloVO?totPrevAmt:0, voCur:   soloVO?totCurAmt:0, voTod:   soloVO?totTodAmt:0,
     retPrev, retCur, retTod: ret,
     advPrev, advCur, advTod: adv,
     dedPrev: 0, dedCur: ded, dedTod: ded,
@@ -2257,9 +2260,15 @@ function renderPaymentSummaryMulti() {
   const netCur  = netTod - netPrev;
 
   // Snapshot the combined certified figures for the Cover Page tab.
+  // Billed work is split base vs VO: on the certificate, a VO's value belongs on the
+  // "Variations" line, not under "Cumulative value of work done (BOQ items)".
+  const baseSecs = sections.filter(s => !s.scope.is_variation);
+  const voSecs   = sections.filter(s =>  s.scope.is_variation);
+  const sumBy = (arr,k) => arr.reduce((a,s)=>a+s[k],0);
   certFin = {
     vr, retPct: effRetPct,
-    workPrev: combPrev, workCur: combCur, workTod: combTod,
+    workPrev: sumBy(baseSecs,'subPrev'), workCur: sumBy(baseSecs,'subCur'), workTod: sumBy(baseSecs,'subTod'),
+    voPrev:   sumBy(voSecs,'subPrev'),   voCur:   sumBy(voSecs,'subCur'),   voTod:   sumBy(voSecs,'subTod'),
     retPrev, retCur, retTod,
     advPrev, advCur, advTod,
     dedPrev: 0, dedCur: ded, dedTod: ded,
@@ -2504,9 +2513,13 @@ function renderCoverPage() {
   const au = (p,c,m) => ({ p:p||0, c:c||0, m:(m!=null?m:(p||0)+(c||0)) });
 
   // ── financial lines (signed contributions) ──
+  // Variations line = billed VO scopes (automatic) + any manually keyed variation amount.
+  const voAuto = au(fin.voPrev, fin.voCur, fin.voTod);
+  const voMan  = ed('variations');
+  const hasVO  = Math.abs(voAuto.m) > 0.005;
   const L = {
     work:    au(fin.workPrev, fin.workCur, fin.workTod),
-    varia:   ed('variations'),
+    varia:   hasVO ? au(voAuto.p+voMan.p, voAuto.c+voMan.c, voAuto.m+voMan.m) : voMan,
     claims:  ed('claims'),
     advPay:  ed('adv_payment'),
     advRec:  au(-fin.advPrev, -fin.advCur, -fin.advTod),
@@ -2653,7 +2666,12 @@ function renderCoverPage() {
         </tr></thead>
         <tbody>
           ${R('1. Cumulative value of work done (BOQ items)', A(L.work,'p'), A(L.work,'c'), A(L.work,'m'))}
-          ${R('2. Variations [including Dayworks]', ...edCells(L.varia,'variations'))}
+          ${hasVO
+            ? R('2. Variations [including Dayworks]', A(L.varia,'p'), A(L.varia,'c'), A(L.varia,'m'))
+              + (Math.abs(voMan.m) > 0.005
+                  ? R('of which manually entered', ...edCells(voMan,'variations'), {indent:true})
+                  : '')
+            : R('2. Variations [including Dayworks]', ...edCells(L.varia,'variations'))}
           ${R('3. Claims', ...edCells(L.claims,'claims'))}
           ${R('Total Cumulative Value of Work Done (1+2+3)', cfmt(st1('p')), cfmt(st1('c')), cfmt(st1('m')), {bold:true,tag:'Sub-total 1'})}
           ${R('Advance Payment', ...edCells(L.advPay,'adv_payment'), {indent:true,tag:'Add'})}
