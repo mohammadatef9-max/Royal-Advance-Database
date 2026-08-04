@@ -425,15 +425,21 @@ body.in-shell{height:100vh;display:flex;flex-direction:column}
         </div>
         <div style="text-align:center;font-size:18px;color:var(--text-muted);margin:8px 0">↓ requires</div>
         <div class="form-group">
-          <label class="form-label">WIR Activity (must be Approved first)</label>
-          <select class="form-select" id="map-wir-sel" onchange="updateMapPreview()"><option value="">— Select WIR —</option></select>
+          <label class="form-label">WIR Activities (must be Approved first)</label>
+          <input class="form-input" id="map-wir-search" placeholder="Filter WIR code or name…" oninput="renderWirPicker()" style="margin-bottom:6px">
+          <div id="map-wir-list" style="max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-panel);padding:4px"></div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+            <b id="map-wir-count">0</b> selected — tick every WIR this clearance needs.
+            <a href="#" onclick="clearMapSel('wir');return false" style="color:var(--accent-text);margin-left:6px">clear</a>
+          </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Villa Type (optional)</label>
-          <select class="form-select" id="map-vtype-sel" onchange="updateMapPreview()">
-            <option value="">All Villa Types (default)</option><option value="3A">3A</option><option value="3D">3D</option><option value="4A">4A</option><option value="4B">4B</option><option value="4C">4C</option><option value="5A">5A</option><option value="5AA">5AA</option><option value="5B">5B</option><option value="5C">5C</option><option value="6B">6B</option><option value="6C">6C</option><option value="A3">A3</option><option value="A4">A4</option><option value="A5">A5</option><option value="AC">AC</option><option value="B4">B4</option><option value="B5">B5</option><option value="B6">B6</option><option value="C4">C4</option><option value="C5">C5</option><option value="C6">C6</option><option value="D3">D3</option><option value="D4">D4</option><option value="T3">T3</option>
-          </select>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">Leave as "All Villa Types" to apply to every villa. Select a type to restrict this WIR requirement to specific villas only.</div>
+          <label class="form-label">Villa Types (optional)</label>
+          <div id="map-vtype-list" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px">
+            Tick none to apply to <b>every</b> villa type, or pick the specific types this applies to.
+            <a href="#" onclick="clearMapSel('vt');return false" style="color:var(--accent-text);margin-left:6px">clear</a>
+          </div>
         </div>
         <div id="map-preview" style="background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text-muted);margin-bottom:14px;min-height:48px">Select a clearance and WIR to preview the mapping.</div>
         <div id="map-alert" style="margin-bottom:8px"></div>
@@ -1426,12 +1432,14 @@ async function loadMap() {
     if (!Object.keys(wirAllMap).length) {
       const w = await fetchAll('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true&order=activity_code.asc');
       w.forEach(a => { wirAllMap[a.activity_code] = {id: a.id, name: a.activity_name, discipline: a.discipline}; });
-      // Populate selects
-      const ws = document.getElementById('map-wir-sel');
-      if (ws.options.length <= 1) {
-        w.forEach(a => { const o = document.createElement('option'); o.value = a.activity_code; o.textContent = `${a.activity_code} — ${a.activity_name}`; ws.appendChild(o); });
-        ws.addEventListener('change', updateMapPreview);
-      }
+    }
+    renderWirPicker();
+    // Villa types come from the villas table — the old hardcoded list had drifted
+    // (missing CA / Semi Detached / Live Work, still listing retired 3D, 5AA, D3, D4, T3).
+    if (!villaTypesAll.length) {
+      const vt = await fetchAll('villas?select=villa_type&is_active=eq.true');
+      villaTypesAll = [...new Set(vt.map(v => (v.villa_type||'').trim()).filter(Boolean))].sort();
+      renderVtypePicker();
     }
     if (!Object.keys(clrAllMap).length) {
       const cl = await fetchAll('clearance_activities?select=id,clearance_code,clearance_name,discipline&is_active=eq.true&order=clearance_code.asc');
@@ -1528,53 +1536,121 @@ function buildMapList() {
   }).join('');
 }
 
-function updateMapPreview() {
-  const clrCode = document.getElementById('map-clr-sel')?.value;
-  const wirCode = document.getElementById('map-wir-sel')?.value;
-  const prev = document.getElementById('map-preview');
-  if (!clrCode || !wirCode) { prev.innerHTML = 'Select a clearance and WIR to preview.'; prev.style.color = 'var(--text-muted)'; return; }
-  const clrName = clrAllMap[clrCode]?.name || clrCode;
-  const wirName = wirAllMap[wirCode]?.name || wirCode;
-  const wirDisc = wirAllMap[wirCode]?.discipline || 'mechanical';
-  const exists = mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode);
-  const vtPrev = document.getElementById('map-vtype-sel')?.value || null;
-  const existsForType = mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode && (m.villa_type||null) === vtPrev);
-  prev.style.color = 'var(--text)';
-  prev.innerHTML = `<div style="font-size:11px"><b style="color:var(--accent-text)">${clrCode}</b> ${clrName}<br>
-    <span style="color:var(--approved)">↳ requires WIR</span> <b style="color:var(--progress)">${wirCode}</b> ${wirName} to be Approved<br>
-    <span style="color:var(--text-dim)">Discipline: </span><span class="td-disc disc-${wirDisc}" style="font-size:9px;padding:1px 7px">${wirDisc}</span>
-    <span style="color:var(--text-dim);margin-left:8px">Applies to: </span><b style="color:var(--progress-text)">${vtPrev || 'ALL villa types'}</b></div>
-    ${existsForType ? '<div style="color:var(--rejected);margin-top:6px;font-size:10px">⚠ This exact mapping already exists.</div>' : ''}`;
+// ── multi-select state for the mapping form ──
+let mapWirSel = new Set();      // selected WIR activity codes
+let mapVtSel  = new Set();      // selected villa types (empty = all types)
+let villaTypesAll = [];         // loaded from the villas table, not hardcoded
+
+function renderWirPicker() {
+  const host = document.getElementById('map-wir-list');
+  if (!host) return;
+  const q = (document.getElementById('map-wir-search')?.value || '').toLowerCase().trim();
+  const codes = Object.keys(wirAllMap).sort();
+  const shown = codes.filter(c => !q || c.toLowerCase().includes(q) || (wirAllMap[c].name||'').toLowerCase().includes(q));
+  if (!shown.length) { host.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--text-muted)">No WIRs match.</div>'; }
+  else host.innerHTML = shown.map(c => {
+    const w = wirAllMap[c];
+    const on = mapWirSel.has(c);
+    return `<label style="display:flex;align-items:center;gap:6px;padding:3px 5px;font-size:11px;cursor:pointer;border-radius:4px;${on?'background:var(--accent-soft)':''}">
+      <input type="checkbox" ${on?'checked':''} onchange="toggleMapWir('${c.replace(/'/g,"\\'")}')">
+      <span style="font-family:var(--mono);color:var(--accent-text)">${c}</span>
+      <span style="color:var(--text-dim);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${w.name||''}</span>
+      <span class="td-disc disc-${w.discipline||'mechanical'}" style="font-size:9px;padding:1px 6px">${w.discipline||'mechanical'}</span>
+    </label>`;
+  }).join('');
+  const cnt = document.getElementById('map-wir-count'); if (cnt) cnt.textContent = mapWirSel.size;
+}
+function renderVtypePicker() {
+  const host = document.getElementById('map-vtype-list');
+  if (!host) return;
+  host.innerHTML = villaTypesAll.map(t => {
+    const on = mapVtSel.has(t);
+    return `<label style="font-size:10px;padding:3px 8px;border-radius:12px;cursor:pointer;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent-soft)':'var(--bg-panel)'};color:${on?'var(--accent-text)':'var(--text-dim)'};display:inline-flex;align-items:center;gap:4px">
+      <input type="checkbox" ${on?'checked':''} onchange="toggleMapVt('${t.replace(/'/g,"\\'")}')" style="margin:0">${t}</label>`;
+  }).join('');
+}
+function toggleMapWir(c){ mapWirSel.has(c) ? mapWirSel.delete(c) : mapWirSel.add(c); renderWirPicker(); updateMapPreview(); }
+function toggleMapVt(t){ mapVtSel.has(t) ? mapVtSel.delete(t) : mapVtSel.add(t); renderVtypePicker(); updateMapPreview(); }
+function clearMapSel(which){
+  if (which==='wir'){ mapWirSel.clear(); renderWirPicker(); } else { mapVtSel.clear(); renderVtypePicker(); }
+  updateMapPreview();
 }
 
+// Every selected WIR × every selected villa type (or one "all types" row when none picked).
+function mapPendingPairs() {
+  const clrCode = document.getElementById('map-clr-sel')?.value;
+  if (!clrCode || !mapWirSel.size) return [];
+  const types = mapVtSel.size ? [...mapVtSel] : [null];
+  const out = [];
+  [...mapWirSel].forEach(wirCode => types.forEach(vt => {
+    out.push({ clrCode, wirCode, villaType: vt,
+      exists: mapAll.some(m => m.clr_code===clrCode && m.wir_code===wirCode && (m.villa_type||null)===vt) });
+  }));
+  return out;
+}
+
+function updateMapPreview() {
+  const clrCode = document.getElementById('map-clr-sel')?.value;
+  const prev = document.getElementById('map-preview');
+  if (!prev) return;
+  if (!clrCode || !mapWirSel.size) {
+    prev.innerHTML = 'Select a clearance and tick one or more WIRs to preview.';
+    prev.style.color = 'var(--text-muted)'; return;
+  }
+  const clrName = clrAllMap[clrCode]?.name || clrCode;
+  const pairs = mapPendingPairs();
+  const toAdd = pairs.filter(p => !p.exists), dupes = pairs.length - toAdd.length;
+  const wirList = [...mapWirSel].sort().map(c =>
+    `<b style="color:var(--progress)">${c}</b> <span style="color:var(--text-dim)">${wirAllMap[c]?.name||''}</span>`).join('<br>');
+  const typeTxt = mapVtSel.size ? [...mapVtSel].sort().join(', ') : 'ALL villa types';
+  prev.style.color = 'var(--text)';
+  prev.innerHTML = `<div style="font-size:11px"><b style="color:var(--accent-text)">${clrCode}</b> ${clrName}<br>
+    <span style="color:var(--approved)">↳ requires these ${mapWirSel.size} WIR${mapWirSel.size!==1?'s':''} approved:</span><br>${wirList}<br>
+    <span style="color:var(--text-dim)">Applies to: </span><b style="color:var(--progress-text)">${typeTxt}</b><br>
+    <span style="color:var(--text-dim)">Will create: </span><b>${toAdd.length}</b> mapping${toAdd.length!==1?'s':''}</div>
+    ${dupes ? `<div style="color:var(--progress);margin-top:6px;font-size:10px">${dupes} already exist and will be skipped.</div>` : ''}`;
+}
+
+// Adds every selected WIR × villa-type combination in one request.
 async function addMapping() {
   const clrCode = document.getElementById('map-clr-sel')?.value;
-  const wirCode = document.getElementById('map-wir-sel')?.value;
-  const disc    = wirAllMap[wirCode]?.discipline || 'mechanical';
   const alertEl = document.getElementById('map-alert');
   alertEl.innerHTML = '';
-  const villaType = document.getElementById('map-vtype-sel')?.value || null;
-  if (!clrCode || !wirCode) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Select both a clearance and a WIR.</div>'; return; }
-  if (mapAll.some(m => m.clr_code === clrCode && m.wir_code === wirCode && (m.villa_type||null) === villaType)) {
-    alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">This exact mapping already exists.</div>'; return;
+  if (!clrCode || !mapWirSel.size) {
+    alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Select a clearance and tick at least one WIR.</div>'; return;
   }
   const clrId = clrAllMap[clrCode]?.id;
-  const wirId = wirAllMap[wirCode]?.id;
-  if (!clrId || !wirId) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">IDs not found — refresh and try again.</div>'; return; }
+  if (!clrId) { alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">Clearance ID not found — refresh and try again.</div>'; return; }
+
+  const pairs = mapPendingPairs();
+  const toAdd = pairs.filter(p => !p.exists);
+  const skipped = pairs.length - toAdd.length;
+  if (!toAdd.length) {
+    alertEl.innerHTML = '<div style="color:var(--rejected);font-size:11px;padding:4px 0">All of those mappings already exist.</div>'; return;
+  }
+  const rows = [];
+  for (const p of toAdd) {
+    const wirId = wirAllMap[p.wirCode]?.id;
+    if (!wirId) { alertEl.innerHTML = `<div style="color:var(--rejected);font-size:11px;padding:4px 0">WIR ${p.wirCode} not found — refresh and try again.</div>`; return; }
+    rows.push({ clearance_activity_id: clrId, required_wir_activity_id: wirId,
+      discipline: wirAllMap[p.wirCode]?.discipline || 'mechanical',
+      dependent_type: 'clearance', is_active: true, villa_type: p.villaType || null });
+  }
   try {
     const r = await fetch(`${SB}/rest/v1/activity_dependencies`, {
       method: 'POST',
       headers: {...getH(), 'Prefer': 'return=representation'},
-      body: JSON.stringify({clearance_activity_id: clrId, required_wir_activity_id: wirId, discipline: disc, dependent_type: 'clearance', is_active: true, villa_type: villaType||null})
+      body: JSON.stringify(rows)          // PostgREST bulk insert
     });
     if (!r.ok) throw new Error(await r.text());
-    alertEl.innerHTML = '<div style="color:var(--approved);font-size:11px;padding:4px 0">✓ Mapping added successfully.</div>';
-    document.getElementById('map-clr-sel').value = '';
-    document.getElementById('map-wir-sel').value = '';
-    document.getElementById('map-vtype-sel').value = '';
-    document.getElementById('map-preview').innerHTML = 'Select a clearance and WIR to preview.';
+    alertEl.innerHTML = `<div style="color:var(--approved);font-size:11px;padding:4px 0">✓ Added ${rows.length} mapping${rows.length!==1?'s':''}${skipped?` (${skipped} already existed)`:''}.</div>`;
+    // Keep the clearance selected so several rounds of mapping stay quick.
+    mapWirSel.clear(); mapVtSel.clear();
+    const s = document.getElementById('map-wir-search'); if (s) s.value = '';
+    renderWirPicker(); renderVtypePicker();
     await loadMap();
-    setTimeout(() => { alertEl.innerHTML = ''; }, 3000);
+    updateMapPreview();
+    setTimeout(() => { alertEl.innerHTML = ''; }, 4000);
   } catch(e) {
     alertEl.innerHTML = `<div style="color:var(--rejected);font-size:11px;padding:4px 0">Error: ${e.message}</div>`;
   }
