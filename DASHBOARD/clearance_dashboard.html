@@ -112,6 +112,25 @@ tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-i
          border-top:1px solid var(--border-strong);color:var(--text)}
 tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
 .empty{padding:48px;text-align:center;color:var(--text-muted);font-size:13px}
+/* clickable count cells */
+td.drill{cursor:pointer}
+td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
+/* ── villa drill-down modal ── */
+#ovl{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
+#ovl.on{display:flex}
+.modal{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:12px;
+       width:min(620px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(0,0,0,.5)}
+.modal h3{margin:0;font-size:14px;font-weight:650}
+.modal .mh{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px}
+.modal .msub{font-size:11px;color:var(--text-muted);margin-top:3px;line-height:1.5}
+.modal .mb{padding:14px 18px;overflow:auto}
+.modal .mf{padding:10px 18px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.vgrid{display:flex;flex-wrap:wrap;gap:5px}
+.vchip{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:6px;
+       background:var(--accent-soft);color:var(--accent-text);border:1px solid var(--border)}
+.vchip small{color:var(--text-dim);margin-left:5px;font-family:'Inter',sans-serif}
+.x{margin-left:auto;background:none;border:none;color:var(--text-muted);font-size:20px;cursor:pointer;line-height:1;padding:0 2px}
+.x:hover{color:var(--text)}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bg-elev);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
@@ -119,7 +138,7 @@ tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
 #toast.error{border-color:var(--rejected);color:var(--rejected)}
 @media print{
   @page{size:A4 landscape;margin:8mm}
-  .hdr .btn,.ctrls{display:none!important}
+  .hdr .btn,.ctrls,#ovl{display:none!important}
   body{background:#fff;color:#000;font-size:8pt}
   .wrap{overflow:visible;max-height:none}
   thead th{position:static}
@@ -167,6 +186,26 @@ tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
 </div>
 
 <div class="wrap"><div id="host"><div class="empty"><span class="spin"></span> Loading…</div></div></div>
+
+<div id="ovl" onclick="if(event.target===this)closeDrill()">
+  <div class="modal">
+    <div class="mh">
+      <div style="flex:1">
+        <h3 id="dr-title">—</h3>
+        <div class="msub" id="dr-sub"></div>
+      </div>
+      <button class="x" onclick="closeDrill()" title="Close">×</button>
+    </div>
+    <div class="mb" id="dr-body"></div>
+    <div class="mf">
+      <button class="btn" onclick="copyVillas()">Copy villa numbers</button>
+      <span id="dr-msg" style="font-size:11px;color:var(--text-muted)"></span>
+      <span class="spacer"></span>
+      <button class="btn" onclick="closeDrill()">Close</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -332,12 +371,16 @@ function render(){
       const x=rec.cl[c];
       const app=x?+x.fully_approved:0, pend=x?+x.pending:0, daily=(x&&x.daily)||{};
       rowApp+=app; rowPend+=pend;
-      tds+=`<td class="c-app gstart ${b} ${app?'':'c-zero'}">${app||0}</td>`;
-      tds+=`<td class="c-pend ${b} ${pend?'':'c-zero'}">${pend||0}</td>`;
+      // any non-zero count opens the villa list behind it
+      const dr=(n,kind,date)=> n
+        ? ` drill" onclick="openDrill('${code.replace(/'/g,"\\'")}','${c}','${kind}',${date?`'${date}'`:'null'})"`
+        : '"';
+      tds+=`<td class="c-app gstart ${b} ${app?'':'c-zero'}${dr(app,'fully_approved',null)}>${app||0}</td>`;
+      tds+=`<td class="c-pend ${b} ${pend?'':'c-zero'}${dr(pend,'pending',null)}>${pend||0}</td>`;
       dates.forEach(d=>{
         const n=+(daily[d]||0);
         const key=c+'|'+d; totals.perCol[key]=(totals.perCol[key]||0)+n;
-        tds+=`<td class="c-day ${b} ${n?'hit':'c-zero'}">${n||0}</td>`;
+        tds+=`<td class="c-day ${b} ${n?'hit':'c-zero'}${dr(n,'released',d)}>${n||0}</td>`;
       });
     });
     totals.app+=rowApp; totals.pend+=rowPend;
@@ -364,6 +407,50 @@ function render(){
     (ws==='mep' ? ' · civil (CCLR) hidden' : ws==='civil' ? ' · civil only' : '') +
     ' · approved/pending are to-date; day columns are this week';
 }
+
+// ── villa drill-down ──
+let drillVillas=[];
+const KIND_LABEL={released:'Released',fully_approved:'Fully approved',pending:'Pending'};
+
+async function openDrill(code,cluster,kind,date){
+  const ovl=document.getElementById('ovl');
+  const name=(rows.find(r=>r.clearance_code===code)||{}).clearance_name||code;
+  const when = kind==='released'
+    ? new Date(date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+    : 'as of today';
+  document.getElementById('dr-title').textContent=name;
+  document.getElementById('dr-sub').innerHTML=
+    `<b>${esc(code)}</b> · ${esc(cluster)} · ${KIND_LABEL[kind]||kind} — ${esc(when)}`;
+  document.getElementById('dr-body').innerHTML='<div style="padding:14px;color:var(--text-muted)"><span class="spin"></span> Loading villas…</div>';
+  document.getElementById('dr-msg').textContent='';
+  drillVillas=[];
+  ovl.classList.add('on');
+  try{
+    const r=await fetch(`${SB}/rest/v1/rpc/clearance_dashboard_villas`,{
+      method:'POST',headers:getH(),
+      body:JSON.stringify({p_code:code,p_cluster:cluster,p_kind:kind,p_date:date||null})});
+    if(!r.ok) throw new Error(r.status+' '+(await r.text()).slice(0,140));
+    const list=await r.json();
+    drillVillas=list.map(v=>v.villa_no);
+    document.getElementById('dr-body').innerHTML = list.length
+      ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:9px">${list.length} villa${list.length!==1?'s':''}</div>`+
+        `<div class="vgrid">`+list.map(v=>
+          `<span class="vchip">${esc(v.villa_no)}${v.villa_type?`<small>${esc(v.villa_type)}</small>`:''}</span>`).join('')+`</div>`
+      : '<div style="color:var(--text-muted)">No villas found for this cell.</div>';
+  }catch(e){
+    document.getElementById('dr-body').innerHTML=`<div style="color:var(--rejected)">Could not load: ${esc(e.message)}</div>`;
+  }
+}
+function closeDrill(){ document.getElementById('ovl').classList.remove('on'); }
+function copyVillas(){
+  if(!drillVillas.length) return;
+  const txt=drillVillas.join(', ');
+  const done=()=>{document.getElementById('dr-msg').textContent='✓ Copied '+drillVillas.length+' villa numbers';};
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done,()=>{});
+  else { const t=document.createElement('textarea'); t.value=txt; document.body.appendChild(t); t.select();
+         try{document.execCommand('copy');done();}catch(e){} t.remove(); }
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrill(); });
 
 function exportCsv(){
   const cls=clusters.filter(c=>shown.has(c));
