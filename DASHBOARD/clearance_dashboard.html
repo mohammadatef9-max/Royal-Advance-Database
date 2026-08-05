@@ -113,12 +113,11 @@ tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
     <option value="electrical">Electrical</option>
     <option value="civil">Civil</option>
   </select>
-  <span class="ctrl-label">Days</span>
-  <select id="f-days" onchange="load()">
-    <option value="6">Last 6</option>
-    <option value="7" selected>Last 7</option>
-    <option value="14">Last 14</option>
-  </select>
+  <span class="ctrl-label">Week</span>
+  <button class="btn" onclick="shiftWeek(-1)" title="Previous week">◀</button>
+  <span id="week-label" style="font-size:12px;font-weight:600;min-width:190px;text-align:center">—</span>
+  <button class="btn" id="btn-next" onclick="shiftWeek(1)" title="Next week">▶</button>
+  <button class="btn" onclick="thisWeek()">This week</button>
   <label class="chip on" id="chip-hide" onclick="toggleHide()">Hide empty rows</label>
   <span class="spacer"></span>
   <span id="status" style="font-size:11px;color:var(--text-muted)"></span>
@@ -142,41 +141,76 @@ function getH(extra){
 function toast(m,t){const el=document.getElementById('toast');el.textContent=m;el.className='show '+(t||'');clearTimeout(el._t);el._t=setTimeout(()=>el.className='',3200);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
+// CCLR-* codes are civil clearances. Their `discipline` column is unreliable — 5 of the
+// 7 are stored as "mechanical" and 2 as "electrical" — so the code prefix is what
+// decides, not the discipline. MEP hides them; Civil shows only them.
+const isCivilClearance = code => /^CCLR/i.test(String(code||'').trim());
+function activeWorkspace(){
+  try{ return sessionStorage.getItem('kp_ws')||''; }catch(e){ return ''; }
+}
+function inWorkspace(r){
+  const ws=activeWorkspace();
+  if(ws==='mep')   return !isCivilClearance(r.clearance_code);
+  if(ws==='civil') return  isCivilClearance(r.clearance_code);
+  return true;   // standalone / no workspace picked → everything
+}
+
 let rows=[];              // raw rpc rows
 let clusters=[];          // cluster codes present in the data
 let shown=new Set();      // clusters currently displayed
-let dates=[];             // date strings for the day columns
+let dates=[];             // date strings for the day columns (Fri → Thu)
 let hideEmpty=true;
+let weekStart=null;       // Date of the displayed week's Friday
+
+// Site week runs Friday → Thursday.
+function fridayOf(d){
+  const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() - 5 + 7) % 7));   // 5 = Friday
+  return x;
+}
+const iso = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
 
 function todayLabel(){
   const d=new Date();
   return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 
-// Column dates: today back N-1 days, oldest first (reads like the printed sheet).
-function buildDates(n){
+// Seven columns, Friday through Thursday of the selected week.
+function buildDates(){
   const out=[];
-  for(let i=n-1;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    out.push(d.toISOString().slice(0,10));
-  }
+  for(let i=0;i<7;i++){ const d=new Date(weekStart); d.setDate(d.getDate()+i); out.push(iso(d)); }
   return out;
 }
-function dLabel(iso){
-  const d=new Date(iso+'T00:00:00');
+function dLabel(isoStr){
+  const d=new Date(isoStr+'T00:00:00');
   return {wd:d.toLocaleDateString('en-GB',{weekday:'short'}), dm:d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})};
+}
+function shiftWeek(n){ weekStart.setDate(weekStart.getDate()+n*7); load(); }
+function thisWeek(){ weekStart=fridayOf(new Date()); load(); }
+
+function paintWeekLabel(){
+  const end=new Date(weekStart); end.setDate(end.getDate()+6);
+  const f=d=>d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  const cur=iso(fridayOf(new Date()));
+  const isCurrent = iso(weekStart)===cur;
+  document.getElementById('week-label').innerHTML =
+    `Fri ${f(weekStart)} – Thu ${f(end)}` +
+    (isCurrent ? ' <span style="color:var(--accent-text)">(this week)</span>' : '');
+  // never page into the future
+  document.getElementById('btn-next').disabled = isCurrent;
 }
 
 async function load(){
   const host=document.getElementById('host');
   host.innerHTML='<div class="empty"><span class="spin"></span> Loading…</div>';
-  const days=parseInt(document.getElementById('f-days').value,10)||7;
-  dates=buildDates(days);
+  if(!weekStart) weekStart=fridayOf(new Date());
+  dates=buildDates();
+  paintWeekLabel();
   try{
     const r=await fetch(`${SB}/rest/v1/rpc/clearance_dashboard_stats`,
-      {method:'POST',headers:getH(),body:JSON.stringify({p_days:days})});
+      {method:'POST',headers:getH(),body:JSON.stringify({p_from:dates[0],p_to:dates[6]})});
     if(!r.ok) throw new Error(r.status+' '+(await r.text()).slice(0,140));
-    rows=await r.json();
+    rows=(await r.json()).filter(inWorkspace);
     clusters=[...new Set(rows.map(x=>x.cluster_code).filter(Boolean))].sort();
     if(!shown.size) clusters.forEach(c=>shown.add(c));
     else [...shown].forEach(c=>{ if(!clusters.includes(c)) shown.delete(c); });
@@ -276,8 +310,11 @@ function render(){
   foot+=`<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
 
   host.innerHTML=`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+  const ws=activeWorkspace();
   document.getElementById('status').textContent=
-    `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending`;
+    `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending` +
+    (ws==='mep' ? ' · civil (CCLR) hidden' : ws==='civil' ? ' · civil only' : '') +
+    ' · approved/pending are to-date; day columns are this week';
 }
 
 function exportCsv(){
@@ -307,7 +344,7 @@ function exportCsv(){
   const blob=new Blob([lines.join('\n')],{type:'text/csv'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='clearance_dashboard_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.download='clearance_dashboard_week_'+dates[0]+'.csv';
   a.click();
 }
 
