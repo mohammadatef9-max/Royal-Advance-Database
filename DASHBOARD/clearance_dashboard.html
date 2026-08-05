@@ -58,8 +58,12 @@ tbody tr:hover td{background:var(--bg-hover)}
 .sticky1,.sticky2,.sticky3{position:sticky;z-index:2;background:var(--bg-panel)!important}
 .sticky1{left:0;width:34px}
 .sticky2{left:34px;text-align:left;min-width:230px;max-width:230px;white-space:normal;font-weight:600}
-.sticky3{left:264px;width:104px;font-family:var(--mono);font-size:10px;border-right:2px solid var(--border-strong)}
+.sticky3{left:264px;width:112px;min-width:112px;font-family:var(--mono);font-size:10px;border-right:2px solid var(--border-strong)}
 thead .sticky1,thead .sticky2,thead .sticky3{z-index:5}
+/* header labels wrap instead of bleeding over the next column */
+thead .sticky2,thead .sticky3{white-space:normal;font-family:'Inter',sans-serif}
+thead th.c-app,thead th.c-pend{min-width:66px}
+thead th{white-space:normal}
 .grp{border-left:2px solid var(--border-strong);font-size:12px;letter-spacing:.06em}
 .c-app{background:var(--accent-soft);font-weight:700;color:var(--accent-text)}
 .c-pend{background:var(--pending-bg);font-weight:700;color:var(--pending)}
