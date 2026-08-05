@@ -519,6 +519,10 @@ body.banner-open .shell{margin-top:40px}
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
         <span class="nl">Clearance Viewer</span>
       </div>
+      <div class="nav perm-gate" id="nav-clearance_dashboard" data-label="Clearance Dashboard" data-perm="request_release" onclick="go('clearance_dashboard')">
+        <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></span>
+        <span class="nl">Clearance Dashboard</span>
+      </div>
       <div class="nav perm-gate" id="nav-clearance_release" data-label="Release Requests" data-perm="request_release" onclick="go('clearance_release')">
         <span class="ni"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
         <span class="nl">Release Requests</span>
@@ -634,6 +638,7 @@ body.banner-open .shell{margin-top:40px}
       <iframe id="frame-wir_viewer"         title="WIR Viewer"></iframe>
       <iframe id="frame-target_list"        title="Weekly Target List"></iframe>
       <iframe id="frame-clearance_viewer"   title="Clearance Viewer"></iframe>
+      <iframe id="frame-clearance_dashboard" title="Clearance Dashboard"></iframe>
       <iframe id="frame-clearance_release"  title="Release Requests"></iframe>
       <iframe id="frame-progress_entry"     title="Progress Entry"></iframe>
       <iframe id="frame-csv_import_tool"    title="Import DC CSV"></iframe>
@@ -701,6 +706,7 @@ const PAGES = {
   wir_submittal:     { title:'WIR Submittal',        desc:'Raise WIRs to the DC (Telegram + tracking)', file:'wir_submittal.html', built:true },
   target_list:       { title:'Weekly Target List',   desc:'Weekly villa targets & WIR status',      file:'target_list.html',        built:true },
   clearance_viewer:  { title:'Clearance Viewer',     desc:'Clearance status by villa & activity',   file:'clearance_viewer.html',   built:true },
+  clearance_dashboard:{ title:'Clearance Dashboard', desc:'Released & pending per cluster, by day', file:'clearance_dashboard.html',built:true },
   clearance_release: { title:'Release Requests',     desc:'Clearance release & rejection workflow', file:'clearance_release.html',  built:true },
   progress_entry:    { title:'Progress Entry',       desc:'Manual site progress updates',           file:'progress_entry.html',     built:true },
   csv_import_tool:   { title:'Import DC CSV',        desc:'Import DC WIR & clearance data',        file:'csv_import_tool.html',    built:true },
@@ -1321,6 +1327,7 @@ const LIVE_DOMAINS = {
   dashboard: ['wir', 'clearance'],
   wir_viewer: ['wir'],
   clearance_viewer: ['clearance'],
+  clearance_dashboard: ['clearance'],
   clearance_release: ['wir', 'clearance', 'release'],
   cluster_tracker: ['progress', 'wir', 'clearance'],
 };

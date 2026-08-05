@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<script src="shared.js?v=3"></script>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Clearance Dashboard</title>
+<style>
+:root {
+  --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-cell:#0f1319;
+  --bg-input:#0d1118;--bg-hover:#1a2030;
+  --border:#1e2531;--border-strong:#2a3340;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;
+  --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
+  --approved:#6ee2a3;--approved-bg:#163d28;
+  --pending:#f5c451;--pending-bg:#3d3216;
+  --rejected:#ff8080;
+  --radius:10px;--mono:'JetBrains Mono',monospace;
+}
+html[data-theme="light"] {
+  --bg:#f4f6fa;--bg-elev:#ffffff;--bg-panel:#eef1f6;--bg-cell:#ffffff;
+  --bg-input:#ffffff;--bg-hover:#e8edf5;
+  --border:#d7dde8;--border-strong:#b9c3d3;
+  --text:#141922;--text-muted:#5d6879;--text-dim:#8792a4;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.10);--accent-text:#1d4ed8;
+  --approved:#0f7b46;--approved-bg:#d6f2e2;
+  --pending:#8a6100;--pending-bg:#fdf3d0;
+  --rejected:#b91c1c;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:13px}
+.hdr{display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--bg-elev);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.hdr h1{margin:0;font-size:16px;font-weight:700;letter-spacing:.01em}
+.hdr .today{font-size:13px;font-weight:600;color:var(--accent-text)}
+.spacer{flex:1}
+.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text);font:inherit;font-weight:600;font-size:12px;cursor:pointer}
+.btn:hover{background:var(--bg-hover)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ctrls{display:flex;align-items:center;gap:14px;padding:10px 20px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.ctrl-label{font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.chip{font-size:11px;padding:4px 10px;border-radius:14px;cursor:pointer;border:1px solid var(--border);background:var(--bg-cell);color:var(--text-dim);display:inline-flex;align-items:center;gap:5px;user-select:none}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
+select,input[type=number]{background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:5px 8px;font:inherit;font-size:12px}
+.wrap{overflow:auto;max-height:calc(100vh - 108px)}
+table{border-collapse:separate;border-spacing:0;font-size:11px;white-space:nowrap}
+th,td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:4px 6px;text-align:center}
+thead th{position:sticky;background:var(--bg-panel);z-index:3;font-weight:700;font-size:10px;line-height:1.25}
+thead tr:nth-child(1) th{top:0;z-index:4}
+thead tr:nth-child(2) th{top:26px}
+thead tr:nth-child(3) th{top:52px}
+tbody td{background:var(--bg-cell)}
+tbody tr:hover td{background:var(--bg-hover)}
+/* sticky identity columns */
+.sticky1,.sticky2,.sticky3{position:sticky;z-index:2;background:var(--bg-panel)!important}
+.sticky1{left:0;width:34px}
+.sticky2{left:34px;text-align:left;min-width:230px;max-width:230px;white-space:normal;font-weight:600}
+.sticky3{left:264px;width:104px;font-family:var(--mono);font-size:10px;border-right:2px solid var(--border-strong)}
+thead .sticky1,thead .sticky2,thead .sticky3{z-index:5}
+.grp{border-left:2px solid var(--border-strong);font-size:12px;letter-spacing:.06em}
+.c-app{background:var(--accent-soft);font-weight:700;color:var(--accent-text)}
+.c-pend{background:var(--pending-bg);font-weight:700;color:var(--pending)}
+.c-day{color:var(--text-muted)}
+.c-day.hit{color:var(--text);font-weight:700}
+.c-zero{color:var(--text-dim);opacity:.45}
+.t-pend{background:var(--pending-bg);color:var(--pending);font-weight:700;border-left:2px solid var(--border-strong)}
+.t-tot{background:var(--approved-bg);color:var(--approved);font-weight:700}
+tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-index:3;border-top:2px solid var(--border-strong)}
+tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
+.empty{padding:40px;text-align:center;color:var(--text-muted)}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bg-elev);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
+#toast.show{opacity:1}
+#toast.error{border-color:var(--rejected);color:var(--rejected)}
+@media print{
+  @page{size:A4 landscape;margin:8mm}
+  .hdr .btn,.ctrls{display:none!important}
+  body{background:#fff;color:#000;font-size:8pt}
+  .wrap{overflow:visible;max-height:none}
+  thead th{position:static}
+  .sticky1,.sticky2,.sticky3{position:static}
+  th,td{border:1px solid #999;padding:2px 3px}
+  tbody td{background:#fff}
+}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <h1>Clearance Dashboard</h1>
+  <span class="today" id="today">—</span>
+  <span class="spacer"></span>
+  <button class="btn" onclick="load()">↻ Refresh</button>
+  <button class="btn primary" onclick="window.print()">🖨 Print</button>
+  <button class="btn" onclick="exportCsv()">⬇ CSV</button>
+</div>
+
+<div class="ctrls">
+  <span class="ctrl-label">Clusters</span>
+  <span id="cl-chips" style="display:flex;gap:5px;flex-wrap:wrap"></span>
+  <span class="ctrl-label">Discipline</span>
+  <select id="f-disc" onchange="render()">
+    <option value="">All</option>
+    <option value="mechanical">Mechanical</option>
+    <option value="electrical">Electrical</option>
+    <option value="civil">Civil</option>
+  </select>
+  <span class="ctrl-label">Days</span>
+  <select id="f-days" onchange="load()">
+    <option value="6">Last 6</option>
+    <option value="7" selected>Last 7</option>
+    <option value="14">Last 14</option>
+  </select>
+  <label class="chip on" id="chip-hide" onclick="toggleHide()">Hide empty rows</label>
+  <span class="spacer"></span>
+  <span id="status" style="font-size:11px;color:var(--text-muted)"></span>
+</div>
+
+<div class="wrap"><div id="host"><div class="empty"><span class="spin"></span> Loading…</div></div></div>
+<div id="toast"></div>
+
+<script>
+// SB and KEY are provided by shared.js
+function getH(extra){
+  let token = window.__MEP_TOKEN__;
+  if(!token){
+    try{
+      const s=localStorage.getItem('mep_session');
+      if(s){const j=JSON.parse(s); if(j&&j.access_token&&j.expires_at&&Date.now()<j.expires_at-30000) token=j.access_token;}
+    }catch(e){}
+  }
+  return Object.assign({'apikey':KEY,'Authorization':'Bearer '+(token||KEY),'Content-Type':'application/json'}, extra||{});
+}
+function toast(m,t){const el=document.getElementById('toast');el.textContent=m;el.className='show '+(t||'');clearTimeout(el._t);el._t=setTimeout(()=>el.className='',3200);}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+let rows=[];              // raw rpc rows
+let clusters=[];          // cluster codes present in the data
+let shown=new Set();      // clusters currently displayed
+let dates=[];             // date strings for the day columns
+let hideEmpty=true;
+
+function todayLabel(){
+  const d=new Date();
+  return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+// Column dates: today back N-1 days, oldest first (reads like the printed sheet).
+function buildDates(n){
+  const out=[];
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    out.push(d.toISOString().slice(0,10));
+  }
+  return out;
+}
+function dLabel(iso){
+  const d=new Date(iso+'T00:00:00');
+  return {wd:d.toLocaleDateString('en-GB',{weekday:'short'}), dm:d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})};
+}
+
+async function load(){
+  const host=document.getElementById('host');
+  host.innerHTML='<div class="empty"><span class="spin"></span> Loading…</div>';
+  const days=parseInt(document.getElementById('f-days').value,10)||7;
+  dates=buildDates(days);
+  try{
+    const r=await fetch(`${SB}/rest/v1/rpc/clearance_dashboard_stats`,
+      {method:'POST',headers:getH(),body:JSON.stringify({p_days:days})});
+    if(!r.ok) throw new Error(r.status+' '+(await r.text()).slice(0,140));
+    rows=await r.json();
+    clusters=[...new Set(rows.map(x=>x.cluster_code).filter(Boolean))].sort();
+    if(!shown.size) clusters.forEach(c=>shown.add(c));
+    else [...shown].forEach(c=>{ if(!clusters.includes(c)) shown.delete(c); });
+    buildChips();
+    render();
+  }catch(e){
+    host.innerHTML=`<div class="empty">Could not load: ${esc(e.message)}</div>`;
+    toast('Load failed: '+e.message,'error');
+  }
+}
+
+function buildChips(){
+  document.getElementById('cl-chips').innerHTML=clusters.map(c=>
+    `<label class="chip ${shown.has(c)?'on':''}" onclick="toggleCluster('${c}')">${c}</label>`).join('');
+}
+function toggleCluster(c){ shown.has(c)?shown.delete(c):shown.add(c); buildChips(); render(); }
+function toggleHide(){ hideEmpty=!hideEmpty; document.getElementById('chip-hide').classList.toggle('on',hideEmpty); render(); }
+
+function render(){
+  const host=document.getElementById('host');
+  const disc=document.getElementById('f-disc').value;
+  const cls=clusters.filter(c=>shown.has(c));
+  if(!cls.length){ host.innerHTML='<div class="empty">Pick at least one cluster.</div>'; return; }
+
+  // clearance_code -> {name, discipline, byCluster:{code:row}}
+  const byCode={};
+  rows.forEach(r=>{
+    if(disc && (r.discipline||'')!==disc) return;
+    if(!shown.has(r.cluster_code)) return;
+    const k=r.clearance_code;
+    if(!byCode[k]) byCode[k]={name:r.clearance_name,discipline:r.discipline,cl:{}};
+    byCode[k].cl[r.cluster_code]=r;
+  });
+
+  let codes=Object.keys(byCode).sort();
+  if(hideEmpty) codes=codes.filter(k=>cls.some(c=>{
+    const x=byCode[k].cl[c]; return x && (+x.fully_approved || +x.pending);
+  }));
+  if(!codes.length){ host.innerHTML='<div class="empty">Nothing to show for this filter.</div>'; return; }
+
+  const dl=dates.map(dLabel);
+  const perCluster=2+dates.length;      // approved + pending + day columns
+
+  // ── header: cluster groups / column names / dates ──
+  let h1=`<tr><th class="sticky1" rowspan="3">#</th><th class="sticky2" rowspan="3">Title of Clearance</th>`+
+         `<th class="sticky3" rowspan="3">Clearance Code</th>`;
+  cls.forEach(c=>{ h1+=`<th class="grp" colspan="${perCluster}">${c}</th>`; });
+  h1+=`<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total Given<br>to Civil</th></tr>`;
+
+  let h2='<tr>';
+  cls.forEach(()=>{
+    h2+=`<th class="c-app">FULLY<br>APPROVED</th><th class="c-pend">PENDING</th>`;
+    dl.forEach(d=>{ h2+=`<th>${d.wd}</th>`; });
+  });
+  h2+='</tr>';
+
+  let h3='<tr>';
+  cls.forEach(()=>{
+    h3+=`<th></th><th></th>`;
+    dl.forEach(d=>{ h3+=`<th style="font-weight:500;color:var(--text-dim)">${d.dm}</th>`; });
+  });
+  h3+='</tr>';
+
+  // ── body ──
+  const totals={app:0,pend:0,perCol:{}};
+  let body='';
+  codes.forEach((code,i)=>{
+    const rec=byCode[code];
+    let rowPend=0,rowApp=0,tds='';
+    cls.forEach(c=>{
+      const x=rec.cl[c];
+      const app=x?+x.fully_approved:0, pend=x?+x.pending:0, daily=(x&&x.daily)||{};
+      rowApp+=app; rowPend+=pend;
+      tds+=`<td class="c-app ${app?'':'c-zero'}">${app||0}</td>`;
+      tds+=`<td class="c-pend ${pend?'':'c-zero'}">${pend||0}</td>`;
+      dates.forEach(d=>{
+        const n=+(daily[d]||0);
+        const key=c+'|'+d; totals.perCol[key]=(totals.perCol[key]||0)+n;
+        tds+=`<td class="c-day ${n?'hit':'c-zero'}">${n||0}</td>`;
+      });
+    });
+    totals.app+=rowApp; totals.pend+=rowPend;
+    body+=`<tr><td class="sticky1">${i+1}</td>`+
+          `<td class="sticky2">${esc(rec.name||code)}</td>`+
+          `<td class="sticky3">${esc(code)}</td>`+tds+
+          `<td class="t-pend">${rowPend||0}</td><td class="t-tot">${rowApp||0}</td></tr>`;
+  });
+
+  // ── footer totals ──
+  let foot=`<tr><td class="sticky1"></td><td class="sticky2">TOTAL</td><td class="sticky3"></td>`;
+  cls.forEach(c=>{
+    let a=0,p=0;
+    codes.forEach(k=>{ const x=byCode[k].cl[c]; if(x){ a+=+x.fully_approved; p+=+x.pending; } });
+    foot+=`<td class="c-app">${a}</td><td class="c-pend">${p}</td>`;
+    dates.forEach(d=>{ foot+=`<td>${totals.perCol[c+'|'+d]||0}</td>`; });
+  });
+  foot+=`<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
+
+  host.innerHTML=`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+  document.getElementById('status').textContent=
+    `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending`;
+}
+
+function exportCsv(){
+  const cls=clusters.filter(c=>shown.has(c));
+  const disc=document.getElementById('f-disc').value;
+  const head=['#','Title of Clearance','Clearance Code'];
+  cls.forEach(c=>{ head.push(c+' Fully Approved', c+' Pending'); dates.forEach(d=>head.push(c+' '+d)); });
+  head.push('Total Pending','Total Given to Civil');
+  const byCode={};
+  rows.forEach(r=>{
+    if(disc && (r.discipline||'')!==disc) return;
+    if(!shown.has(r.cluster_code)) return;
+    (byCode[r.clearance_code]=byCode[r.clearance_code]||{name:r.clearance_name,cl:{}}).cl[r.cluster_code]=r;
+  });
+  const lines=[head.join(',')];
+  Object.keys(byCode).sort().forEach((code,i)=>{
+    const rec=byCode[code]; let a=0,p=0;
+    const cells=[i+1,'"'+String(rec.name||'').replace(/"/g,'""')+'"',code];
+    cls.forEach(c=>{
+      const x=rec.cl[c], ap=x?+x.fully_approved:0, pe=x?+x.pending:0, daily=(x&&x.daily)||{};
+      a+=ap; p+=pe; cells.push(ap,pe);
+      dates.forEach(d=>cells.push(+(daily[d]||0)));
+    });
+    cells.push(p,a);
+    lines.push(cells.join(','));
+  });
+  const blob=new Blob([lines.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='clearance_dashboard_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ── shell session bridge (same contract as the other pages) ──
+window.addEventListener('message',function(e){
+  if(!e.data||typeof e.data!=='object')return;
+  if(e.data.type==='theme') document.documentElement.setAttribute('data-theme',e.data.theme);
+  if(e.data.type==='session'){
+    window.__MEP_TOKEN__=e.data.token; window.__MEP_USER__=e.data.user;
+    if(!rows.length) load();
+  }
+  // a fresh clearance import invalidates every number on this page
+  if(e.data.type==='data_updated' && (e.data.dataType==='clearance'||e.data.dataType==='clr')) load();
+});
+try{window.parent.postMessage({type:'child_ready'},'*');}catch(e){}
+
+document.getElementById('today').textContent=todayLabel();
+load();
+</script>
+</body>
+</html>
