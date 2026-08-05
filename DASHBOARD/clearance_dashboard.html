@@ -12,69 +12,106 @@
 <style>
 :root {
   --bg:#0b0e14;--bg-elev:#11151c;--bg-panel:#151a23;--bg-cell:#0f1319;
-  --bg-input:#0d1118;--bg-hover:#1a2030;
-  --border:#1e2531;--border-strong:#2a3340;
-  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;
+  --bg-row-alt:#111620;--bg-input:#0d1118;--bg-hover:#1c2333;
+  --border:#1e2531;--border-strong:#2f3a4a;--border-subtle:#181d26;
+  --text:#e6e9ef;--text-muted:#8a93a3;--text-dim:#5b6373;--text-faint:#454c5b;
   --accent:#4f8cff;--accent-soft:rgba(79,140,255,0.14);--accent-text:#93b6ff;
-  --approved:#6ee2a3;--approved-bg:#163d28;
-  --pending:#f5c451;--pending-bg:#3d3216;
+  --approved:#6ee2a3;--approved-bg:rgba(34,197,94,.10);
+  --pending:#f5c451;--pending-bg:rgba(245,196,81,.09);
   --rejected:#ff8080;
+  /* alternating cluster bands — barely-there tints that survive zebra striping */
+  --band-a:#0f1319;--band-a-alt:#111620;
+  --band-b:#121722;--band-b-alt:#141a26;
   --radius:10px;--mono:'JetBrains Mono',monospace;
 }
 html[data-theme="light"] {
-  --bg:#f4f6fa;--bg-elev:#ffffff;--bg-panel:#eef1f6;--bg-cell:#ffffff;
-  --bg-input:#ffffff;--bg-hover:#e8edf5;
-  --border:#d7dde8;--border-strong:#b9c3d3;
-  --text:#141922;--text-muted:#5d6879;--text-dim:#8792a4;
-  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.10);--accent-text:#1d4ed8;
-  --approved:#0f7b46;--approved-bg:#d6f2e2;
-  --pending:#8a6100;--pending-bg:#fdf3d0;
+  --bg:#f6f7fa;--bg-elev:#ffffff;--bg-panel:#f1f3f8;--bg-cell:#ffffff;
+  --bg-row-alt:#fafbfd;--bg-input:#ffffff;--bg-hover:#e9eef7;
+  --border:#dfe4ed;--border-strong:#c3cbd9;--border-subtle:#eceff5;
+  --text:#141922;--text-muted:#5d6879;--text-dim:#8792a4;--text-faint:#aab2c0;
+  --accent:#2563eb;--accent-soft:rgba(37,99,235,0.09);--accent-text:#1d4ed8;
+  --approved:#0f7b46;--approved-bg:rgba(16,185,129,.10);
+  --pending:#8a6100;--pending-bg:rgba(245,196,81,.16);
   --rejected:#b91c1c;
+  --band-a:#ffffff;--band-a-alt:#fafbfd;
+  --band-b:#f5f7fb;--band-b-alt:#f1f4f9;
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:13px}
-.hdr{display:flex;align-items:center;gap:14px;padding:12px 20px;background:var(--bg-elev);border-bottom:1px solid var(--border);flex-wrap:wrap}
-.hdr h1{margin:0;font-size:16px;font-weight:700;letter-spacing:.01em}
-.hdr .today{font-size:13px;font-weight:600;color:var(--accent-text)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:13px;
+     -webkit-font-smoothing:antialiased}
+/* ── header ── */
+.hdr{display:flex;align-items:center;gap:12px;padding:14px 22px;background:var(--bg-elev);
+     border-bottom:1px solid var(--border);flex-wrap:wrap}
+.hdr h1{margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em}
+.hdr .today{font-size:12px;font-weight:500;color:var(--text-muted);padding-left:12px;border-left:1px solid var(--border)}
 .spacer{flex:1}
-.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text);font:inherit;font-weight:600;font-size:12px;cursor:pointer}
-.btn:hover{background:var(--bg-hover)}
+.btn{padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:var(--bg-panel);color:var(--text);
+     font:inherit;font-weight:550;font-size:12px;cursor:pointer;transition:background .12s,border-color .12s;line-height:1.4}
+.btn:hover:not(:disabled){background:var(--bg-hover);border-color:var(--border-strong)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-.ctrls{display:flex;align-items:center;gap:14px;padding:10px 20px;background:var(--bg-panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
-.ctrl-label{font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
-.chip{font-size:11px;padding:4px 10px;border-radius:14px;cursor:pointer;border:1px solid var(--border);background:var(--bg-cell);color:var(--text-dim);display:inline-flex;align-items:center;gap:5px;user-select:none}
-.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text);font-weight:600}
-select,input[type=number]{background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:5px 8px;font:inherit;font-size:12px}
-.wrap{overflow:auto;max-height:calc(100vh - 108px)}
-table{border-collapse:separate;border-spacing:0;font-size:11px;white-space:nowrap}
-th,td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:4px 6px;text-align:center}
-thead th{position:sticky;background:var(--bg-panel);z-index:3;font-weight:700;font-size:10px;line-height:1.25}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.icon{padding:6px 10px;font-size:11px}
+/* ── control bar, grouped into segments ── */
+.ctrls{display:flex;align-items:center;gap:10px;padding:9px 22px;background:var(--bg-panel);
+       border-bottom:1px solid var(--border);flex-wrap:wrap}
+.seg{display:flex;align-items:center;gap:7px;padding-right:12px;margin-right:2px;border-right:1px solid var(--border)}
+.seg:last-of-type{border-right:none}
+.ctrl-label{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.chip{font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;border:1px solid var(--border);
+      background:var(--bg-cell);color:var(--text-muted);user-select:none;font-weight:550;transition:.12s}
+.chip:hover{border-color:var(--border-strong);color:var(--text)}
+.chip.on{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}
+select{background:var(--bg-input);color:var(--text);border:1px solid var(--border);border-radius:7px;
+       padding:5px 8px;font:inherit;font-size:12px}
+#week-label{font-variant-numeric:tabular-nums}
+/* ── table ── */
+.wrap{overflow:auto;max-height:calc(100vh - 106px);padding:14px 22px 22px}
+table{border-collapse:separate;border-spacing:0;font-size:11px;white-space:nowrap;
+      font-variant-numeric:tabular-nums;border:1px solid var(--border);border-radius:10px}
+th,td{border-right:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);
+      padding:5px 7px;text-align:center}
+thead th{position:sticky;background:var(--bg-panel);z-index:3;font-weight:600;font-size:10px;line-height:1.3;
+         color:var(--text-muted);letter-spacing:.02em}
 thead tr:nth-child(1) th{top:0;z-index:4}
-thead tr:nth-child(2) th{top:26px}
-thead tr:nth-child(3) th{top:52px}
+thead tr:nth-child(2) th{top:28px}
+thead tr:nth-child(3) th{top:56px}
+thead tr:last-child th{border-bottom:1px solid var(--border-strong)}
 tbody td{background:var(--bg-cell)}
+tbody tr:nth-child(even) td{background:var(--bg-row-alt)}
 tbody tr:hover td{background:var(--bg-hover)}
-/* sticky identity columns */
+/* sticky identity columns, with a shadow that hints at scrolled content */
 .sticky1,.sticky2,.sticky3{position:sticky;z-index:2;background:var(--bg-panel)!important}
-.sticky1{left:0;width:34px}
-.sticky2{left:34px;text-align:left;min-width:230px;max-width:230px;white-space:normal;font-weight:600}
-.sticky3{left:264px;width:112px;min-width:112px;font-family:var(--mono);font-size:10px;border-right:2px solid var(--border-strong)}
+.sticky1{left:0;width:32px;color:var(--text-dim);font-size:10px}
+.sticky2{left:32px;text-align:left;min-width:236px;max-width:236px;white-space:normal;font-weight:550;color:var(--text)}
+.sticky3{left:268px;width:112px;min-width:112px;font-family:var(--mono);font-size:10px;color:var(--text-muted);
+         box-shadow:6px 0 8px -6px rgba(0,0,0,.45)}
 thead .sticky1,thead .sticky2,thead .sticky3{z-index:5}
-/* header labels wrap instead of bleeding over the next column */
 thead .sticky2,thead .sticky3{white-space:normal;font-family:'Inter',sans-serif}
 thead th.c-app,thead th.c-pend{min-width:66px}
 thead th{white-space:normal}
-.grp{border-left:2px solid var(--border-strong);font-size:12px;letter-spacing:.06em}
-.c-app{background:var(--accent-soft);font-weight:700;color:var(--accent-text)}
-.c-pend{background:var(--pending-bg);font-weight:700;color:var(--pending)}
-.c-day{color:var(--text-muted)}
-.c-day.hit{color:var(--text);font-weight:700}
-.c-zero{color:var(--text-dim);opacity:.45}
-.t-pend{background:var(--pending-bg);color:var(--pending);font-weight:700;border-left:2px solid var(--border-strong)}
-.t-tot{background:var(--approved-bg);color:var(--approved);font-weight:700}
-tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-index:3;border-top:2px solid var(--border-strong)}
+/* cluster bands — alternating tint so groups separate without heavy rules */
+.grp{border-left:1px solid var(--border-strong);font-size:11px;font-weight:700;letter-spacing:.08em;
+     color:var(--text);padding:5px 0}
+.gA{background:var(--band-a)}
+.gB{background:var(--band-b)}
+tbody td.gA{background:var(--band-a)}
+tbody td.gB{background:var(--band-b)}
+tbody tr:nth-child(even) td.gA{background:var(--band-a-alt)}
+tbody tr:nth-child(even) td.gB{background:var(--band-b-alt)}
+tbody tr:hover td{background:var(--bg-hover)!important}
+td.gstart,th.gstart{border-left:1px solid var(--border-strong)}
+.c-app{font-weight:650;color:var(--accent-text)}
+.c-pend{font-weight:650;color:var(--pending)}
+.c-day{color:var(--text-muted);font-weight:450}
+.c-day.hit{color:var(--text);font-weight:650}
+.c-zero{color:var(--text-faint,var(--text-dim));opacity:.35;font-weight:400}
+.t-pend{color:var(--pending);font-weight:700;border-left:1px solid var(--border-strong);background:var(--pending-bg)}
+.t-tot{color:var(--approved);font-weight:700;background:var(--approved-bg)}
+tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-index:3;
+         border-top:1px solid var(--border-strong);color:var(--text)}
 tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
-.empty{padding:40px;text-align:center;color:var(--text-muted)}
+.empty{padding:48px;text-align:center;color:var(--text-muted);font-size:13px}
 .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px}
 @keyframes sp{to{transform:rotate(360deg)}}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bg-elev);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
@@ -104,23 +141,29 @@ tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
 </div>
 
 <div class="ctrls">
-  <span class="ctrl-label">Clusters</span>
-  <span id="cl-chips" style="display:flex;gap:5px;flex-wrap:wrap"></span>
-  <span class="ctrl-label">Discipline</span>
-  <select id="f-disc" onchange="render()">
-    <option value="">All</option>
-    <option value="mechanical">Mechanical</option>
-    <option value="electrical">Electrical</option>
-    <option value="civil">Civil</option>
-  </select>
-  <span class="ctrl-label">Week</span>
-  <button class="btn" onclick="shiftWeek(-1)" title="Previous week">◀</button>
-  <span id="week-label" style="font-size:12px;font-weight:600;min-width:190px;text-align:center">—</span>
-  <button class="btn" id="btn-next" onclick="shiftWeek(1)" title="Next week">▶</button>
-  <button class="btn" onclick="thisWeek()">This week</button>
-  <label class="chip on" id="chip-hide" onclick="toggleHide()">Hide empty rows</label>
+  <div class="seg">
+    <span class="ctrl-label">Week</span>
+    <button class="btn icon" onclick="shiftWeek(-1)" title="Previous week">◀</button>
+    <span id="week-label" style="font-size:12px;font-weight:600;min-width:186px;text-align:center">—</span>
+    <button class="btn icon" id="btn-next" onclick="shiftWeek(1)" title="Next week">▶</button>
+    <button class="btn" onclick="thisWeek()">This week</button>
+  </div>
+  <div class="seg">
+    <span class="ctrl-label">Clusters</span>
+    <span id="cl-chips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
+  </div>
+  <div class="seg">
+    <span class="ctrl-label">Discipline</span>
+    <select id="f-disc" onchange="render()">
+      <option value="">All</option>
+      <option value="mechanical">Mechanical</option>
+      <option value="electrical">Electrical</option>
+      <option value="civil">Civil</option>
+    </select>
+    <label class="chip on" id="chip-hide" onclick="toggleHide()">Hide empty rows</label>
+  </div>
   <span class="spacer"></span>
-  <span id="status" style="font-size:11px;color:var(--text-muted)"></span>
+  <span id="status" style="font-size:11px;color:var(--text-dim);text-align:right;max-width:520px"></span>
 </div>
 
 <div class="wrap"><div id="host"><div class="empty"><span class="spin"></span> Loading…</div></div></div>
@@ -255,22 +298,26 @@ function render(){
   const perCluster=2+dates.length;      // approved + pending + day columns
 
   // ── header: cluster groups / column names / dates ──
+  const band = i => i%2 ? 'gB' : 'gA';
+
   let h1=`<tr><th class="sticky1" rowspan="3">#</th><th class="sticky2" rowspan="3">Title of Clearance</th>`+
          `<th class="sticky3" rowspan="3">Clearance Code</th>`;
-  cls.forEach(c=>{ h1+=`<th class="grp" colspan="${perCluster}">${c}</th>`; });
+  cls.forEach((c,i)=>{ h1+=`<th class="grp gstart ${band(i)}" colspan="${perCluster}">${c}</th>`; });
   h1+=`<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total Given<br>to Civil</th></tr>`;
 
   let h2='<tr>';
-  cls.forEach(()=>{
-    h2+=`<th class="c-app">FULLY<br>APPROVED</th><th class="c-pend">PENDING</th>`;
-    dl.forEach(d=>{ h2+=`<th>${d.wd}</th>`; });
+  cls.forEach((c,i)=>{
+    const b=band(i);
+    h2+=`<th class="c-app gstart ${b}">FULLY<br>APPROVED</th><th class="c-pend ${b}">PENDING</th>`;
+    dl.forEach(d=>{ h2+=`<th class="${b}">${d.wd}</th>`; });
   });
   h2+='</tr>';
 
   let h3='<tr>';
-  cls.forEach(()=>{
-    h3+=`<th></th><th></th>`;
-    dl.forEach(d=>{ h3+=`<th style="font-weight:500;color:var(--text-dim)">${d.dm}</th>`; });
+  cls.forEach((c,i)=>{
+    const b=band(i);
+    h3+=`<th class="gstart ${b}"></th><th class="${b}"></th>`;
+    dl.forEach(d=>{ h3+=`<th class="${b}" style="font-weight:450;color:var(--text-dim)">${d.dm}</th>`; });
   });
   h3+='</tr>';
 
@@ -280,16 +327,17 @@ function render(){
   codes.forEach((code,i)=>{
     const rec=byCode[code];
     let rowPend=0,rowApp=0,tds='';
-    cls.forEach(c=>{
+    cls.forEach((c,gi)=>{
+      const b=band(gi);
       const x=rec.cl[c];
       const app=x?+x.fully_approved:0, pend=x?+x.pending:0, daily=(x&&x.daily)||{};
       rowApp+=app; rowPend+=pend;
-      tds+=`<td class="c-app ${app?'':'c-zero'}">${app||0}</td>`;
-      tds+=`<td class="c-pend ${pend?'':'c-zero'}">${pend||0}</td>`;
+      tds+=`<td class="c-app gstart ${b} ${app?'':'c-zero'}">${app||0}</td>`;
+      tds+=`<td class="c-pend ${b} ${pend?'':'c-zero'}">${pend||0}</td>`;
       dates.forEach(d=>{
         const n=+(daily[d]||0);
         const key=c+'|'+d; totals.perCol[key]=(totals.perCol[key]||0)+n;
-        tds+=`<td class="c-day ${n?'hit':'c-zero'}">${n||0}</td>`;
+        tds+=`<td class="c-day ${b} ${n?'hit':'c-zero'}">${n||0}</td>`;
       });
     });
     totals.app+=rowApp; totals.pend+=rowPend;
@@ -301,10 +349,10 @@ function render(){
 
   // ── footer totals ──
   let foot=`<tr><td class="sticky1"></td><td class="sticky2">TOTAL</td><td class="sticky3"></td>`;
-  cls.forEach(c=>{
+  cls.forEach((c,gi)=>{
     let a=0,p=0;
     codes.forEach(k=>{ const x=byCode[k].cl[c]; if(x){ a+=+x.fully_approved; p+=+x.pending; } });
-    foot+=`<td class="c-app">${a}</td><td class="c-pend">${p}</td>`;
+    foot+=`<td class="c-app gstart">${a}</td><td class="c-pend">${p}</td>`;
     dates.forEach(d=>{ foot+=`<td>${totals.perCol[c+'|'+d]||0}</td>`; });
   });
   foot+=`<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
