@@ -421,7 +421,7 @@ function render(){
          `<th class="sticky3" rowspan="3">Clearance Code</th>`;
   cls.forEach((c,i)=>{ h1+=`<th class="grp gstart ${band(i)}" colspan="${perCluster}">${c}</th>`; });
   h1+=`<th class="t-week" rowspan="3">Released<br>This Week</th>`+
-      `<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total Given<br>to Civil</th></tr>`;
+      `<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total<br>Released</th></tr>`;
 
   let h2='<tr>';
   cls.forEach((c,i)=>{
@@ -668,7 +668,7 @@ function exportCsv(){
   const disc=document.getElementById('f-disc').value;
   const head=['#','Title of Clearance','Clearance Code'];
   cls.forEach(c=>{ head.push(c+' Fully Approved', c+' Pending'); dates.forEach(d=>head.push(c+' '+d)); head.push(c+' Week Total'); });
-  head.push('Released This Week','Total Pending','Total Given to Civil');
+  head.push('Released This Week','Total Pending','Total Released');
   const byCode={};
   rows.forEach(r=>{
     if(disc && (r.discipline||'')!==disc) return;
