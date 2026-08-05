@@ -106,6 +106,8 @@ td.gstart,th.gstart{border-left:1px solid var(--border-strong)}
 .c-day{color:var(--text-muted);font-weight:450}
 .c-day.hit{color:var(--text);font-weight:650}
 .c-zero{color:var(--text-faint,var(--text-dim));opacity:.35;font-weight:400}
+.c-wk{font-weight:650;color:var(--text);background:rgba(127,127,127,.07);border-left:1px dashed var(--border-strong)}
+.t-week{color:var(--text);font-weight:700;background:rgba(127,127,127,.10);border-left:1px solid var(--border-strong)}
 .t-pend{color:var(--pending);font-weight:700;border-left:1px solid var(--border-strong);background:var(--pending-bg)}
 .t-tot{color:var(--approved);font-weight:700;background:var(--approved-bg)}
 tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-index:3;
@@ -116,8 +118,22 @@ tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:4}
 td.drill{cursor:pointer}
 td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
 /* ── villa drill-down modal ── */
-#ovl{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
-#ovl.on{display:flex}
+#ovl,.ovl{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:200}
+#ovl.on,.ovl.on{display:flex}
+.fin{width:100%;background:var(--bg-input);color:var(--text);border:1px solid var(--border);
+     border-radius:7px;padding:6px 9px;font:inherit;font-size:12px}
+.pk{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:12px;cursor:pointer}
+.pk:hover{background:var(--bg-hover)}
+.pk code{font-family:var(--mono);font-size:10px;color:var(--accent-text);min-width:86px}
+.pk .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* layout editor rows */
+.lr{display:flex;align-items:center;gap:9px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;
+    margin-bottom:5px;background:var(--bg-panel);font-size:12px;cursor:grab}
+.lr.dragging{opacity:.4}
+.lr .grip{color:var(--text-dim);cursor:grab;user-select:none}
+.lr code{font-family:var(--mono);font-size:10px;color:var(--accent-text);min-width:86px}
+.lr .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lr.off{opacity:.45}
 .modal{background:var(--bg-elev);border:1px solid var(--border-strong);border-radius:12px;
        width:min(620px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 18px 48px rgba(0,0,0,.5)}
 .modal h3{margin:0;font-size:14px;font-weight:650}
@@ -172,6 +188,10 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
     <span id="cl-chips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
   </div>
   <div class="seg">
+    <span class="ctrl-label">Clearance</span>
+    <button class="btn" id="btn-pick" onclick="openPicker()">All clearances ▾</button>
+  </div>
+  <div class="seg">
     <span class="ctrl-label">Discipline</span>
     <select id="f-disc" onchange="render()">
       <option value="">All</option>
@@ -180,6 +200,7 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
       <option value="civil">Civil</option>
     </select>
     <label class="chip on" id="chip-hide" onclick="toggleHide()">Hide empty rows</label>
+    <button class="btn" id="btn-layout" onclick="openLayout()" style="display:none">⚙ Rows</button>
   </div>
   <span class="spacer"></span>
   <span id="status" style="font-size:11px;color:var(--text-dim);text-align:right;max-width:520px"></span>
@@ -202,6 +223,49 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
       <span id="dr-msg" style="font-size:11px;color:var(--text-muted)"></span>
       <span class="spacer"></span>
       <button class="btn" onclick="closeDrill()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- clearance multi-select -->
+<div id="pick-ovl" class="ovl" onclick="if(event.target===this)closePicker()">
+  <div class="modal">
+    <div class="mh">
+      <div style="flex:1">
+        <h3>Filter clearances</h3>
+        <div class="msub">Tick the clearance titles to show. None ticked = show all.</div>
+      </div>
+      <button class="x" onclick="closePicker()" title="Close">×</button>
+    </div>
+    <div style="padding:10px 18px 0"><input class="fin" id="pick-search" placeholder="Search title or code…" oninput="renderPicker()"></div>
+    <div class="mb" id="pick-body"></div>
+    <div class="mf">
+      <button class="btn" onclick="pickAll(true)">Select all</button>
+      <button class="btn" onclick="pickAll(false)">Clear</button>
+      <span id="pick-count" style="font-size:11px;color:var(--text-muted)"></span>
+      <span class="spacer"></span>
+      <button class="btn primary" onclick="applyPicker()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<!-- super-admin row layout -->
+<div id="lay-ovl" class="ovl" onclick="if(event.target===this)closeLayout()">
+  <div class="modal">
+    <div class="mh">
+      <div style="flex:1">
+        <h3>Configure rows</h3>
+        <div class="msub">Drag to reorder, untick to hide. Saved as the default for <b>everyone</b> in this workspace.</div>
+      </div>
+      <button class="x" onclick="closeLayout()" title="Close">×</button>
+    </div>
+    <div class="mb" id="lay-body"></div>
+    <div class="mf">
+      <button class="btn" onclick="layReset()">Reset to A–Z</button>
+      <span id="lay-msg" style="font-size:11px;color:var(--text-muted)"></span>
+      <span class="spacer"></span>
+      <button class="btn" onclick="closeLayout()">Cancel</button>
+      <button class="btn primary" onclick="saveLayout()">Save for everyone</button>
     </div>
   </div>
 </div>
@@ -296,6 +360,8 @@ async function load(){
     clusters=[...new Set(rows.map(x=>x.cluster_code).filter(Boolean))].sort();
     if(!shown.size) clusters.forEach(c=>shown.add(c));
     else [...shown].forEach(c=>{ if(!clusters.includes(c)) shown.delete(c); });
+    await loadLayout();
+    paintPickBtn();
     buildChips();
     render();
   }catch(e){
@@ -327,14 +393,23 @@ function render(){
     byCode[k].cl[r.cluster_code]=r;
   });
 
-  let codes=Object.keys(byCode).sort();
+  // Row order/visibility: the shared super-admin layout wins, then A–Z for anything
+  // it doesn't mention (a newly imported clearance code shouldn't silently vanish).
+  let codes=Object.keys(byCode);
+  if(layout.length){
+    const pos={}, hid={};
+    layout.forEach((l,i)=>{ pos[l.code]=i; if(l.hidden) hid[l.code]=1; });
+    codes=codes.filter(k=>!hid[k])
+               .sort((a,b)=>(pos[a]??9e6)-(pos[b]??9e6) || a.localeCompare(b));
+  } else codes.sort();
+  if(pickSel.size) codes=codes.filter(k=>pickSel.has(k));
   if(hideEmpty) codes=codes.filter(k=>cls.some(c=>{
     const x=byCode[k].cl[c]; return x && (+x.fully_approved || +x.pending);
   }));
   if(!codes.length){ host.innerHTML='<div class="empty">Nothing to show for this filter.</div>'; return; }
 
   const dl=dates.map(dLabel);
-  const perCluster=2+dates.length;      // approved + pending + day columns
+  const perCluster=3+dates.length;      // approved + pending + day columns + week subtotal
 
   // ── header: cluster groups / column names / dates ──
   const band = i => i%2 ? 'gB' : 'gA';
@@ -342,13 +417,15 @@ function render(){
   let h1=`<tr><th class="sticky1" rowspan="3">#</th><th class="sticky2" rowspan="3">Title of Clearance</th>`+
          `<th class="sticky3" rowspan="3">Clearance Code</th>`;
   cls.forEach((c,i)=>{ h1+=`<th class="grp gstart ${band(i)}" colspan="${perCluster}">${c}</th>`; });
-  h1+=`<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total Given<br>to Civil</th></tr>`;
+  h1+=`<th class="t-week" rowspan="3">Released<br>This Week</th>`+
+      `<th class="t-pend" rowspan="3">Total<br>Pending</th><th class="t-tot" rowspan="3">Total Given<br>to Civil</th></tr>`;
 
   let h2='<tr>';
   cls.forEach((c,i)=>{
     const b=band(i);
     h2+=`<th class="c-app gstart ${b}">FULLY<br>APPROVED</th><th class="c-pend ${b}">PENDING</th>`;
     dl.forEach(d=>{ h2+=`<th class="${b}">${d.wd}</th>`; });
+    h2+=`<th class="c-wk ${b}">WEEK</th>`;
   });
   h2+='</tr>';
 
@@ -357,15 +434,16 @@ function render(){
     const b=band(i);
     h3+=`<th class="gstart ${b}"></th><th class="${b}"></th>`;
     dl.forEach(d=>{ h3+=`<th class="${b}" style="font-weight:450;color:var(--text-dim)">${d.dm}</th>`; });
+    h3+=`<th class="${b}"></th>`;
   });
   h3+='</tr>';
 
   // ── body ──
-  const totals={app:0,pend:0,perCol:{}};
+  const totals={app:0,pend:0,week:0,perCol:{},perWeek:{}};
   let body='';
   codes.forEach((code,i)=>{
     const rec=byCode[code];
-    let rowPend=0,rowApp=0,tds='';
+    let rowPend=0,rowApp=0,rowWeek=0,tds='';
     cls.forEach((c,gi)=>{
       const b=band(gi);
       const x=rec.cl[c];
@@ -377,16 +455,22 @@ function render(){
         : '"';
       tds+=`<td class="c-app gstart ${b} ${app?'':'c-zero'}${dr(app,'fully_approved',null)}>${app||0}</td>`;
       tds+=`<td class="c-pend ${b} ${pend?'':'c-zero'}${dr(pend,'pending',null)}>${pend||0}</td>`;
+      let clWeek=0;
       dates.forEach(d=>{
         const n=+(daily[d]||0);
+        clWeek+=n;
         const key=c+'|'+d; totals.perCol[key]=(totals.perCol[key]||0)+n;
         tds+=`<td class="c-day ${b} ${n?'hit':'c-zero'}${dr(n,'released',d)}>${n||0}</td>`;
       });
+      rowWeek+=clWeek;
+      totals.perWeek[c]=(totals.perWeek[c]||0)+clWeek;
+      tds+=`<td class="c-wk ${b} ${clWeek?'':'c-zero'}">${clWeek||0}</td>`;
     });
-    totals.app+=rowApp; totals.pend+=rowPend;
+    totals.app+=rowApp; totals.pend+=rowPend; totals.week+=rowWeek;
     body+=`<tr><td class="sticky1">${i+1}</td>`+
           `<td class="sticky2">${esc(rec.name||code)}</td>`+
           `<td class="sticky3">${esc(code)}</td>`+tds+
+          `<td class="t-week ${rowWeek?'':'c-zero'}">${rowWeek||0}</td>`+
           `<td class="t-pend">${rowPend||0}</td><td class="t-tot">${rowApp||0}</td></tr>`;
   });
 
@@ -397,8 +481,10 @@ function render(){
     codes.forEach(k=>{ const x=byCode[k].cl[c]; if(x){ a+=+x.fully_approved; p+=+x.pending; } });
     foot+=`<td class="c-app gstart">${a}</td><td class="c-pend">${p}</td>`;
     dates.forEach(d=>{ foot+=`<td>${totals.perCol[c+'|'+d]||0}</td>`; });
+    foot+=`<td class="c-wk">${totals.perWeek[c]||0}</td>`;
   });
-  foot+=`<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
+  foot+=`<td class="t-week">${totals.week}</td>`+
+        `<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
 
   host.innerHTML=`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
   const ws=activeWorkspace();
@@ -406,6 +492,112 @@ function render(){
     `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending` +
     (ws==='mep' ? ' · civil (CCLR) hidden' : ws==='civil' ? ' · civil only' : '') +
     ' · approved/pending are to-date; day columns are this week';
+}
+
+// ── clearance title filter (multi-select) ──
+let pickSel=new Set();       // empty = show all
+function allCodes(){
+  const m={}; rows.forEach(r=>{ if(!m[r.clearance_code]) m[r.clearance_code]=r.clearance_name||r.clearance_code; });
+  return Object.keys(m).sort().map(c=>({code:c,name:m[c]}));
+}
+function openPicker(){ document.getElementById('pick-ovl').classList.add('on'); renderPicker(); }
+function closePicker(){ document.getElementById('pick-ovl').classList.remove('on'); }
+function renderPicker(){
+  const q=(document.getElementById('pick-search').value||'').toLowerCase().trim();
+  const list=allCodes().filter(x=>!q||x.code.toLowerCase().includes(q)||x.name.toLowerCase().includes(q));
+  document.getElementById('pick-body').innerHTML = list.length
+    ? list.map(x=>`<label class="pk"><input type="checkbox" ${pickSel.has(x.code)?'checked':''}
+        onchange="togglePick('${x.code.replace(/'/g,"\\'")}')"><code>${esc(x.code)}</code>
+        <span class="nm">${esc(x.name)}</span></label>`).join('')
+    : '<div style="color:var(--text-muted);font-size:12px">No clearances match.</div>';
+  document.getElementById('pick-count').textContent =
+    pickSel.size ? pickSel.size+' selected' : 'showing all';
+}
+function togglePick(c){ pickSel.has(c)?pickSel.delete(c):pickSel.add(c); renderPicker(); }
+function pickAll(on){
+  pickSel.clear();
+  if(on) allCodes().forEach(x=>pickSel.add(x.code));
+  renderPicker();
+}
+function applyPicker(){
+  // "all ticked" means the same as no filter — keep the button honest
+  if(pickSel.size===allCodes().length) pickSel.clear();
+  closePicker(); paintPickBtn(); render();
+}
+function paintPickBtn(){
+  document.getElementById('btn-pick').textContent =
+    (pickSel.size ? pickSel.size+' clearance'+(pickSel.size>1?'s':'') : 'All clearances')+' ▾';
+}
+
+// ── shared row layout (super admin only) ──
+let layout=[];            // [{code, hidden}] display order
+let layDraft=[];
+const layoutScope = () => activeWorkspace() || 'all';
+function isSuperAdmin(){
+  const u=window.__MEP_USER__||{};
+  return u.main_role_id===1 || u.role_id===1 || (u.role||'')==='super_admin' ||
+         (Array.isArray(u.permissions) && u.permissions.includes('manage_system') && u.permissions.includes('manage_users'));
+}
+async function loadLayout(){
+  try{
+    const r=await fetch(`${SB}/rest/v1/clearance_dashboard_layout?scope=eq.${encodeURIComponent(layoutScope())}&select=layout`,{headers:getH()});
+    if(r.ok){ const d=await r.json(); layout=(d[0]&&Array.isArray(d[0].layout))?d[0].layout:[]; }
+  }catch(e){ layout=[]; }
+  document.getElementById('btn-layout').style.display = isSuperAdmin() ? '' : 'none';
+}
+function openLayout(){
+  const known=allCodes();
+  const pos={}; layout.forEach((l,i)=>pos[l.code]=i);
+  layDraft=known.slice().sort((a,b)=>(pos[a.code]??9e6)-(pos[b.code]??9e6)||a.code.localeCompare(b.code))
+    .map(x=>({code:x.code,name:x.name,hidden:!!(layout.find(l=>l.code===x.code)||{}).hidden}));
+  document.getElementById('lay-msg').textContent='';
+  document.getElementById('lay-ovl').classList.add('on');
+  renderLayout();
+}
+function closeLayout(){ document.getElementById('lay-ovl').classList.remove('on'); }
+function renderLayout(){
+  document.getElementById('lay-body').innerHTML = layDraft.map((l,i)=>
+    `<div class="lr ${l.hidden?'off':''}" draggable="true" data-i="${i}"
+        ondragstart="layDragStart(event,${i})" ondragover="layDragOver(event,${i})" ondrop="layDrop(event,${i})"
+        ondragend="this.classList.remove('dragging')">
+      <span class="grip">⋮⋮</span>
+      <input type="checkbox" ${l.hidden?'':'checked'} onclick="event.stopPropagation()" onchange="layToggle(${i})">
+      <code>${esc(l.code)}</code><span class="nm">${esc(l.name)}</span>
+      <span style="color:var(--text-dim);font-size:10px">${i+1}</span>
+    </div>`).join('');
+}
+function layToggle(i){ layDraft[i].hidden=!layDraft[i].hidden; renderLayout(); }
+let layFrom=null;
+function layDragStart(e,i){ layFrom=i; e.currentTarget.classList.add('dragging'); try{e.dataTransfer.effectAllowed='move';}catch(_){} }
+function layDragOver(e,i){ e.preventDefault(); }
+function layDrop(e,i){
+  e.preventDefault();
+  if(layFrom===null||layFrom===i) return;
+  const [m]=layDraft.splice(layFrom,1); layDraft.splice(i,0,m); layFrom=null; renderLayout();
+}
+function layReset(){ layDraft.sort((a,b)=>a.code.localeCompare(b.code)); renderLayout(); }
+async function saveLayout(){
+  const msg=document.getElementById('lay-msg');
+  msg.style.color='var(--text-muted)'; msg.textContent='Saving…';
+  const body={ scope:layoutScope(),
+               layout:layDraft.map(l=>({code:l.code,hidden:!!l.hidden})),
+               updated_at:new Date().toISOString(),
+               updated_by:(window.__MEP_USER__?.full_name||window.__MEP_USER__?.email||null) };
+  try{
+    const r=await fetch(`${SB}/rest/v1/clearance_dashboard_layout?on_conflict=scope`,
+      {method:'POST',headers:{...getH(),'Prefer':'resolution=merge-duplicates,return=representation'},
+       body:JSON.stringify(body)});
+    if(!r.ok) throw new Error(r.status+' '+(await r.text()).slice(0,160));
+    layout=body.layout;
+    msg.style.color='var(--approved)'; msg.textContent='✓ Saved as the default for everyone';
+    render();
+    setTimeout(closeLayout,700);
+  }catch(e){
+    msg.style.color='var(--rejected)';
+    msg.textContent = /permission|denied|42501|401|403/i.test(e.message)
+      ? 'Only a super admin can change the shared layout.'
+      : 'Save failed: '+e.message;
+  }
 }
 
 // ── villa drill-down ──
@@ -456,8 +648,8 @@ function exportCsv(){
   const cls=clusters.filter(c=>shown.has(c));
   const disc=document.getElementById('f-disc').value;
   const head=['#','Title of Clearance','Clearance Code'];
-  cls.forEach(c=>{ head.push(c+' Fully Approved', c+' Pending'); dates.forEach(d=>head.push(c+' '+d)); });
-  head.push('Total Pending','Total Given to Civil');
+  cls.forEach(c=>{ head.push(c+' Fully Approved', c+' Pending'); dates.forEach(d=>head.push(c+' '+d)); head.push(c+' Week Total'); });
+  head.push('Released This Week','Total Pending','Total Given to Civil');
   const byCode={};
   rows.forEach(r=>{
     if(disc && (r.discipline||'')!==disc) return;
@@ -465,15 +657,20 @@ function exportCsv(){
     (byCode[r.clearance_code]=byCode[r.clearance_code]||{name:r.clearance_name,cl:{}}).cl[r.cluster_code]=r;
   });
   const lines=[head.join(',')];
-  Object.keys(byCode).sort().forEach((code,i)=>{
-    const rec=byCode[code]; let a=0,p=0;
+  // export exactly what's on screen: same rows, same order
+  const shownCodes=[...document.querySelectorAll('tbody .sticky3')].map(td=>td.textContent.trim())
+                     .filter(c=>byCode[c]);
+  (shownCodes.length?shownCodes:Object.keys(byCode).sort()).forEach((code,i)=>{
+    const rec=byCode[code]; let a=0,p=0,wk=0;
     const cells=[i+1,'"'+String(rec.name||'').replace(/"/g,'""')+'"',code];
     cls.forEach(c=>{
       const x=rec.cl[c], ap=x?+x.fully_approved:0, pe=x?+x.pending:0, daily=(x&&x.daily)||{};
       a+=ap; p+=pe; cells.push(ap,pe);
-      dates.forEach(d=>cells.push(+(daily[d]||0)));
+      let cw=0;
+      dates.forEach(d=>{ const n=+(daily[d]||0); cw+=n; cells.push(n); });
+      wk+=cw; cells.push(cw);
     });
-    cells.push(p,a);
+    cells.push(wk,p,a);
     lines.push(cells.join(','));
   });
   const blob=new Blob([lines.join('\n')],{type:'text/csv'});
