@@ -126,23 +126,34 @@ tr:hover td{background:var(--bg-hover)}
       <select id="mine-date" style="width:auto" onchange="mineDate=this.value;loadMine()">
         <option value="all">All time</option><option value="today">Today</option><option value="7">Last 7 days</option>
       </select>
+      <select id="mine-by" style="width:auto" onchange="mineBy=this.value;renderMine()"><option value="">All people</option></select>
+      <select id="mine-cl" style="width:auto" onchange="mineCl=this.value;renderMine()"><option value="">All clusters</option></select>
+      <select id="mine-act" style="width:auto" onchange="mineAct=this.value;renderMine()"><option value="">All activities</option></select>
       <div style="flex:1"></div>
+      <span id="mine-count" class="muted" style="font-size:11px"></span>
       <button class="btn sm" onclick="loadMine()">↻ Refresh</button>
     </div>
     <div class="card" style="padding:0;overflow:auto">
       <table><thead><tr>
-        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th id="mine-by-h" style="display:none">By</th><th>Status</th><th></th>
-      </tr></thead><tbody id="mine-body"><tr><td colspan="7" class="empty"><span class="spin"></span></td></tr></tbody></table>
+        <th>Raised</th><th>Villa</th><th>Type</th><th>Activity</th><th>Sub</th><th id="mine-by-h" style="display:none">By</th><th>Status</th><th></th>
+      </tr></thead><tbody id="mine-body"><tr><td colspan="8" class="empty"><span class="spin"></span></td></tr></tbody></table>
     </div>
   </div>
 
   <!-- INCOMING (DC) -->
   <div id="pane-inc" class="hidden">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:8px"><button class="btn sm" onclick="loadIncoming()">↻ Refresh</button></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+      <select id="inc-by" style="width:auto" onchange="incBy=this.value;renderIncoming()"><option value="">All people</option></select>
+      <select id="inc-cl" style="width:auto" onchange="incCl=this.value;renderIncoming()"><option value="">All clusters</option></select>
+      <select id="inc-act" style="width:auto" onchange="incAct=this.value;renderIncoming()"><option value="">All activities</option></select>
+      <div style="flex:1"></div>
+      <span id="inc-count" class="muted" style="font-size:11px"></span>
+      <button class="btn sm" onclick="loadIncoming()">↻ Refresh</button>
+    </div>
     <div class="card" style="padding:0;overflow:auto">
       <table><thead><tr>
-        <th>Raised</th><th>Villa</th><th>Activity</th><th>Sub</th><th>By</th><th>Photos</th><th>Status</th><th>Actions</th>
-      </tr></thead><tbody id="inc-body"><tr><td colspan="8" class="empty"><span class="spin"></span></td></tr></tbody></table>
+        <th>Raised</th><th>Villa</th><th>Type</th><th>Activity</th><th>Sub</th><th>By</th><th>Photos</th><th>Status</th><th>Actions</th>
+      </tr></thead><tbody id="inc-body"><tr><td colspan="9" class="empty"><span class="spin"></span></td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -167,7 +178,10 @@ function uid(){ return me && me.id!=null ? String(me.id) : ((me&&me.email)||'');
 let me=null, perms=[], canRaise=false, dcMech=false, dcElec=false, isDC=false, isAdmin=false, canViewAll=false;
 let myDisc=[];              // ['mechanical','electrical'] for a DC user
 let mineScope='mine', mineDate='all', mineRows=[];
-let clusterCode={}, villas=[], villaByKey={};
+// list filters (shared shape for both tabs): '' = no filter
+let mineBy='', mineCl='', mineAct='';
+let incBy='',  incCl='',  incAct='',  incRows=[];
+let clusterCode={}, villas=[], villaByKey={}, villaById={};
 let acts=[], actByCode={};
 let prereqs={};            // activity_code -> [prereq_activity_code]
 let villaWir=null, villaNcr=null, villaOpenSubs=null;   // cached for the selected villa
@@ -198,12 +212,14 @@ async function init(){
   // reference data
   const [cl, vl, ac, pq] = await Promise.all([
     fa('clusters?select=id,code&order=id'),
-    faAll('villas?select=id,villa_no,cluster_id&is_active=eq.true&order=id'),
+    faAll('villas?select=id,villa_no,cluster_id,villa_type&is_active=eq.true&order=id'),
     fa('activities?select=id,activity_code,activity_name,discipline&is_active=eq.true&discipline=in.(mechanical,electrical)&order=activity_code'),
     fa('wir_prerequisites?select=activity_code,prereq_activity_code'),
   ]);
   cl.forEach(c=>clusterCode[c.id]=c.code);
-  villas=vl; vl.forEach(v=>{ villaByKey[(clusterCode[v.cluster_id]||'')+'_'+v.villa_no]=v; });
+  // by-id lookup as well as by cluster+number: submittals store villa_id, and villa
+  // type isn't on wir_submittals, so the type column resolves through this map.
+  villas=vl; vl.forEach(v=>{ villaByKey[(clusterCode[v.cluster_id]||'')+'_'+v.villa_no]=v; villaById[v.id]=v; });
   acts=ac; ac.forEach(a=>actByCode[a.activity_code]=a);
   pq.forEach(p=>{ (prereqs[p.activity_code]=prereqs[p.activity_code]||[]).push(p.prereq_activity_code); });
 
@@ -322,6 +338,30 @@ async function raiseWir(){
   btn.textContent='Raise WIR';
 }
 
+// ── shared filter helpers ──
+// Villa type lives on `villas`, not on `wir_submittals`, so resolve it per row.
+function villaTypeOf(r){
+  const v = villaById[r.villa_id] || villaByKey[(r.cluster||'')+'_'+r.villa_no];
+  return (v && v.villa_type) ? v.villa_type : '';
+}
+// Rebuild a <select> from the values actually present, keeping the current choice
+// if it still exists (so a refresh doesn't silently widen the filter).
+function fillFilter(id, values, cur, allLabel){
+  const el=document.getElementById(id); if(!el) return cur;
+  const vals=[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true}));
+  const keep = vals.includes(cur) ? cur : '';
+  el.innerHTML = `<option value="">${allLabel}</option>` +
+    vals.map(v=>`<option value="${esc(v)}"${v===keep?' selected':''}>${esc(v)}</option>`).join('');
+  el.value = keep;
+  return keep;
+}
+function passes(r, by, cl, act){
+  if(by  && String(r.raised_by_name||'')!==by) return false;
+  if(cl  && String(r.cluster||'')!==cl) return false;
+  if(act && String(r.activity_code||'')!==act) return false;
+  return true;
+}
+
 // ── MY SUBMITTALS ──
 async function loadMine(){
   if(!(canRaise||canViewAll)) return;
@@ -333,9 +373,27 @@ async function loadMine(){
   if(mineDate==='today'){ const d=new Date(); d.setHours(0,0,0,0); q+=`&raised_at=gte.${d.toISOString()}`; }
   else if(mineDate==='7'){ const d=new Date(Date.now()-7*864e5); q+=`&raised_at=gte.${d.toISOString()}`; }
   try{
-    const rows=await fa(q); mineRows=rows;
-    const cols = showBy?7:6;
-    if(!rows.length){ body.innerHTML=`<tr><td colspan="${cols}" class="empty">No submittals.</td></tr>`; return; }
+    mineRows=await fa(q);
+    // person filter is only meaningful when several people's rows are on screen
+    document.getElementById('mine-by').style.display = showBy?'':'none';
+    mineBy  = showBy ? fillFilter('mine-by',  mineRows.map(r=>r.raised_by_name), mineBy,  'All people') : '';
+    mineCl  = fillFilter('mine-cl',  mineRows.map(r=>r.cluster),       mineCl,  'All clusters');
+    mineAct = fillFilter('mine-act', mineRows.map(r=>r.activity_code), mineAct, 'All activities');
+    renderMine();
+  }catch(e){ body.innerHTML=`<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+}
+
+function renderMine(){
+  const body=document.getElementById('mine-body');
+  const showBy = (mineScope==='all' && canViewAll);
+  const cols = showBy?8:7;
+  const rows = mineRows.filter(r=>passes(r,mineBy,mineCl,mineAct));
+  const cnt=document.getElementById('mine-count');
+  if(cnt) cnt.textContent = rows.length===mineRows.length
+    ? `${rows.length} submittal${rows.length!==1?'s':''}`
+    : `${rows.length} of ${mineRows.length}`;
+  {
+    if(!rows.length){ body.innerHTML=`<tr><td colspan="${cols}" class="empty">No submittals match these filters.</td></tr>`; return; }
     body.innerHTML=rows.map(r=>{
       const mine = String(r.raised_by)===uid();
       let act='';
@@ -346,6 +404,7 @@ async function loadMine(){
       return `<tr>
         <td class="muted">${fmtDate(r.raised_at)}</td>
         <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
+        <td class="muted">${esc(villaTypeOf(r)||'—')}</td>
         <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
         <td>${esc(r.subcontractor_name||'—')}</td>
         ${showBy?`<td class="muted">${esc(r.raised_by_name||'')}</td>`:''}
@@ -365,7 +424,7 @@ async function loadMine(){
         </div>
       </td></tr>`;
     }).join('');
-  }catch(e){ body.innerHTML=`<tr><td colspan="7" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+  }
 }
 // Raiser attaches extra documents the DC asked for: pick files, then press Send.
 function attachDocs(id){
@@ -427,28 +486,45 @@ async function loadIncoming(){
   const body=document.getElementById('inc-body');
   const discF = myDisc.length? `&discipline=in.(${myDisc.join(',')})` : '';
   try{
-    const rows=await fa(`wir_submittals?status=in.(pending,info_requested)${discF}&select=*&order=raised_at.asc&limit=300`);
-    const cnt=document.getElementById('inc-cnt');
-    cnt.textContent=rows.length; cnt.classList.toggle('hidden',!rows.length);
-    if(!rows.length){ body.innerHTML=`<tr><td colspan="8" class="empty">No pending submittals. 🎉</td></tr>`; return; }
-    body.innerHTML=rows.map(r=>{
-      const ph=(r.photos||[]).map(u=>`<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" onerror="this.replaceWith(document.createTextNode('📎'))"></a>`).join('');
-      return `<tr>
-        <td class="muted">${fmtDate(r.raised_at)}</td>
-        <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
-        <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
-        <td>${esc(r.subcontractor_name||'—')}</td>
-        <td class="muted">${esc(r.raised_by_name||'')}</td>
-        <td><div class="thumbs">${ph||'<span class="muted">—</span>'}</div></td>
-        <td>${statusPill(r)}</td>
-        <td style="white-space:nowrap">
-          <button class="btn sm green" onclick="dcAction(${r.id},'submitted')">Submitted</button>
-          <button class="btn sm amber" onclick="dcAction(${r.id},'info_requested')">Docs</button>
-          <button class="btn sm red" onclick="dcAction(${r.id},'rejected')">Reject</button>
-        </td>
-      </tr>`;
-    }).join('');
-  }catch(e){ body.innerHTML=`<tr><td colspan="8" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+    incRows=await fa(`wir_submittals?status=in.(pending,info_requested)${discF}&select=*&order=raised_at.asc&limit=300`);
+    incBy  = fillFilter('inc-by',  incRows.map(r=>r.raised_by_name), incBy,  'All people');
+    incCl  = fillFilter('inc-cl',  incRows.map(r=>r.cluster),        incCl,  'All clusters');
+    incAct = fillFilter('inc-act', incRows.map(r=>r.activity_code),  incAct, 'All activities');
+    renderIncoming();
+  }catch(e){ body.innerHTML=`<tr><td colspan="9" class="empty">Error: ${esc(e.message)}</td></tr>`; }
+}
+
+function renderIncoming(){
+  const body=document.getElementById('inc-body');
+  const rows=incRows.filter(r=>passes(r,incBy,incCl,incAct));
+  // the tab badge counts the real queue, not the filtered view
+  const cnt=document.getElementById('inc-cnt');
+  if(cnt){ cnt.textContent=incRows.length; cnt.classList.toggle('hidden',!incRows.length); }
+  const lbl=document.getElementById('inc-count');
+  if(lbl) lbl.textContent = rows.length===incRows.length
+    ? `${rows.length} pending` : `${rows.length} of ${incRows.length} pending`;
+  if(!rows.length){
+    body.innerHTML=`<tr><td colspan="9" class="empty">${incRows.length?'No submittals match these filters.':'No pending submittals. 🎉'}</td></tr>`;
+    return;
+  }
+  body.innerHTML=rows.map(r=>{
+    const ph=(r.photos||[]).map(u=>`<a href="${esc(u)}" target="_blank"><img src="${esc(u)}" onerror="this.replaceWith(document.createTextNode('📎'))"></a>`).join('');
+    return `<tr>
+      <td class="muted">${fmtDate(r.raised_at)}</td>
+      <td class="mono">VI-${esc(r.villa_no)} <span class="muted">C${esc(r.cluster).replace(/^C/i,'')}</span></td>
+      <td class="muted">${esc(villaTypeOf(r)||'—')}</td>
+      <td>${esc(r.activity_code)} <span class="muted">${esc(r.activity_name)}</span></td>
+      <td>${esc(r.subcontractor_name||'—')}</td>
+      <td class="muted">${esc(r.raised_by_name||'')}</td>
+      <td><div class="thumbs">${ph||'<span class="muted">—</span>'}</div></td>
+      <td>${statusPill(r)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn sm green" onclick="dcAction(${r.id},'submitted')">Submitted</button>
+        <button class="btn sm amber" onclick="dcAction(${r.id},'info_requested')">Docs</button>
+        <button class="btn sm red" onclick="dcAction(${r.id},'rejected')">Reject</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 async function dcAction(id,status){
   if(!isDC){ alert('Only the DC can accept or reject WIR requests.'); return; }
