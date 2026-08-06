@@ -514,7 +514,11 @@ function render(){
   document.getElementById('status').textContent=
     `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending` +
     (ws==='mep' ? ' · civil (CCLR) hidden' : ws==='civil' ? ' · civil only' : '') +
-    ' · approved/pending are to-date; day columns are this week';
+    ' · figures as at ' + (function(){
+      const end=dates[6], today=iso(new Date());
+      const a=(end&&end<today)?end:today;
+      return new Date(a+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    })();
 }
 
 // Header rows 2 and 3 must stick directly beneath the rows above them. Their heights
@@ -645,9 +649,11 @@ const KIND_LABEL={released:'Released',fully_approved:'Fully approved',pending:'P
 async function openDrill(code,cluster,kind,date){
   const ovl=document.getElementById('ovl');
   const name=(rows.find(r=>r.clearance_code===code)||{}).clearance_name||code;
+  const endIso = dates[6], todayIso = iso(new Date());
+  const asOf = (endIso && endIso < todayIso) ? endIso : todayIso;
   const when = kind==='released'
     ? new Date(date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
-    : 'as of today';
+    : 'as of '+new Date(asOf+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
   document.getElementById('dr-title').textContent=name;
   document.getElementById('dr-sub').innerHTML=
     `<b>${esc(code)}</b> · ${esc(cluster)} · ${KIND_LABEL[kind]||kind} — ${esc(when)}`;
@@ -658,7 +664,8 @@ async function openDrill(code,cluster,kind,date){
   try{
     const r=await fetch(`${SB}/rest/v1/rpc/clearance_dashboard_villas`,{
       method:'POST',headers:getH(),
-      body:JSON.stringify({p_code:code,p_cluster:cluster,p_kind:kind,p_date:date||null})});
+      // p_asof keeps the villa list on the same point in time as the cell that was clicked
+      body:JSON.stringify({p_code:code,p_cluster:cluster,p_kind:kind,p_date:date||null,p_asof:dates[6]||null})});
     if(!r.ok) throw new Error(r.status+' '+(await r.text()).slice(0,140));
     const list=await r.json();
     drillVillas=list.map(v=>v.villa_no);
