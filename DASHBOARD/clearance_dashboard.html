@@ -108,11 +108,26 @@ td.gstart,th.gstart{border-left:1px solid var(--border-strong)}
 .c-pend{font-weight:650;color:var(--pending)}
 .c-day{color:var(--text-muted);font-weight:450}
 .c-day.hit{color:var(--text);font-weight:650}
-.c-zero{color:var(--text-faint,var(--text-dim));opacity:.35;font-weight:400}
+/* dim the zeros with colour, not opacity — opacity would fade the cell's background
+   too and give every zero cell its own stacking context */
+.c-zero{color:var(--text-faint,var(--text-dim));font-weight:400}
 .c-wk{font-weight:650;color:var(--text);background:rgba(127,127,127,.07);border-left:1px dashed var(--border-strong)}
 .t-week{color:var(--text);font-weight:700;background:rgba(127,127,127,.10);border-left:1px solid var(--border-strong)}
 .t-pend{color:var(--pending);font-weight:700;border-left:1px solid var(--border-strong);background:var(--pending-bg)}
 .t-tot{color:var(--approved);font-weight:700;background:var(--approved-bg)}
+/* A pinned cell must be FULLY opaque — the tint colours above are rgba, so rows
+   scrolling underneath showed straight through the header/footer in exactly those
+   columns (WEEK, Released This Week, Total Pending, Total Released). Repaint the tint
+   as a gradient layer over an opaque base. The compound selectors matter: a bare
+   `thead th` (0,0,2) loses to `.t-pend` (0,1,0), so each one is restated here. */
+thead th.c-wk,   tfoot td.c-wk  {background-color:var(--bg-panel);
+  background-image:linear-gradient(rgba(127,127,127,.07),rgba(127,127,127,.07))}
+thead th.t-week, tfoot td.t-week{background-color:var(--bg-panel);
+  background-image:linear-gradient(rgba(127,127,127,.10),rgba(127,127,127,.10))}
+thead th.t-pend, tfoot td.t-pend{background-color:var(--bg-panel);
+  background-image:linear-gradient(var(--pending-bg),var(--pending-bg))}
+thead th.t-tot,  tfoot td.t-tot {background-color:var(--bg-panel);
+  background-image:linear-gradient(var(--approved-bg),var(--approved-bg))}
 tfoot td{position:sticky;bottom:0;background:var(--bg-panel);font-weight:700;z-index:4;
          border-top:1px solid var(--border-strong);color:var(--text)}
 tfoot td.sticky1,tfoot td.sticky2,tfoot td.sticky3{z-index:5}
