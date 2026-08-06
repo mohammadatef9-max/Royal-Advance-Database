@@ -174,15 +174,59 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--bg-elev);border:1px solid var(--border);padding:9px 16px;border-radius:8px;font-size:12px;opacity:0;pointer-events:none;transition:.2s;z-index:99}
 #toast.show{opacity:1}
 #toast.error{border-color:var(--rejected);color:var(--rejected)}
+/* ── PRINT: one A3 landscape sheet ─────────────────────────────────────────────
+   The screen view is a dark, frozen-pane, scrolling grid — none of which survives
+   on paper. Print gets a light palette, unpinned cells, a fixed layout scaled to the
+   page width, and a title block naming the week and the filters that produced it. */
+#print-head{display:none}
 @media print{
-  @page{size:A4 landscape;margin:8mm}
-  .hdr .btn,.ctrls,#ovl{display:none!important}
-  body{background:#fff;color:#000;font-size:8pt}
-  .wrap{overflow:visible;max-height:none}
-  thead th{position:static}
-  .sticky1,.sticky2,.sticky3{position:static}
-  th,td{border:1px solid #999;padding:2px 3px}
-  tbody td{background:#fff}
+  @page{size:A3 landscape;margin:7mm}
+  html,body{background:#fff!important;color:#111!important;font-size:7pt}
+  /* colour carries meaning here (approved / pending), so keep it on paper */
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+
+  /* screen chrome off, print header on */
+  .hdr,.ctrls,#ovl,.ovl,#toast{display:none!important}
+  #print-head{display:block!important;margin-bottom:4mm}
+  #print-head h2{margin:0 0 1mm;font-size:12pt;font-weight:700;color:#111}
+  #print-head .meta{font-size:7.5pt;color:#444;line-height:1.5}
+
+  /* unpin every sticky cell and let the table flow */
+  .wrap{overflow:visible!important;max-height:none!important;padding:0!important}
+  #host table{margin-top:0!important}
+  thead th,tfoot td,.sticky1,.sticky2,.sticky3{position:static!important;box-shadow:none!important}
+
+  /* repeat the header on every sheet; never split a row across pages */
+  thead{display:table-header-group}
+  tfoot{display:table-footer-group}
+  tr,thead{break-inside:avoid;page-break-inside:avoid}
+
+  /* fixed layout = the grid scales to the sheet instead of overflowing it */
+  table{width:100%!important;table-layout:fixed;font-size:6.4pt;border:.5pt solid #888!important;
+        border-radius:0!important}
+  th,td{border:.4pt solid #b5b5b5!important;padding:1pt 1.5pt!important;color:#111!important;
+        background:#fff!important;overflow:hidden;text-overflow:ellipsis}
+  thead th{background:#eceff4!important;color:#111!important;font-size:6pt;font-weight:700}
+  .grp{background:#dde3ec!important;color:#111!important;font-size:7pt}
+
+  /* identity columns: give the title room, squeeze the rest */
+  .sticky1{width:7mm}
+  .sticky2{width:42mm;white-space:normal!important;font-weight:600}
+  .sticky3{width:20mm;font-family:inherit!important}
+
+  /* light, printer-friendly versions of the on-screen tints */
+  .c-app,thead th.c-app{background:#e8f0fe!important;color:#0b3d91!important;font-weight:700}
+  .c-pend,thead th.c-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
+  .c-wk,thead th.c-wk,tfoot td.c-wk{background:#f0f0f0!important;color:#111!important;font-weight:700}
+  .t-week,thead th.t-week,tfoot td.t-week{background:#e9e9e9!important;color:#111!important;font-weight:700}
+  .t-pend,thead th.t-pend,tfoot td.t-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
+  .t-tot,thead th.t-tot,tfoot td.t-tot{background:#d9f2e4!important;color:#0b5c36!important;font-weight:700}
+  tfoot td{background:#eceff4!important;font-weight:700}
+  /* zeros stay faint so real numbers carry the page */
+  .c-zero{color:#b0b0b0!important}
+  .gA,.gB,tbody tr:nth-child(even) td{background:#fff!important}
+  tbody tr:nth-child(even) td.c-app{background:#e8f0fe!important}
+  tbody tr:nth-child(even) td.c-pend{background:#fdf3d0!important}
 }
 </style>
 </head>
@@ -228,7 +272,11 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
   <span id="status" style="font-size:11px;color:var(--text-dim);text-align:right;max-width:520px"></span>
 </div>
 
-<div class="wrap"><div id="host"><div class="empty"><span class="spin"></span> Loading…</div></div></div>
+<div class="wrap">
+  <!-- print-only: the sheet must say what it is without the on-screen controls -->
+  <div id="print-head"><h2>Clearance Dashboard</h2><div class="meta" id="print-meta"></div></div>
+  <div id="host"><div class="empty"><span class="spin"></span> Loading…</div></div>
+</div>
 
 <div id="ovl" onclick="if(event.target===this)closeDrill()">
   <div class="modal">
@@ -533,6 +581,7 @@ function render(){
   }
   host.innerHTML=notice+`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
   syncHeaderOffsets();
+  paintPrintHead(cls, codes.length, disc);
   const ws=activeWorkspace();
   document.getElementById('status').textContent=
     `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending` +
@@ -558,6 +607,27 @@ function syncHeaderOffsets(){
 // re-measure when the layout can change under us
 window.addEventListener('resize', syncHeaderOffsets);
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(syncHeaderOffsets).catch(()=>{});
+
+// The printed sheet loses every on-screen control, so restate what it shows: which
+// week, which clusters, which filters, and the date the figures are stated as at.
+function paintPrintHead(cls, rowCount, disc){
+  const el=document.getElementById('print-meta'); if(!el) return;
+  const f=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  const end=dates[6], today=iso(dubaiNow());
+  const asOf=(end&&end<today)?end:today;
+  const ws=activeWorkspace();
+  const bits=[
+    `<b>Week:</b> Fri ${f(dates[0])} – Thu ${f(dates[6])}`,
+    `<b>Clusters:</b> ${cls.join(', ')||'—'}`,
+    `<b>Clearances:</b> ${pickSel.size? pickSel.size+' selected' : 'all'} (${rowCount} shown)`,
+  ];
+  if(disc) bits.push(`<b>Discipline:</b> ${esc(disc)}`);
+  if(ws==='mep')   bits.push('civil (CCLR) excluded');
+  if(ws==='civil') bits.push('civil only');
+  el.innerHTML = bits.join(' &nbsp;·&nbsp; ') +
+    `<br><b>Approved / Pending as at:</b> ${f(asOf)} &nbsp;·&nbsp; day columns are releases within the week` +
+    `&nbsp;·&nbsp; printed ${new Date().toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}`;
+}
 
 // How far the imported DC log actually reaches. A week beyond this is empty because the
 // data hasn't been imported yet — very different from "nothing was released", so say so.
