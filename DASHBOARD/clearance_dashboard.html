@@ -234,19 +234,21 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
   tbody .sticky1,tbody .sticky2,tbody .sticky3{background:#fff!important;color:#111!important}
   thead .sticky1,thead .sticky2,thead .sticky3{background:#eceff4!important;color:#111!important}
 
+  /* Flatten the alternating cluster bands and zebra striping FIRST — these must not
+     win over the semantic tints below, which are what make the sheet readable. */
+  .gA,.gB,tbody td.gA,tbody td.gB,tbody tr:nth-child(even) td{background:#fff!important}
+
   /* light, printer-friendly versions of the on-screen tints */
-  .c-app,thead th.c-app{background:#e8f0fe!important;color:#0b3d91!important;font-weight:700}
-  .c-pend,thead th.c-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
-  .c-wk,thead th.c-wk,tfoot td.c-wk{background:#f0f0f0!important;color:#111!important;font-weight:700}
-  .t-week,thead th.t-week,tfoot td.t-week{background:#e9e9e9!important;color:#111!important;font-weight:700}
-  .t-pend,thead th.t-pend,tfoot td.t-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
-  .t-tot,thead th.t-tot,tfoot td.t-tot{background:#d9f2e4!important;color:#0b5c36!important;font-weight:700}
-  tfoot td{background:#eceff4!important;font-weight:700}
-  /* zeros stay faint so real numbers carry the page */
-  .c-zero{color:#b0b0b0!important}
-  .gA,.gB,tbody tr:nth-child(even) td{background:#fff!important}
-  tbody tr:nth-child(even) td.c-app{background:#e8f0fe!important}
-  tbody tr:nth-child(even) td.c-pend{background:#fdf3d0!important}
+  th.grp,thead th.grp{background:#dbe2ec!important;color:#111!important;font-weight:700}
+  td.c-app,th.c-app,thead th.c-app,tbody td.c-app{background:#e8f0fe!important;color:#0b3d91!important;font-weight:700}
+  td.c-pend,th.c-pend,thead th.c-pend,tbody td.c-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
+  td.c-wk,th.c-wk,thead th.c-wk,tfoot td.c-wk{background:#f1f1f1!important;color:#111!important;font-weight:700}
+  td.t-week,th.t-week,thead th.t-week,tfoot td.t-week{background:#e9e9e9!important;color:#111!important;font-weight:700}
+  td.t-pend,th.t-pend,thead th.t-pend,tfoot td.t-pend{background:#fdf3d0!important;color:#7a5300!important;font-weight:700}
+  td.t-tot,th.t-tot,thead th.t-tot,tfoot td.t-tot{background:#d9f2e4!important;color:#0b5c36!important;font-weight:700}
+  tfoot td{border-top:.8pt solid #666!important;font-weight:700}
+  /* zeros stay faint so the real numbers carry the page */
+  td.c-zero{color:#bbb!important;font-weight:400}
 }
 </style>
 </head>
