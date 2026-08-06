@@ -320,6 +320,18 @@ textarea{resize:vertical;min-height:60px}
   .qs-left,.scope-hdr,.pc-bar,.qs-tabs,.ps-toolbar,.psum-actions,.sh-actions,.modal-overlay,
   .warn-strip,.fin-auto-hint,.fin-auto-btn,.sig-block-title .btn,.icon-btn{display:none!important}
 
+  /* The scope switcher is on-screen navigation: the printed sheet already carries its
+     own section heading, and every scope feeds the summary regardless. */
+  #ps-section-bar{display:none!important}
+
+  /* Loading placeholders must never reach paper. The rule below reveals every tab, so
+     any panel still holding its initial spinner would otherwise print one. */
+  .loading-row,.spin{display:none!important}
+
+  /* The Cover Page has its own print action (printCover opens a dedicated window), so
+     it must not be folded into the summary + progress sheet print. */
+  #tc-cover{display:none!important}
+
   /* reset layout to block flow */
   html,body{display:block!important;height:auto!important;overflow:visible!important;background:#fff!important;color:#000!important}
   .qs-main{display:block!important;overflow:visible!important;background:#fff!important}
