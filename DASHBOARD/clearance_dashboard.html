@@ -330,6 +330,13 @@ let dates=[];             // date strings for the day columns (Fri → Thu)
 let hideEmpty=true;
 let weekStart=null;       // Date of the displayed week's Friday
 
+// The project runs on Dubai time (UTC+4, no DST) and the week rolls over at Dubai
+// midnight. Using the browser's own clock meant a device in another timezone could sit
+// in a different week than the database — which showed up as a whole week of zeros.
+function dubaiNow(){
+  const d = new Date(Date.now() + 4*3600*1000);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
 // Site week runs Friday → Thursday.
 function fridayOf(d){
   const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());
@@ -339,8 +346,7 @@ function fridayOf(d){
 const iso = d => new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
 
 function todayLabel(){
-  const d=new Date();
-  return d.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return dubaiNow().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 }
 
 // Seven columns, Friday through Thursday of the selected week.
@@ -354,12 +360,12 @@ function dLabel(isoStr){
   return {wd:d.toLocaleDateString('en-GB',{weekday:'short'}), dm:d.toLocaleDateString('en-GB',{day:'2-digit',month:'2-digit'})};
 }
 function shiftWeek(n){ weekStart.setDate(weekStart.getDate()+n*7); load(); }
-function thisWeek(){ weekStart=fridayOf(new Date()); load(); }
+function thisWeek(){ weekStart=fridayOf(dubaiNow()); load(); }
 
 function paintWeekLabel(){
   const end=new Date(weekStart); end.setDate(end.getDate()+6);
   const f=d=>d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
-  const cur=iso(fridayOf(new Date()));
+  const cur=iso(fridayOf(dubaiNow()));
   const isCurrent = iso(weekStart)===cur;
   document.getElementById('week-label').innerHTML =
     `Fri ${f(weekStart)} – Thu ${f(end)}` +
@@ -371,7 +377,7 @@ function paintWeekLabel(){
 async function load(){
   const host=document.getElementById('host');
   host.innerHTML='<div class="empty"><span class="spin"></span> Loading…</div>';
-  if(!weekStart) weekStart=fridayOf(new Date());
+  if(!weekStart) weekStart=fridayOf(dubaiNow());
   dates=buildDates();
   paintWeekLabel();
   try{
@@ -383,6 +389,7 @@ async function load(){
     if(!shown.size) clusters.forEach(c=>shown.add(c));
     else [...shown].forEach(c=>{ if(!clusters.includes(c)) shown.delete(c); });
     await loadLayout();
+    await loadDataThrough();
     paintPickBtn();
     buildChips();
     render();
@@ -508,14 +515,30 @@ function render(){
   foot+=`<td class="t-week">${totals.week}</td>`+
         `<td class="t-pend">${totals.pend}</td><td class="t-tot">${totals.app}</td></tr>`;
 
-  host.innerHTML=`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+  // A week with no releases at all is almost always "not imported yet", not "nothing
+  // happened" — spell that out rather than leaving a grid of zeros to interpret.
+  let notice='';
+  if(!totals.week){
+    const fmtD=s=>new Date(s+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    const behind = dataThrough && dataThrough < dates[0];
+    notice=`<div style="margin-bottom:10px;padding:9px 12px;border:1px solid var(--border-strong);
+      border-radius:8px;background:var(--pending-bg);color:var(--text);font-size:12px">
+      <b>No clearances released in this week.</b> ${
+        behind
+          ? `The DC log currently only goes up to <b>${fmtD(dataThrough)}</b>, so this week has no data yet — import the latest log, or use ◀ to view an earlier week.`
+          : dataThrough
+            ? `Latest release in the imported log: <b>${fmtD(dataThrough)}</b>.`
+            : ''}
+    </div>`;
+  }
+  host.innerHTML=notice+`<table><thead>${h1}${h2}${h3}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
   syncHeaderOffsets();
   const ws=activeWorkspace();
   document.getElementById('status').textContent=
     `${codes.length} clearance types · ${cls.length} clusters · ${totals.app.toLocaleString()} released, ${totals.pend.toLocaleString()} pending` +
     (ws==='mep' ? ' · civil (CCLR) hidden' : ws==='civil' ? ' · civil only' : '') +
     ' · figures as at ' + (function(){
-      const end=dates[6], today=iso(new Date());
+      const end=dates[6], today=iso(dubaiNow());
       const a=(end&&end<today)?end:today;
       return new Date(a+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
     })();
@@ -535,6 +558,16 @@ function syncHeaderOffsets(){
 // re-measure when the layout can change under us
 window.addEventListener('resize', syncHeaderOffsets);
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(syncHeaderOffsets).catch(()=>{});
+
+// How far the imported DC log actually reaches. A week beyond this is empty because the
+// data hasn't been imported yet — very different from "nothing was released", so say so.
+let dataThrough=null;
+async function loadDataThrough(){
+  try{
+    const r=await fetch(`${SB}/rest/v1/rpc/clearance_data_through`,{method:'POST',headers:getH(),body:'{}'});
+    if(r.ok){ const d=await r.json(); dataThrough=(typeof d==='string')?d:(d&&d[0])||null; }
+  }catch(e){ dataThrough=null; }
+}
 
 // ── clearance title filter (multi-select) ──
 let pickSel=new Set();       // empty = show all
@@ -649,7 +682,7 @@ const KIND_LABEL={released:'Released',fully_approved:'Fully approved',pending:'P
 async function openDrill(code,cluster,kind,date){
   const ovl=document.getElementById('ovl');
   const name=(rows.find(r=>r.clearance_code===code)||{}).clearance_name||code;
-  const endIso = dates[6], todayIso = iso(new Date());
+  const endIso = dates[6], todayIso = iso(dubaiNow());
   const asOf = (endIso && endIso < todayIso) ? endIso : todayIso;
   const when = kind==='released'
     ? new Date(date+'T00:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
