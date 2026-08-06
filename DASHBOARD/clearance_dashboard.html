@@ -181,6 +181,23 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
 #print-head{display:none}
 @media print{
   @page{size:A3 landscape;margin:7mm}
+
+  /* Repoint the design tokens at a light palette. Chasing individual selectors doesn't
+     work — rules like `.sticky2{background:var(--bg-panel)!important}` carry class
+     specificity and beat any `th,td{...!important}` override, which is why the frozen
+     columns printed as solid black bars. Redefining the variables fixes every consumer
+     at once, including ones added later. */
+  :root,html,html[data-theme="dark"],html[data-theme="light"]{
+    --bg:#fff;--bg-elev:#fff;--bg-panel:#eceff4;--bg-cell:#fff;--bg-row-alt:#fff;
+    --bg-input:#fff;--bg-hover:#fff;
+    --border:#b5b5b5;--border-strong:#8a8a8a;--border-subtle:#c9c9c9;
+    --text:#111;--text-muted:#444;--text-dim:#666;--text-faint:#b0b0b0;
+    --accent:#0b3d91;--accent-soft:#e8f0fe;--accent-text:#0b3d91;
+    --approved:#0b5c36;--approved-bg:#d9f2e4;
+    --pending:#7a5300;--pending-bg:#fdf3d0;
+    --rejected:#8a1c1c;
+    --band-a:#fff;--band-a-alt:#fff;--band-b:#fff;--band-b-alt:#fff;
+  }
   html,body{background:#fff!important;color:#111!important;font-size:7pt}
   /* colour carries meaning here (approved / pending), so keep it on paper */
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
@@ -213,6 +230,9 @@ td.drill:hover{outline:1px solid var(--accent);outline-offset:-1px}
   .sticky1{width:7mm}
   .sticky2{width:42mm;white-space:normal!important;font-weight:600}
   .sticky3{width:20mm;font-family:inherit!important}
+  /* body identity cells read better white; the header keeps the panel tint */
+  tbody .sticky1,tbody .sticky2,tbody .sticky3{background:#fff!important;color:#111!important}
+  thead .sticky1,thead .sticky2,thead .sticky3{background:#eceff4!important;color:#111!important}
 
   /* light, printer-friendly versions of the on-screen tints */
   .c-app,thead th.c-app{background:#e8f0fe!important;color:#0b3d91!important;font-weight:700}
