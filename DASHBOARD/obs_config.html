@@ -60,6 +60,7 @@ tr.dirty td{background:rgba(245,158,11,.08)}
 .w-num{width:84px}.w-wir{width:80px}
 .code{font-family:var(--mono);color:var(--accent-text);font-weight:700}
 .muted{color:var(--text-faint)}
+tr.totrow td{border-top:1px solid var(--border);background:var(--bg-panel,var(--bg-elev));font-weight:700}
 .card{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px}
 .card h3{font-size:13px;margin-bottom:10px}
 textarea.paste{width:100%;height:150px;border:1px solid var(--border-strong);border-radius:8px;background:var(--bg-panel);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical}
@@ -105,6 +106,7 @@ tr.grp{user-select:none}
     <div class="tab active" data-tab="act" onclick="showTab('act')">Activities &amp; WIR</div>
     <div class="tab" data-tab="dist" onclick="showTab('dist')">Trade Distribution</div>
     <div class="tab" data-tab="mp" onclick="showTab('mp')">Manpower Import</div>
+    <div class="tab" data-tab="day" onclick="showTab('day')">Per-Date View</div>
   </div>
 
   <div class="scroll">
@@ -170,6 +172,35 @@ tr.grp{user-select:none}
       <div class="card">
         <h3>Saved manpower</h3>
         <table id="m-saved"></table>
+      </div>
+    </div>
+
+    <!-- PER-DATE VIEW -->
+    <div class="pane" id="pane-day">
+      <div class="card">
+        <h3>Labour on a specific date</h3>
+        <div class="bar">
+          <div class="fld"><label>Date</label><input type="date" id="dv-date" class="sel" onchange="renderDayView()"></div>
+          <button class="btn" onclick="dvShift(-1)">◀ Prev day</button>
+          <button class="btn" onclick="dvToday()">Today</button>
+          <button class="btn" onclick="dvShift(1)">Next day ▶</button>
+          <span class="spacer"></span>
+          <span class="tb-label" id="dv-info" style="color:var(--text-faint)"></span>
+        </div>
+        <div class="muted" style="font-size:11px">
+          Manpower is recorded per <b>month</b> (man-days per trade), so a single date is shown
+          <b>pro-rated</b>: the month's man-days ÷ days in that month. Month totals stay exact —
+          treat a single day as the daily average for that month, not a timesheet reading.
+        </div>
+        <div id="dv-warn" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h3>By trade</h3>
+        <table id="dv-trade"></table>
+      </div>
+      <div class="card">
+        <h3>By activity group <span class="muted" style="font-weight:400;font-size:11px">— trade hours × distribution %</span></h3>
+        <table id="dv-group"></table>
       </div>
     </div>
   </div>
@@ -295,6 +326,109 @@ async function loadAll(){
 function showTab(t){
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));
   document.querySelectorAll('.pane').forEach(el=>el.classList.toggle('active',el.id==='pane-'+t));
+  if(t==='day') initDayView();
+}
+
+/* ───── PER-DATE VIEW ─────
+   Manpower is captured monthly (man-days per trade). A single date is therefore the
+   month's man-days divided by the days in that month — the daily average. Stated
+   plainly in the UI so nobody reads it as a timesheet figure. */
+let dvMonthCache={};    // 'YYYY-MM-01' -> [{trade,man_days,shift_hours,is_indirect}]
+let dvDist=null;        // [{trade,activity_group,pct}]
+let dvReady=false;
+
+function dubaiToday(){
+  const d=new Date(Date.now()+4*3600*1000);
+  return d.toISOString().slice(0,10);   // site runs on Dubai time
+}
+function daysInMonth(iso){ const [y,m]=iso.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function monthKeyOf(dateIso){ return dateIso.slice(0,7)+'-01'; }
+
+async function initDayView(){
+  if(dvReady) return;
+  dvReady=true;
+  const el=document.getElementById('dv-date');
+  if(el && !el.value) el.value=dubaiToday();
+  try{ dvDist = await fa('obs_trade_distribution?select=trade,activity_group,pct'); }
+  catch(e){ dvDist=[]; }
+  renderDayView();
+}
+function dvToday(){ document.getElementById('dv-date').value=dubaiToday(); renderDayView(); }
+function dvShift(n){
+  const el=document.getElementById('dv-date');
+  const d=new Date((el.value||dubaiToday())+'T12:00:00');
+  d.setDate(d.getDate()+n);
+  el.value=d.toISOString().slice(0,10);
+  renderDayView();
+}
+
+async function renderDayView(){
+  const date=document.getElementById('dv-date').value;
+  const warn=document.getElementById('dv-warn');
+  const tT=document.getElementById('dv-trade'), tG=document.getElementById('dv-group');
+  if(!date){ warn.innerHTML=''; tT.innerHTML=''; tG.innerHTML=''; return; }
+  const mk=monthKeyOf(date), nDays=daysInMonth(date);
+
+  if(!dvMonthCache[mk]){
+    try{ dvMonthCache[mk]=await fa('obs_manpower?select=trade,man_days,shift_hours,is_indirect&period_month=eq.'+mk); }
+    catch(e){ warn.innerHTML='<div class="muted" style="color:var(--bad)">Could not load manpower: '+esc(e.message)+'</div>'; return; }
+  }
+  const rows=dvMonthCache[mk]||[];
+  const monthLabel=new Date(date+'T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+
+  if(!rows.length){
+    warn.innerHTML=`<div style="padding:9px 12px;border:1px solid var(--bdr,#333);border-radius:8px;font-size:12px">
+      <b>No manpower saved for ${esc(monthLabel)}.</b> Import that month under
+      <b>Manpower Import</b> — per-date figures are derived from the monthly totals.</div>`;
+    tT.innerHTML=''; tG.innerHTML='';
+    document.getElementById('dv-info').textContent='';
+    return;
+  }
+  warn.innerHTML='';
+
+  // pro-rate to one day
+  let totDays=0, totHrs=0, indirectHrs=0;
+  const perTrade=rows.map(r=>{
+    const md=(Number(r.man_days)||0)/nDays;
+    const sh=Number(r.shift_hours)||0;
+    const hrs=md*sh;
+    totDays+=md; totHrs+=hrs; if(r.is_indirect) indirectHrs+=hrs;
+    return {trade:r.trade, manDays:md, shift:sh, hrs, indirect:!!r.is_indirect};
+  }).sort((a,b)=>b.hrs-a.hrs);
+
+  tT.innerHTML='<thead><tr><th class="l">Trade</th><th>Man-days / day</th><th>Shift hrs</th><th>Man-hours / day</th><th class="l">Type</th></tr></thead><tbody>'
+    + perTrade.map(t=>`<tr><td class="l">${esc(t.trade)}</td><td>${fmt(t.manDays,1)}</td>`
+        +`<td>${fmt(t.shift,1)}</td><td><b>${fmt(t.hrs,1)}</b></td>`
+        +`<td class="l muted">${t.indirect?'Indirect':'Direct'}</td></tr>`).join('')
+    + `<tr class="totrow"><td class="l"><b>TOTAL</b></td><td><b>${fmt(totDays,1)}</b></td><td></td>`
+    + `<td><b>${fmt(totHrs,1)}</b></td><td class="l muted">${fmt(indirectHrs,1)} indirect</td></tr></tbody>`;
+
+  // distribute across activity groups
+  const hrsByTrade={}; perTrade.forEach(t=>hrsByTrade[t.trade]=t.hrs);
+  const byGroup={};
+  (dvDist||[]).forEach(d=>{
+    const h=(hrsByTrade[d.trade]||0)*(Number(d.pct)||0)/100;
+    if(!h) return;
+    (byGroup[d.activity_group]=byGroup[d.activity_group]||{hrs:0,parts:[]});
+    byGroup[d.activity_group].hrs+=h;
+    byGroup[d.activity_group].parts.push(d.trade+' '+fmt(d.pct,0)+'%');
+  });
+  const gList=Object.entries(byGroup).sort((a,b)=>b[1].hrs-a[1].hrs);
+  const gTot=gList.reduce((s,[,v])=>s+v.hrs,0);
+  // hours that no distribution rule places anywhere
+  const unmapped=totHrs-indirectHrs-gTot;
+
+  tG.innerHTML = gList.length
+    ? '<thead><tr><th class="l">Activity group</th><th>Man-hours / day</th><th class="l">From</th></tr></thead><tbody>'
+      + gList.map(([g,v])=>`<tr><td class="l">${esc(g)}</td><td><b>${fmt(v.hrs,1)}</b></td>`
+          +`<td class="l muted" style="font-size:11px">${esc(v.parts.join(' · '))}</td></tr>`).join('')
+      + `<tr class="totrow"><td class="l"><b>TOTAL DISTRIBUTED</b></td><td><b>${fmt(gTot,1)}</b></td>`
+      + `<td class="l muted" style="font-size:11px">${ Math.abs(unmapped)>0.05
+          ? fmt(unmapped,1)+' hrs/day not covered by any distribution rule' : 'all direct hours distributed'}</td></tr></tbody>`
+    : '<thead><tr><th class="l">Activity group</th></tr></thead><tbody><tr><td class="l muted">No trade distribution configured — set it under <b>Trade Distribution</b>.</td></tr></tbody>';
+
+  document.getElementById('dv-info').textContent =
+    monthLabel+' ÷ '+nDays+' days · '+fmt(totHrs,0)+' man-hrs/day';
 }
 
 /* ───── ACTIVITIES (grouped by discipline → activity group) ───── */

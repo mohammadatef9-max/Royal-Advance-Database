@@ -199,7 +199,7 @@ async function reload(){
   const loading=document.getElementById('loading'); loading.style.display='flex';
   try{
     const m=document.getElementById('f-month').value||monthStr(new Date());
-    await Promise.all([ loadCompletion(m,false), loadLabour(m,false) ]);   // both views are per-month
+    await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m) ]);   // all per-month
     if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
   finally{ loading.style.display='none'; }
@@ -275,7 +275,29 @@ async function loadLabour(m,cum){
     tradeHrs[r.trade]=(tradeHrs[r.trade]||0)+h; tradeDays[r.trade]=(tradeDays[r.trade]||0)+days; if(r.is_indirect) indirectHrs+=h; });
   distByGroup={}; dist.forEach(d=>{ (distByGroup[d.activity_group]=distByGroup[d.activity_group]||[]).push({trade:d.trade,pct:Number(d.pct)||0}); });
 }
-function groupSpent(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeHrs[d.trade]||0)*d.pct/100,0); }
+// Raw distributed hours: monthly trade man-hours × that group's share.
+function groupSpentRaw(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeHrs[d.trade]||0)*d.pct/100,0); }
+
+// Actual hours are capped at what the completed work earned (EV). The distribution is a
+// planning split, so it can push more hours into a category than that category earned;
+// left alone it overstates spend there and hides it from wherever the labour really went.
+// The surplus is held back as an unassigned pool and placed by hand (obs_hour_allocation).
+// Nothing is discarded — the pool is reported so project totals still reconcile with payroll.
+let manualAlloc={};        // activity_group -> manually assigned hours
+let unassignedPool=0;      // capped-off hours not yet placed
+function groupSpent(grp){
+  const raw=groupSpentRaw(grp);
+  const cap=(grp.EV||0);
+  const capped=cap>0 ? Math.min(raw,cap) : raw;   // no earned value yet → nothing to cap against
+  return capped + (Number(manualAlloc[grp.group])||0);
+}
+async function loadAlloc(m){
+  manualAlloc={};
+  try{
+    const rows=await fa('obs_hour_allocation?select=activity_group,hours&period_month=eq.'+m+'-01');
+    rows.forEach(r=>{ manualAlloc[r.activity_group]=Number(r.hours)||0; });
+  }catch(e){ manualAlloc={}; }
+}
 // Man-days of labour distributed to a group this period (how many workers' days are assigned to it).
 function groupDays(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeDays[d.trade]||0)*d.pct/100,0); }
 
@@ -287,9 +309,16 @@ function render(m){
       s.done=c.done.size; s.inprog=c.inprog.size; s.Z=c.applicable.size;
       s.EV=(s.done+s.inprog*IN_PROGRESS_CREDIT)*s.AC; EV+=s.EV; BAC+=s.Z*s.AC;
       c.done.forEach(v=>totVillas.add(v)); c.inprog.forEach(v=>totVillas.add(v)); });
-    grp.EV=EV; grp.BAC=BAC; grp.AC=groupSpent(grp);
+    grp.EV=EV; grp.BAC=BAC;
+    grp.ACraw=groupSpentRaw(grp);
+    grp.AC=groupSpent(grp);
+    grp.capped=Math.max(0, grp.ACraw-(grp.EV>0?Math.min(grp.ACraw,grp.EV):grp.ACraw));
     totEV+=EV; totAC+=grp.AC;
   });
+  // hours the cap held back, less whatever has already been placed by hand
+  const heldBack=groups.reduce((s,g)=>s+(g.capped||0),0);
+  const placed=Object.values(manualAlloc).reduce((s,v)=>s+(Number(v)||0),0);
+  unassignedPool=Math.max(0, heldBack-placed);
   const cpi=totAC?totEV/totAC:0; const variance=totEV-totAC;
   document.getElementById('tb-info').textContent=groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
@@ -375,7 +404,9 @@ function summaryModel(){
   Object.keys(byDisc).forEach(d=>{ if(!order.includes(d)) order.push(d); });
   const rows=order.filter(d=>byDisc[d]).map(d=>({label:DISC_LABEL[d]||d, ...evm(byDisc[d])}));
   const direct=rows.reduce((a,r)=>({AC:a.AC+r.AC,EV:a.EV+r.EV,BAC:a.BAC+r.BAC}),{AC:0,EV:0,BAC:0});
-  const proj=evm({AC:direct.AC+indirectHrs, EV:direct.EV, BAC:direct.BAC});
+  // Unassigned overrun is still labour that was paid for — leaving it out of the project
+  // total would understate spend and flatter CPI.
+  const proj=evm({AC:direct.AC+indirectHrs+unassignedPool, EV:direct.EV, BAC:direct.BAC});
   return { rows, proj, indirect:indirectHrs };
 }
 
@@ -390,10 +421,101 @@ function renderSummary(m){
   M.rows.forEach(r=> b+=row(r));
   // indirect overhead (manpower only, no earned-value)
   b+=`<tr><td class="l">Total Indirect Works</td>${nCell(M.indirect)}<td colspan="6" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
+  // Held-back hours are real labour; showing them keeps the total reconcilable with payroll
+  if(unassignedPool>0.5){
+    b+=`<tr><td class="l" style="color:var(--warn,#f5c451)">Unassigned overrun</td>${nCell(unassignedPool)}`
+      +`<td colspan="6" class="muted" style="font-size:11px">hours above what each category earned — `
+      +`<a href="#" onclick="openAlloc();return false" style="color:var(--accent-text,#93b6ff)">assign to categories</a></td></tr>`;
+  }
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
   document.getElementById('summary').innerHTML=
-    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (per month) · AED @ ${AED_RATE}/hr</span></div>`
+    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (per month) · AED @ ${AED_RATE}/hr</span>`
+    +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
+}
+
+/* ───── MANUAL ASSIGNMENT OF CAPPED-OFF HOURS ─────
+   Places the overrun the cap held back. Saved per month + activity group so the split
+   is auditable and re-editable, rather than being folded into the trade percentages. */
+function openAlloc(){
+  if(!canEnter){ alert('You need OBS entry permission to assign hours.'); return; }
+  const m=document.getElementById('f-month').value||'';
+  const heldBack=groups.reduce((s,g)=>s+(g.capped||0),0);
+  const rows=groups.slice().sort((a,b)=>(b.capped||0)-(a.capped||0)).map(g=>{
+    const cur=Number(manualAlloc[g.group])||0;
+    return `<tr>
+      <td class="l">${esc(g.group)}</td>
+      <td style="text-align:right">${fmtK(g.ACraw||0)}</td>
+      <td style="text-align:right">${fmtK(g.EV||0)}</td>
+      <td style="text-align:right;color:${(g.capped||0)>0.5?'var(--warn,#f5c451)':'inherit'}">${fmtK(g.capped||0)}</td>
+      <td style="text-align:right"><input type="number" step="1" min="0" value="${cur||''}" placeholder="0"
+          data-grp="${esc(g.group)}" oninput="allocTotal()" class="alloc-in"
+          style="width:90px;text-align:right;background:var(--bg-input,#0d1118);color:inherit;border:1px solid var(--border,#333);border-radius:6px;padding:3px 6px"></td>
+    </tr>`;
+  }).join('');
+  const html=`<div id="alloc-ovl" style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:300"
+       onclick="if(event.target===this)closeAlloc()">
+    <div style="background:var(--bg-elev,#11151c);border:1px solid var(--border,#333);border-radius:12px;width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid var(--border,#333)">
+        <div style="font-size:14px;font-weight:650">Assign overrun hours — ${esc(m)}</div>
+        <div style="font-size:11px;color:var(--text-muted,#8a93a3);margin-top:4px;line-height:1.5">
+          Actual hours are capped at each category's <b>allowable budget (EV)</b>. The hours that
+          exceeded it are listed under <b>Held back</b>; place them wherever the labour actually went.
+          Anything left unassigned is still counted in the project total, so payroll always reconciles.
+        </div>
+      </div>
+      <div style="padding:12px 18px;overflow:auto">
+        <table class="sumtbl" style="width:100%">
+          <thead><tr><th class="l">Activity group</th><th style="text-align:right">Distributed</th>
+            <th style="text-align:right">Allowable (EV)</th><th style="text-align:right">Held back</th>
+            <th style="text-align:right">Assign hrs</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div style="padding:10px 18px;border-top:1px solid var(--border,#333);display:flex;align-items:center;gap:10px">
+        <span style="font-size:12px">Held back: <b>${fmtK(heldBack)}</b> hrs</span>
+        <span style="font-size:12px">Assigned: <b id="alloc-sum">0</b></span>
+        <span style="font-size:12px" id="alloc-left"></span>
+        <span style="flex:1"></span>
+        <button class="btn" onclick="closeAlloc()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveAlloc()">Save</button>
+      </div>
+    </div></div>`;
+  document.body.insertAdjacentHTML('beforeend',html);
+  allocTotal();
+}
+function closeAlloc(){ document.getElementById('alloc-ovl')?.remove(); }
+function allocTotal(){
+  const ins=[...document.querySelectorAll('.alloc-in')];
+  const sum=ins.reduce((s,i)=>s+(Number(i.value)||0),0);
+  const heldBack=groups.reduce((s,g)=>s+(g.capped||0),0);
+  document.getElementById('alloc-sum').textContent=fmtK(sum);
+  const left=heldBack-sum;
+  const el=document.getElementById('alloc-left');
+  el.textContent = left>=0 ? `· ${fmtK(left)} left unassigned`
+                           : `· ${fmtK(-left)} over the held-back amount`;
+  el.style.color = left<0 ? 'var(--bad,#ff8080)' : 'var(--text-muted,#8a93a3)';
+}
+async function saveAlloc(){
+  const m=document.getElementById('f-month').value||''; if(!m) return;
+  const period=m+'-01';
+  const ins=[...document.querySelectorAll('.alloc-in')];
+  const keep=[], drop=[];
+  ins.forEach(i=>{
+    const g=i.dataset.grp, v=Number(i.value)||0;
+    (v>0?keep:drop).push({activity_group:g,hours:v});
+  });
+  try{
+    // clear the month, then write only the non-zero rows — keeps the table free of noise
+    await fwrite('DELETE','obs_hour_allocation?period_month=eq.'+period);
+    if(keep.length) await fwrite('POST','obs_hour_allocation',
+      keep.map(k=>({period_month:period,activity_group:k.activity_group,hours:k.hours,
+                    updated_at:new Date().toISOString(),
+                    updated_by:(window.__MEP_USER__?.full_name||window.__MEP_USER__?.email||null)})));
+    closeAlloc();
+    await loadAlloc(m);
+    render(m); renderSummary(m);
+  }catch(e){ alert('Could not save the assignment: '+e.message); }
 }
 
 function printSummary(){
