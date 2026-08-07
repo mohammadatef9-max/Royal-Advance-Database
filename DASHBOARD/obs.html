@@ -124,7 +124,7 @@ const AED_RATE = 10.5;
 const RA_PREFIX = 'RA';
 const IN_PROGRESS_CREDIT = 0.5;
 
-let perms=[], canEnter=false;
+let perms=[], canEnter=false, isSuper=false;
 let view='groups';       // 'groups' (per-group) | 'summary' (EVM by discipline) — both per-month
 let groups=[];           // [{discipline,disc_sort,group,subs:[...],status,configured,EV,AC,BAC}]
 let codeToActId={}, actIdToCode={};       // WIR code <-> activities.id
@@ -166,6 +166,7 @@ async function init(){
   const sa=perms.includes('manage_users')&&perms.includes('manage_system');
   const canView=sa||perms.includes('view_obs')||perms.includes('obs_entry')||perms.includes('edit_obs');
   canEnter=sa||perms.includes('obs_entry')||perms.includes('edit_obs');
+  isSuper=sa;   // manual villas-done overrides are super-admin only (RLS enforces it too)
   if(!canView){ document.getElementById('page').style.display='none'; document.getElementById('access-denied').classList.add('show'); return; }
   document.getElementById('f-month').value=monthStr(new Date());
   await loadCatalogue();
@@ -207,7 +208,7 @@ async function reload(){
   try{
     if(view==='day'){ await renderDay(); return; }   // day view reads manpower only, not completion
     const m=document.getElementById('f-month').value||monthStr(new Date());
-    await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m) ]);   // all per-month
+    await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m), loadManual(m) ]);   // all per-month
     if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
   finally{ loading.style.display='none'; }
@@ -297,7 +298,9 @@ function groupSpent(grp){
   const raw=groupSpentRaw(grp);
   const cap=(grp.EV||0);
   const capped=cap>0 ? Math.min(raw,cap) : raw;   // no earned value yet → nothing to cap against
-  return capped + (Number(manualAlloc[grp.group])||0);
+  // Hours booked directly to the group are a measurement, not a distribution estimate,
+  // so they are added after the cap — capping them would quietly hide real labour.
+  return capped + (Number(manualAlloc[grp.group])||0) + (Number(groupLabour[grp.group])||0);
 }
 async function loadAlloc(m){
   manualAlloc={};
@@ -306,27 +309,73 @@ async function loadAlloc(m){
     rows.forEach(r=>{ manualAlloc[r.activity_group]=Number(r.hours)||0; });
   }catch(e){ manualAlloc={}; }
 }
+
+/* ───── MANUAL OVERRIDES ─────
+   Some work the automated derivation cannot see. PRECAST is the case that forced this:
+   PRE2/PRE3 carry no completion code and the group has no trade distribution, so it
+   reads as zero on both sides. Villas done can be entered per code, and labour can be
+   booked straight to a group — both per month, both super-admin only. */
+let manualDone={};     // ccs_code -> villas done, entered by hand (overrides the derived count)
+let groupLabour={};    // activity_group -> man-hours booked directly to the group
+async function loadManual(m){
+  manualDone={}; groupLabour={};
+  try{
+    const [d,l]=await Promise.all([
+      fa('obs_manual_completion?select=ccs_code,villas_done&period_month=eq.'+m+'-01'),
+      fa('obs_group_labour?select=activity_group,man_hours&period_month=eq.'+m+'-01')
+    ]);
+    (d||[]).forEach(r=>{ manualDone[r.ccs_code]=Number(r.villas_done)||0; });
+    (l||[]).forEach(r=>{ groupLabour[r.activity_group]=Number(r.man_hours)||0; });
+  }catch(e){ manualDone={}; groupLabour={}; }
+}
+
+// One place decides a sub-activity's numbers, so the group view and the summary can
+// never disagree about what was done.
+function subStats(s){
+  const c=compByCode[s.wir]||{applicable:new Set(),done:new Set(),inprog:new Set()};
+  const man=manualDone[s.ccs_code];
+  const manual=(man!=null);
+  const done   = manual ? man : c.done.size;
+  const inprog = manual ? 0   : c.inprog.size;   // a hand-entered count is final, not partial
+  // Budget needs a villa population. A manually-entered code has no derived applicable
+  // set, so fall back to what was entered — otherwise BAC is 0 and CPI/EAC blow up.
+  const Z=Math.max(c.applicable.size, manual?done:0);
+  return { done, inprog, Z, manual, EV:(done+inprog*IN_PROGRESS_CREDIT)*s.AC, BAC:Z*s.AC };
+}
 // Man-days of labour distributed to a group this period (how many workers' days are assigned to it).
 function groupDays(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeDays[d.trade]||0)*d.pct/100,0); }
 
-function render(m){
-  let totEV=0, totAC=0, totVillas=new Set();
+/* Fills grp.EV/BAC/ACraw/AC/capped plus the unassigned pool. Shared by both views:
+   groupSpent() caps against grp.EV, and before this was shared the Summary read whatever
+   grp.EV the group view happened to leave behind — so its cap and the unassigned pool
+   depended on which view you opened first. */
+function computeGroups(){
   groups.forEach(grp=>{
     let EV=0, BAC=0;
-    grp.subs.forEach(s=>{ const c=compByCode[s.wir]||{applicable:new Set(),done:new Set(),inprog:new Set()};
-      s.done=c.done.size; s.inprog=c.inprog.size; s.Z=c.applicable.size;
-      s.EV=(s.done+s.inprog*IN_PROGRESS_CREDIT)*s.AC; EV+=s.EV; BAC+=s.Z*s.AC;
-      c.done.forEach(v=>totVillas.add(v)); c.inprog.forEach(v=>totVillas.add(v)); });
+    grp.subs.forEach(s=>{ const st=subStats(s);
+      s.done=st.done; s.inprog=st.inprog; s.Z=st.Z; s.manual=st.manual; s.EV=st.EV;
+      EV+=st.EV; BAC+=st.BAC; });
     grp.EV=EV; grp.BAC=BAC;
     grp.ACraw=groupSpentRaw(grp);
-    grp.AC=groupSpent(grp);
+    grp.AC=groupSpent(grp);                       // reads grp.EV — set just above
     grp.capped=Math.max(0, grp.ACraw-(grp.EV>0?Math.min(grp.ACraw,grp.EV):grp.ACraw));
-    totEV+=EV; totAC+=grp.AC;
   });
   // hours the cap held back, less whatever has already been placed by hand
   const heldBack=groups.reduce((s,g)=>s+(g.capped||0),0);
   const placed=Object.values(manualAlloc).reduce((s,v)=>s+(Number(v)||0),0);
   unassignedPool=Math.max(0, heldBack-placed);
+}
+
+function render(m){
+  computeGroups();
+  let totEV=0, totAC=0; const totVillas=new Set();
+  groups.forEach(grp=>{
+    totEV+=grp.EV; totAC+=grp.AC;
+    // Manual counts are a number, not a villa list, so they add nothing to the villa tally.
+    grp.subs.forEach(s=>{ if(s.manual) return;
+      const c=compByCode[s.wir]; if(!c) return;
+      c.done.forEach(v=>totVillas.add(v)); c.inprog.forEach(v=>totVillas.add(v)); });
+  });
   const cpi=totAC?totEV/totAC:0; const variance=totEV-totAC;
   document.getElementById('tb-info').textContent=groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
@@ -343,14 +392,20 @@ function render(m){
   groups.forEach((grp,gi)=>{
     if(grp.discipline!==lastDisc){ lastDisc=grp.discipline; html+=`<div class="disc-h">${esc(grp.discipline)}</div>`; }
     const cpiG=grp.AC?grp.EV/grp.AC:0;
-    const collapsed = grp.status==='ok' ? '' : 'collapsed';
-    const tag = grp.status==='ok' ? '<span class="tag ok">configured</span>'
+    // A group fed by hand (PRECAST) is tracked, even though it has no completion WIR —
+    // don't nag for configuration it will never need.
+    const byHand = grp.subs.some(s=>s.manual) || (Number(groupLabour[grp.group])||0)>0;
+    const collapsed = (grp.status==='ok'||byHand) ? '' : 'collapsed';
+    const tag = byHand ? '<span class="tag ok">manual entry</span>'
+      : grp.status==='ok' ? '<span class="tag ok">configured</span>'
       : grp.status==='noqty' ? '<span class="tag off">needs qty/villa</span>'
       : '<span class="tag off">needs completion WIR</span>';
-    const hint = grp.status==='ok' ? ''
+    const hint = (grp.status==='ok'||byHand) ? ''
       : grp.status==='noqty' ? '<div class="muted" style="font-size:11px;margin-bottom:8px">WIR is set — add <b>Qty/villa</b> for each sub-activity in <b>OBS Config → Activities &amp; WIR</b> to compute budget &amp; earned.</div>'
       : '<div class="muted" style="font-size:11px;margin-bottom:8px">Set the <b>completion WIR</b> for these sub-activities in <b>OBS Config → Activities &amp; WIR</b> to enable earned-value tracking.</div>';
-    const spentNote = grp.AC ? '' : ' (no manpower/distribution for this group)';
+    const direct=Number(groupLabour[grp.group])||0;
+    const spentNote = direct ? ' — includes '+fmt(direct,0)+' hrs booked directly to this group'
+                    : grp.AC ? '' : ' (no manpower/distribution for this group)';
     html+=`<div class="panel ${collapsed}" id="gp-${gi}">`
       +`<div class="panel-h" onclick="toggle(${gi})">`
         +`<span class="caret">▾</span>`
@@ -360,6 +415,8 @@ function render(m){
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
         +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
+        +(isSuper?`<button class="btn" style="padding:2px 8px;font-size:11px" title="Edit villas done for this group"
+             onclick="event.stopPropagation();openDone(${gi})">✎ Villas done</button>`:'')
       +`</div>`
       +`<div class="panel-b">${hint}${subTable(grp)}</div></div>`;
   });
@@ -372,9 +429,88 @@ function subTable(grp){
   grp.subs.forEach(s=>{ budgetPerVilla+=s.AC;
     h+=`<tr><td class="l code">${esc(s.ccs_code)}</td><td class="l" style="font-family:var(--font)">${esc(s.description)}</td>`
       +`<td><span class="code">${s.wir||'—'}</span></td><td>${fmt(s.G,2)}</td><td>${fmt(s.W,2)}</td><td>${fmt(s.AC,2)}</td>`
-      +`<td>${s.done||0}${s.inprog?'<span class="muted"> +'+s.inprog+'ip</span>':''}</td><td>${fmt(s.EV||0,0)}</td></tr>`; });
+      +`<td>${s.done||0}${s.inprog?'<span class="muted"> +'+s.inprog+'ip</span>':''}`
+      +`${s.manual?'<span class="tag off" style="margin-left:6px" title="Entered by hand — overrides the derived count">manual</span>':''}</td>`
+      +`<td>${fmt(s.EV||0,0)}</td></tr>`; });
   h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
   return h+'</tbody></table>';
+}
+
+/* ───── MANUAL VILLAS DONE (super admin) ─────
+   Overrides the WIR/clearance-derived count for a code in the selected month. Blank means
+   "derive it" — that is how you undo an override, rather than typing the derived number
+   back in and freezing it. */
+function openDone(gi){
+  if(!isSuper){ alert('Editing villas done is restricted to super admins.'); return; }
+  const grp=groups[gi]; if(!grp) return;
+  const m=document.getElementById('f-month').value||'';
+  const rows=grp.subs.map(s=>{
+    const c=compByCode[s.wir]||{done:new Set(),inprog:new Set()};
+    const cur=manualDone[s.ccs_code];
+    return `<tr>
+      <td class="l"><b>${esc(s.ccs_code)}</b></td>
+      <td class="l" style="font-family:var(--font)">${esc(s.description)}</td>
+      <td style="text-align:right">${fmt(s.AC,1)}</td>
+      <td style="text-align:right" class="muted">${c.done.size}${c.inprog.size?' +'+c.inprog.size+'ip':''}</td>
+      <td style="text-align:right"><input type="number" step="1" min="0" value="${cur!=null?esc(cur):''}" placeholder="auto"
+          data-code="${esc(s.ccs_code)}" data-budget="${s.AC}" oninput="doneTotal()" class="done-in"
+          style="width:90px;text-align:right;background:var(--bg-panel);color:inherit;border:1px solid var(--border-strong);border-radius:6px;padding:3px 6px"></td>
+    </tr>`;
+  }).join('');
+  document.body.insertAdjacentHTML('beforeend',
+    `<div id="done-ovl" style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:300"
+       onclick="if(event.target===this)closeDone()">
+      <div style="background:var(--bg-elev);border:1px solid var(--border);border-radius:12px;width:min(820px,94vw);max-height:86vh;display:flex;flex-direction:column">
+        <div style="padding:14px 18px;border-bottom:1px solid var(--border)">
+          <div style="font-size:14px;font-weight:650">Villas done — ${esc(grp.group)} · ${esc(m)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;line-height:1.5">
+            Enter what was completed <b>in this month</b>. A value here <b>overrides</b> the count derived
+            from WIRs and clearances; clear the box to go back to the derived figure. Earned hours =
+            villas done × budget hrs/villa.
+          </div>
+        </div>
+        <div style="padding:12px 18px;overflow:auto">
+          <table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th>
+            <th>Budget hr/villa</th><th>Derived</th><th>Villas done</th></tr></thead>
+            <tbody>${rows}</tbody></table>
+        </div>
+        <div style="padding:10px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px" id="done-sum"></span>
+          <span style="flex:1"></span>
+          <button class="btn" onclick="closeDone()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveDone()">Save</button>
+        </div>
+      </div></div>`);
+  doneTotal();
+}
+function closeDone(){ document.getElementById('done-ovl')?.remove(); }
+function doneTotal(){
+  const ins=[...document.querySelectorAll('.done-in')];
+  let ev=0, n=0;
+  ins.forEach(i=>{ if(i.value!==''){ n++; ev+=(Number(i.value)||0)*(Number(i.dataset.budget)||0); } });
+  document.getElementById('done-sum').textContent = n
+    ? n+' code'+(n>1?'s':'')+' overridden · '+fmt(ev,0)+' earned hrs'
+    : 'No overrides — all codes derived automatically';
+}
+async function saveDone(){
+  const m=document.getElementById('f-month').value; if(!m) return;
+  const period=m+'-01';
+  const by=(window.__MEP_USER__&&(window.__MEP_USER__.full_name||window.__MEP_USER__.email))||null;
+  const ins=[...document.querySelectorAll('.done-in')];
+  const codes=ins.map(i=>'"'+i.dataset.code+'"').join(',');
+  const keep=ins.filter(i=>i.value!=='').map(i=>({ period_month:period, ccs_code:i.dataset.code,
+    villas_done:Number(i.value)||0, updated_at:new Date().toISOString(), updated_by:by }));
+  try{
+    // clear this group's codes for the month, then write back only the ones with a value
+    if(codes) await fwrite('DELETE','obs_manual_completion?period_month=eq.'+period+'&ccs_code=in.('+encodeURIComponent(codes)+')');
+    if(keep.length) await fwrite('POST','obs_manual_completion',keep);
+    closeDone();
+    await loadManual(m);
+    render(m);
+  }catch(e){
+    alert(/\[40[13]\]/.test(e.message) ? 'Editing villas done is restricted to super admins.'
+                                       : 'Could not save: '+e.message);
+  }
 }
 
 function toggle(gi){ document.getElementById('gp-'+gi)?.classList.toggle('collapsed'); }
@@ -511,14 +647,12 @@ function vCell(n){ const v=Math.round(n); const neg=v<0; return `<td style="font
 function nCell(n){ return `<td style="font-family:var(--mono);text-align:right">${fmt(Math.round(n))}</td>`; }
 
 function summaryModel(){
+  computeGroups();
   const byDisc={};
   groups.forEach(grp=>{
-    let EV=0,BAC=0;
-    grp.subs.forEach(s=>{ const c=compByCode[s.wir]||{applicable:new Set(),done:new Set(),inprog:new Set()};
-      EV+=(c.done.size+c.inprog.size*IN_PROGRESS_CREDIT)*s.AC; BAC+=c.applicable.size*s.AC; });
     const d=grp.discipline||'Other';
     if(!byDisc[d]) byDisc[d]={AC:0,EV:0,BAC:0};
-    byDisc[d].AC+=groupSpent(grp); byDisc[d].EV+=EV; byDisc[d].BAC+=BAC;
+    byDisc[d].AC+=grp.AC; byDisc[d].EV+=grp.EV; byDisc[d].BAC+=grp.BAC;
   });
   const order=['DRAINAGE ACTIVITIES','WATER SUPPLY ACTIVITIES','HVAC ACTIVITIES','ELECTRICAL ACTIVITIES','Functional Test','Snagging and de-snagging','Internal Rectification','PRECAST','Subcontractor Works Done by RA Labor'];
   Object.keys(byDisc).forEach(d=>{ if(!order.includes(d)) order.push(d); });

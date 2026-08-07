@@ -106,6 +106,7 @@ tr.grp{user-select:none}
     <div class="tab active" data-tab="act" onclick="showTab('act')">Activities &amp; WIR</div>
     <div class="tab" data-tab="dist" onclick="showTab('dist')">Trade Distribution</div>
     <div class="tab" data-tab="mp" onclick="showTab('mp')">Manpower Import</div>
+    <div class="tab" data-tab="pre" id="tab-pre" style="display:none" onclick="showTab('pre')">PRECAST</div>
   </div>
 
   <div class="scroll">
@@ -171,6 +172,48 @@ tr.grp{user-select:none}
       <div class="card">
         <h3>Saved manpower</h3>
         <table id="m-saved"></table>
+      </div>
+    </div>
+
+    <!-- PRECAST -->
+    <div class="pane" id="pane-pre">
+      <div class="card">
+        <div class="bar">
+          <div class="fld"><label>Month</label><input type="month" id="p-month" class="sel" onchange="loadPrecast()"></div>
+          <button class="btn" onclick="preShift(-1)">◀ Prev</button>
+          <button class="btn" onclick="preShift(1)">Next ▶</button>
+          <span class="spacer"></span>
+          <button class="btn btn-primary" onclick="savePrecast()">Save month</button>
+          <span class="msg" id="p-msg"></span>
+        </div>
+        <div class="muted" style="font-size:11px">
+          Precast is a factory operation with its own crew, so it sits outside the normal machinery:
+          the manpower import skips the Precast block, and the group has no trade-distribution rows.
+          Enter its labour and its output here and the OBS Tracker will earn-value the group from these figures.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Labour this month</h3>
+        <div class="bar">
+          <div class="fld"><label>Workers</label><input id="p-workers" class="inp" type="number" min="0" step="1" style="width:100px" oninput="preCalc()"></div>
+          <div class="fld"><label>Days worked</label><input id="p-days" class="inp" type="number" min="0" step="1" style="width:100px" oninput="preCalc()"></div>
+          <div class="fld"><label>Shift (hrs/day)</label><input id="p-shift" class="inp" type="number" min="0" step="0.5" value="10" style="width:100px" oninput="preCalc()"></div>
+          <div class="fld"><label>Man-hours (AC)</label><div id="p-hours" style="font-family:var(--mono);font-size:18px;font-weight:800;padding:4px 2px">0</div></div>
+          <span class="spacer"></span>
+          <div class="fld" style="flex:1;min-width:220px"><label>Note (optional)</label><input id="p-note" class="sel" style="width:100%" placeholder="e.g. 2 shifts from the 14th"></div>
+        </div>
+        <div class="muted" style="font-size:11px">Workers × days × shift = the hours charged to <b>PRECAST WORKS</b> for this month. These are counted as actual spend as entered — they are not capped against earned value, because they are a direct measurement rather than a distribution estimate.</div>
+      </div>
+
+      <div class="card">
+        <h3>Villas done this month <span class="muted" style="font-weight:400;font-size:11px">— what the crew completed, per code</span></h3>
+        <table id="p-codes"></table>
+        <div class="muted" style="font-size:11px;margin-top:10px">
+          Enter what was completed <b>in this month</b>, not the running total. Earned hours =
+          villas done × budget hrs/villa (qty per villa × std rate), set under <b>Activities &amp; WIR</b>.
+          Leave a code blank to let the tracker derive it from WIRs/clearances instead.
+        </div>
       </div>
     </div>
 
@@ -262,11 +305,16 @@ function getH(extra){
 async function fa(p){ const r=await fetch(SB+'/rest/v1/'+p,{headers:getH()}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.json(); }
 async function fwrite(method,p,body){ const r=await fetch(SB+'/rest/v1/'+p,{method,headers:getH({'Prefer':'return=representation,resolution=merge-duplicates'}),body:body?JSON.stringify(body):undefined}); if(!r.ok)throw new Error('['+r.status+'] '+await r.text()); return r.text(); }
 
+let isSuper=false;
 async function init(){
   perms=(window.__MEP_USER__&&window.__MEP_USER__.permissions)||[];
   const sa=perms.includes('manage_users')&&perms.includes('manage_system');
   canEnter=sa||perms.includes('obs_entry')||perms.includes('edit_obs');
   if(!canEnter){ document.getElementById('page').style.display='none'; document.getElementById('access-denied').classList.add('show'); return; }
+  // PRECAST figures override the tracker's computed output, so only a super admin sees the tab.
+  // RLS enforces the same rule server-side — hiding it is a convenience, not the control.
+  isSuper=sa;
+  document.getElementById('tab-pre').style.display=sa?'':'none';
   await loadAll();
 }
 async function loadAll(){
@@ -297,6 +345,129 @@ async function loadAll(){
 function showTab(t){
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));
   document.querySelectorAll('.pane').forEach(el=>el.classList.toggle('active',el.id==='pane-'+t));
+  if(t==='pre') initPrecast();
+}
+
+/* ───── PRECAST ─────
+   Precast has no automated figures on either side: the manpower import deliberately skips
+   the Factory block, the group has no trade-distribution rows, and PRE2/PRE3 carry no
+   completion code. So both its spend and its output are entered by hand here, per month.
+   Super-admin only — these values override what the tracker would otherwise compute. */
+const PRE_GROUP='PRECAST WORKS';
+let preReady=false, preCodes=[];
+
+async function initPrecast(){
+  if(preReady) return;
+  preReady=true;
+  const el=document.getElementById('p-month');
+  if(el && !el.value) el.value=monthStr(new Date());
+  preCodes=acts.filter(a=>(a.activity_group||'')===PRE_GROUP)
+               .map(a=>({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'',
+                          budget:(Number(a.qty_per_villa)||0)*(Number(a.std_prod_rate)||0) }));
+  await loadPrecast();
+}
+function preShift(n){
+  const el=document.getElementById('p-month');
+  const [y,m]=(el.value||monthStr(new Date())).split('-').map(Number);
+  const d=new Date(y,m-1+n,1);
+  el.value=monthStr(d);
+  loadPrecast();
+}
+function preCalc(){
+  const v=id=>Number(document.getElementById(id).value)||0;
+  const hrs=v('p-workers')*v('p-days')*v('p-shift');
+  document.getElementById('p-hours').textContent=fmt(hrs,0);
+  preEarned();
+  return hrs;
+}
+// Live "what this month earns" readout under the codes table.
+function preEarned(){
+  let ev=0, any=false;
+  preCodes.forEach(c=>{
+    const el=document.getElementById('pc-'+c.ccs_code);
+    if(!el) return;
+    if(el.value!==''){ any=true; ev+=(Number(el.value)||0)*c.budget; }
+    const cell=document.getElementById('pe-'+c.ccs_code);
+    if(cell) cell.textContent = el.value==='' ? '—' : fmt((Number(el.value)||0)*c.budget,0);
+  });
+  const hrs=Number(String(document.getElementById('p-hours').textContent).replace(/,/g,''))||0;
+  const foot=document.getElementById('p-foot');
+  if(foot){
+    const cpi=hrs?ev/hrs:0;
+    foot.innerHTML = any
+      ? `Earned <b>${fmt(ev,0)}</b> hrs · Spent <b>${fmt(hrs,0)}</b> hrs · CPI `
+        +`<b style="color:${cpi>=1?'var(--good)':'var(--bad)'}">${cpi?cpi.toFixed(2):'—'}</b>`
+      : '<span class="muted">No manual figures for this month — the tracker will derive them.</span>';
+  }
+}
+
+async function loadPrecast(){
+  const m=document.getElementById('p-month').value;
+  const msg=document.getElementById('p-msg'); msg.textContent='';
+  if(!m) return;
+  const period=m+'-01';
+  let lab=null, done={};
+  try{
+    const [L,D]=await Promise.all([
+      fa('obs_group_labour?select=workers,days_worked,shift_hours,note&period_month=eq.'+period+'&activity_group=eq.'+encodeURIComponent(PRE_GROUP)),
+      fa('obs_manual_completion?select=ccs_code,villas_done&period_month=eq.'+period)
+    ]);
+    lab=L&&L[0]||null;
+    (D||[]).forEach(r=>{ done[r.ccs_code]=r.villas_done; });
+  }catch(e){ msg.textContent='Load failed: '+e.message; msg.style.color='var(--bad)'; }
+
+  document.getElementById('p-workers').value = lab? lab.workers : '';
+  document.getElementById('p-days').value    = lab? lab.days_worked : '';
+  document.getElementById('p-shift').value   = lab? lab.shift_hours : 10;
+  document.getElementById('p-note').value    = lab&&lab.note ? lab.note : '';
+
+  document.getElementById('p-codes').innerHTML =
+    '<thead><tr><th>Code</th><th>Description</th><th>Unit</th><th style="text-align:right">Budget hrs / villa</th>'
+    +'<th style="text-align:right">Villas done</th><th style="text-align:right">Earned hrs</th></tr></thead><tbody>'
+    + (preCodes.length ? preCodes.map(c=>
+        `<tr><td><b>${esc(c.ccs_code)}</b></td><td>${esc(c.description)}</td><td class="muted">${esc(c.unit)}</td>`
+        +`<td style="text-align:right;font-family:var(--mono)">${fmt(c.budget,1)}</td>`
+        +`<td style="text-align:right"><input id="pc-${esc(c.ccs_code)}" class="inp" type="number" min="0" step="1" `
+        +`style="width:100px;text-align:right" value="${done[c.ccs_code]!=null?esc(done[c.ccs_code]):''}" `
+        +`placeholder="auto" oninput="preEarned()"></td>`
+        +`<td id="pe-${esc(c.ccs_code)}" style="text-align:right;font-family:var(--mono)">—</td></tr>`).join('')
+      : `<tr><td colspan="6" class="muted">No activities in <b>${esc(PRE_GROUP)}</b>. Add them under <b>Activities &amp; WIR</b>.</td></tr>`)
+    + `</tbody><tfoot><tr><td colspan="6" id="p-foot" style="padding-top:10px;border:0"></td></tr></tfoot>`;
+  preCalc();
+}
+
+async function savePrecast(){
+  const m=document.getElementById('p-month').value;
+  const msg=document.getElementById('p-msg');
+  if(!m){ msg.textContent='Pick a month first.'; msg.style.color='var(--bad)'; return; }
+  const period=m+'-01';
+  const num=id=>Number(document.getElementById(id).value)||0;
+  const by=(window.__MEP_USER__&&(window.__MEP_USER__.full_name||window.__MEP_USER__.email))||null;
+  msg.textContent='Saving…'; msg.style.color='var(--text-muted)';
+  try{
+    // Labour: a row with no workers or no days is meaningless — clear it instead of storing a zero.
+    const workers=num('p-workers'), days=num('p-days'), shift=num('p-shift');
+    await fwrite('DELETE','obs_group_labour?period_month=eq.'+period+'&activity_group=eq.'+encodeURIComponent(PRE_GROUP));
+    if(workers>0 && days>0){
+      await fwrite('POST','obs_group_labour',[{ period_month:period, activity_group:PRE_GROUP,
+        workers, days_worked:days, shift_hours:shift,
+        note:document.getElementById('p-note').value.trim()||null, updated_at:new Date().toISOString(), updated_by:by }]);
+    }
+    // Villas done: only codes with a value entered. A blank means "derive it", so the row is removed.
+    const rows=[];
+    preCodes.forEach(c=>{
+      const el=document.getElementById('pc-'+c.ccs_code);
+      if(el && el.value!=='') rows.push({ period_month:period, ccs_code:c.ccs_code,
+        villas_done:Number(el.value)||0, updated_at:new Date().toISOString(), updated_by:by });
+    });
+    const codeList=preCodes.map(c=>'"'+c.ccs_code+'"').join(',');
+    if(codeList) await fwrite('DELETE','obs_manual_completion?period_month=eq.'+period+'&ccs_code=in.('+encodeURIComponent(codeList)+')');
+    if(rows.length) await fwrite('POST','obs_manual_completion',rows);
+    msg.textContent='Saved '+m+'.'; msg.style.color='var(--good)';
+  }catch(e){
+    msg.textContent = /\[40[13]\]/.test(e.message) ? 'Saving PRECAST figures is restricted to super admins.' : 'Save failed: '+e.message;
+    msg.style.color='var(--bad)';
+  }
 }
 
 /* ───── ACTIVITIES (grouped by discipline → activity group) ───── */
