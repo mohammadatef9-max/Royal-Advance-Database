@@ -2615,7 +2615,7 @@ function renderCoverPage() {
           ${kv('Employer', ti(S.employer, "coverEditSettings('employer', this.value)", '100%', canMeta))}
           ${kv('Consultant', ti(S.consultant, "coverEditSettings('consultant', this.value)", '100%', canMeta))}
           ${kv('Contractor', ti(S.contractor, "coverEditSettings('contractor', this.value)", '100%', canMeta))}
-          ${kv('Subcontractor', '<b>'+esc(selectedScope.subcontractor_name)+'</b>')}
+          ${kv('Subcontractor', '<b>'+esc(scopeDisplayName(selectedScope))+'</b>')}
         </div>
         <div>
           ${kv('Main Contractor TRN', ti(S.main_trn, "coverEditSettings('main_trn', this.value)", '100%', canMeta), '150px')}
@@ -2706,7 +2706,7 @@ function printCover() {
   const PAGE_W = 210, PAGE_H = 297;              // A4 portrait
   const availW = PAGE_W - 2*M, availH = PAGE_H - 2*M;
   const w = window.open('', '_blank');
-  w.document.write(`<html><head><title>Payment Certificate — ${escH(selectedScope.subcontractor_name||'')} PC${escH(selectedPC.pc_number||'')}</title>
+  w.document.write(`<html><head><title>Payment Certificate — ${escH(scopeDisplayName(selectedScope))} PC${escH(selectedPC.pc_number||'')}</title>
     <style>
       @page{ size:A4 portrait; margin:${M}mm }
       /* the box tints (section headers, totals) carry meaning — keep them on paper */
