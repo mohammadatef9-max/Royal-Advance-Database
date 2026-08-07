@@ -186,6 +186,11 @@ let acts=[], actByCode={};
 let prereqs={};            // activity_code -> [prereq_activity_code]
 let villaWir=null, villaNcr=null, villaOpenSubs=null;   // cached for the selected villa
 let villaProgSub=null;     // activity_id -> subcontractor, from the villa's site-progress entries
+
+// Site day boundaries are Dubai's (UTC+4), matching the bot and the clearance dashboard —
+// using the browser's own midnight would let "today" differ per device.
+function dubaiDay(ts){ const d=new Date(ts); return isNaN(d)?'':new Date(d.getTime()+4*3600*1000).toISOString().slice(0,10); }
+function dubaiToday(){ return new Date(Date.now()+4*3600*1000).toISOString().slice(0,10); }
 let curTab='raise';
 
 async function init(){
@@ -257,7 +262,7 @@ async function onVillaChange(){
     const [w,n,s,p]=await Promise.all([
       fa(`v_latest_wir_status?villa_id=eq.${v.id}&select=raw_activity_code,normalised_status,raw_subcontractor,discipline&order=id`),
       fa(`ncr_sor_records?villa_id=eq.${v.id}&select=activity_code,status&is_active=eq.true&status=neq.closed`),
-      fa(`wir_submittals?villa_id=eq.${v.id}&select=activity_code,status&status=in.(pending,info_requested,submitted)`),
+      fa(`wir_submittals?villa_id=eq.${v.id}&select=activity_code,status,raised_at,dc_actioned_at&status=in.(pending,info_requested,submitted)`),
       fa(`progress_updates?villa_id=eq.${v.id}&select=activity_id,subcontractor&is_current=eq.true&is_deleted=eq.false`),
     ]);
     villaWir=w; villaNcr=n; villaOpenSubs=s;
@@ -293,8 +298,22 @@ function onActivityChange(){
   if(ncr.length){ ok=false; issues.push(`<b>Open NCR on this activity</b> — resolve it before raising.`); }
   // 3) duplicate / already approved
   if(latestStatus(code)==='approved'){ ok=false; issues.push(`This WIR is already <b>approved</b> for this villa — no need to raise.`); }
-  const openSub=(villaOpenSubs||[]).find(r=>String(r.activity_code||'').trim()===code);
-  if(openSub){ ok=false; issues.push(`A submittal for this villa+activity is already <b>${esc(openSub.status)}</b>.`); }
+  // A submittal still sitting with the DC blocks a duplicate. One the DC has already
+  // submitted only blocks for the rest of that same day: if the consultant rejects it,
+  // the engineer has to raise it again the next day, so the villa+activity must not be
+  // locked forever. (Rejected / recalled aren't in this list at all — already re-raisable.)
+  const openSub=(villaOpenSubs||[]).find(r=>{
+    if(String(r.activity_code||'').trim()!==code) return false;
+    if(r.status==='pending'||r.status==='info_requested') return true;
+    const when=r.dc_actioned_at||r.raised_at;
+    return when ? dubaiDay(when)===dubaiToday() : true;
+  });
+  if(openSub){
+    ok=false;
+    issues.push(openSub.status==='submitted'
+      ? `Already <b>submitted to the consultant today</b>. If it comes back rejected you can raise it again tomorrow.`
+      : `A submittal for this villa+activity is already <b>${esc(openSub.status)}</b>.`);
+  }
 
   if(ok){
     box.innerHTML=`<div class="gate ok">✓ Ready to raise — prerequisites clear, no blocking NCR.</div>`;

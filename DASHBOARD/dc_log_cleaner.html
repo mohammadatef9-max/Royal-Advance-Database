@@ -560,7 +560,25 @@ function downloadCSV(tab){
 }
 
 // ── Supabase helpers ──
-function safeDate(v){if(!v)return null;const s=String(v).trim();if(!s)return null;if(/^\d+$/.test(s)){const n=parseInt(s);if(n<1||n>60000)return null;const d=new Date(Date.UTC(1899,11,30)+n*86400000);return isNaN(d)?null:d.toISOString().split('T')[0];}const d=new Date(s);if(isNaN(d))return null;const y=d.getFullYear();return(y<2000||y>2040)?null:d.toISOString().split('T')[0];}
+// A calendar date has no timezone. XLSX (cellDates:true) hands back a Date at LOCAL
+// midnight, and toISOString() converts that to UTC — in Dubai (UTC+4) 11 May 00:00
+// becomes 10 May 20:00Z, so every imported date landed ONE DAY EARLY. Read the local
+// components instead, and never let a date string be re-interpreted as UTC.
+function isoLocal(d){const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
+function safeDate(v){
+  if(!v) return null;
+  if(v instanceof Date) return isNaN(v)?null:isoLocal(v);          // XLSX cellDates
+  const s=String(v).trim(); if(!s) return null;
+  if(/^\d+$/.test(s)){                                            // Excel serial
+    const n=parseInt(s,10); if(n<1||n>60000) return null;
+    const d=new Date(1899,11,30+n);                               // built local, read local
+    return isNaN(d)?null:isoLocal(d);
+  }
+  const ymd=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(ymd) return ymd[0];  // already a plain date
+  const d=new Date(s); if(isNaN(d)) return null;
+  const y=d.getFullYear();
+  return (y<2000||y>2040)?null:isoLocal(d);
+}
 function normWir(s){s=(s||'').toUpperCase().trim();return s==='A'||s==='B'?'approved':s==='C'||s==='D'?'rejected':s==='UR'?'under_review':'not_submitted';}
 function normClr(s){s=(s||'').toLowerCase().trim();return s.includes('fully approved')?'fully_approved':s.includes('not approved')||s.includes('rejected')?'not_approved':s.includes('pending')?'pending':'not_approved';}
 function addLog(tab,msg,cls='info'){const el=document.getElementById('log-'+tab);if(!el)return;const d=document.createElement('div');d.className='log-'+cls;d.textContent='['+new Date().toLocaleTimeString()+'] '+msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}

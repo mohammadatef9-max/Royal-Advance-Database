@@ -699,9 +699,17 @@ function findCol(headers,keywords,exact=false){
   }
   return '';
 }
+// A calendar date carries no timezone. XLSX (cellDates:true) returns a Date at LOCAL
+// midnight; toISOString() then converts to UTC, and in Dubai (UTC+4) 11 May 00:00 becomes
+// 10 May 20:00Z — which is why imported dates were landing one day early. Always read the
+// local components.
+function isoLocal(d){ const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate()); }
+
 function safeDate(val){
   // Guard against blank/null
   if(!val) return null;
+  if(val instanceof Date) return isNaN(val)?null:isoLocal(val);   // XLSX cellDates:true
   const s=String(val).trim();
   if(!s) return null;
 
@@ -710,11 +718,16 @@ function safeDate(val){
   if(/^\d+$/.test(s)){
     const n=parseInt(s,10);
     if(n<1||n>60000) return null;  // reject out-of-range serials
-    // Convert Excel serial to JS date (Excel epoch = 1899-12-30)
-    const d=new Date(Date.UTC(1899,11,30)+n*86400000);
+    // Excel epoch = 1899-12-30. Build it in LOCAL time and read local components —
+    // building in UTC then calling toISOString() is what shifted dates a day.
+    const d=new Date(1899,11,30+n);
     if(isNaN(d)) return null;
-    return d.toISOString().split('T')[0];
+    return isoLocal(d);
   }
+
+  // Already a plain calendar date — pass it through rather than re-parsing it as UTC
+  const ymd=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(ymd) return ymd[0];
 
   // Try parsing as a normal date string
   const d=new Date(s);
@@ -722,7 +735,7 @@ function safeDate(val){
   const yr=d.getFullYear();
   // Reject anything outside a sane construction window (2000–2040)
   if(yr<2000||yr>2040) return null;
-  return d.toISOString().split('T')[0];
+  return isoLocal(d);
 }
 
 function normaliseWir(s){s=(s||'').toUpperCase().trim();if(s==='A'||s==='B')return 'approved';if(s==='C'||s==='D')return 'rejected';if(s==='UR')return 'under_review';return 'not_submitted';}
@@ -1105,7 +1118,9 @@ function parseDate(d){
   if(!d) return null;
   const dmy=d.match(/(\d{1,2})[-\/]([A-Za-z]+)[-\/](\d{4})/);
   if(dmy){const months={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};const m=months[dmy[2].toLowerCase().substring(0,3)];if(m)return `${dmy[3]}-${String(m).padStart(2,'0')}-${dmy[1].padStart(2,'0')}`;}
-  const dt=new Date(d);if(!isNaN(dt))return dt.toISOString().split('T')[0];
+  if(d instanceof Date) return isNaN(d)?null:isoLocal(d);
+  const ymd=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/); if(ymd) return ymd[0];
+  const dt=new Date(d);if(!isNaN(dt))return isoLocal(dt);   // local components, not UTC
   return null;
 }
 
