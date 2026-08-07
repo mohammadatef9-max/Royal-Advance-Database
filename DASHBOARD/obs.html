@@ -96,6 +96,10 @@ tbody tr:last-child td{border-bottom:0}
     <span style="width:1px;height:22px;background:var(--border);margin:0 4px"></span>
     <span class="tb-label month-ctl">Month</span>
     <input type="month" id="f-month" class="sel month-ctl" onchange="reload()">
+    <select id="f-mode" class="sel month-ctl" onchange="setMode(this.value)" title="Show this month alone, or everything up to and including it">
+      <option value="month">This month</option>
+      <option value="cum">Cumulative to date</option>
+    </select>
     <span class="tb-label day-ctl" style="display:none">Date</span>
     <input type="date" id="f-day" class="sel day-ctl" style="display:none" onchange="reload()">
     <button class="btn day-ctl" style="display:none" onclick="dayShift(-1)" title="Previous day">◀</button>
@@ -125,7 +129,10 @@ const RA_PREFIX = 'RA';
 const IN_PROGRESS_CREDIT = 0.5;
 
 let perms=[], canEnter=false, isSuper=false;
-let view='groups';       // 'groups' (per-group) | 'summary' (EVM by discipline) — both per-month
+let view='groups';       // 'groups' (per-group) | 'summary' (EVM by discipline) | 'day'
+// Month alone, or everything up to and including it. Applies to both the group and
+// summary views; By Day is a single date and ignores it.
+let cumulative=false;
 let groups=[];           // [{discipline,disc_sort,group,subs:[...],status,configured,EV,AC,BAC}]
 let codeToActId={}, actIdToCode={};       // WIR code <-> activities.id
 let clrCodeToId={}, clrIdToCode={};        // clearance code <-> clearance_activities.id
@@ -208,7 +215,8 @@ async function reload(){
   try{
     if(view==='day'){ await renderDay(); return; }   // day view reads manpower only, not completion
     const m=document.getElementById('f-month').value||monthStr(new Date());
-    await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m), loadManual(m) ]);   // all per-month
+    const cum=cumulative;
+    await Promise.all([ loadCompletion(m,cum), loadLabour(m,cum), loadAlloc(m,cum), loadManual(m,cum) ]);
     if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
   finally{ loading.style.display='none'; }
@@ -302,11 +310,15 @@ function groupSpent(grp){
   // so they are added after the cap — capping them would quietly hide real labour.
   return capped + (Number(manualAlloc[grp.group])||0) + (Number(groupLabour[grp.group])||0);
 }
-async function loadAlloc(m){
+// Cumulative reads every month up to and including m, so values are summed rather than
+// assigned — assigning would silently keep whichever month came back last.
+function monthFilter(m,cum){ return cum ? 'period_month=lt.'+monthEnd(m) : 'period_month=eq.'+m+'-01'; }
+
+async function loadAlloc(m,cum){
   manualAlloc={};
   try{
-    const rows=await fa('obs_hour_allocation?select=activity_group,hours&period_month=eq.'+m+'-01');
-    rows.forEach(r=>{ manualAlloc[r.activity_group]=Number(r.hours)||0; });
+    const rows=await fa('obs_hour_allocation?select=activity_group,hours&'+monthFilter(m,cum));
+    rows.forEach(r=>{ manualAlloc[r.activity_group]=(manualAlloc[r.activity_group]||0)+(Number(r.hours)||0); });
   }catch(e){ manualAlloc={}; }
 }
 
@@ -317,15 +329,17 @@ async function loadAlloc(m){
    booked straight to a group — both per month, both super-admin only. */
 let manualDone={};     // ccs_code -> villas done, entered by hand (overrides the derived count)
 let groupLabour={};    // activity_group -> man-hours booked directly to the group
-async function loadManual(m){
+async function loadManual(m,cum){
   manualDone={}; groupLabour={};
   try{
+    const flt=monthFilter(m,cum);
     const [d,l]=await Promise.all([
-      fa('obs_manual_completion?select=ccs_code,villas_done&period_month=eq.'+m+'-01'),
-      fa('obs_group_labour?select=activity_group,man_hours&period_month=eq.'+m+'-01')
+      fa('obs_manual_completion?select=ccs_code,villas_done&'+flt),
+      fa('obs_group_labour?select=activity_group,man_hours&'+flt)
     ]);
-    (d||[]).forEach(r=>{ manualDone[r.ccs_code]=Number(r.villas_done)||0; });
-    (l||[]).forEach(r=>{ groupLabour[r.activity_group]=Number(r.man_hours)||0; });
+    // Each month records what was done in that month, so cumulative is their sum.
+    (d||[]).forEach(r=>{ manualDone[r.ccs_code]=(manualDone[r.ccs_code]||0)+(Number(r.villas_done)||0); });
+    (l||[]).forEach(r=>{ groupLabour[r.activity_group]=(groupLabour[r.activity_group]||0)+(Number(r.man_hours)||0); });
   }catch(e){ manualDone={}; groupLabour={}; }
 }
 
@@ -377,13 +391,13 @@ function render(m){
       c.done.forEach(v=>totVillas.add(v)); c.inprog.forEach(v=>totVillas.add(v)); });
   });
   const cpi=totAC?totEV/totAC:0; const variance=totEV-totAC;
-  document.getElementById('tb-info').textContent=groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
+  document.getElementById('tb-info').textContent=periodTag(m)+' · '+groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   document.getElementById('kpis').innerHTML=
-    kpi(fmt(totVillas.size),'Villas Active','across all groups this month','accent')
-   +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered in '+m)
-   +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour in '+m)
+    kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'),'accent')
+   +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
+   +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour '+periodOf(m))
    +kpi((variance>=0?'+':'')+fmtK(variance),variance>=0?'Hrs Saved':'Hrs Over','earned − spent',variance>=0?'ok':'bad')
    +kpi((cpi?cpi.toFixed(2):'—'),'CPI','earned ÷ spent',(cpi>=1?'ok':cpi>0?'warn':''))
    +kpi('AED '+fmtK(variance*AED_RATE),'Cost Variance','@ '+AED_RATE+' AED/hr',variance>=0?'ok':'bad');
@@ -411,7 +425,7 @@ function render(m){
         +`<span class="caret">▾</span>`
         +`<span class="gname" title="${esc(grp.group)}">${esc(grp.group)}</span>`
         +tag
-        +`<span class="mini" title="man-days of labour assigned to this group this month">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
+        +`<span class="mini" title="man-days of labour assigned to this group ${cumulative?'up to and including this month':'this month'}">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
         +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
@@ -442,6 +456,10 @@ function subTable(grp){
    back in and freezing it. */
 function openDone(gi){
   if(!isSuper){ alert('Editing villas done is restricted to super admins.'); return; }
+  // In cumulative mode the figures on screen are totals across many months, but a save
+  // writes into the selected month alone — that would book the whole running total into
+  // one month. Editing stays a per-month action.
+  if(cumulative){ alert('Switch the period to “This month” to edit villas done.\n\nCumulative figures are a total across months; edits are saved against a single month.'); return; }
   const grp=groups[gi]; if(!grp) return;
   const m=document.getElementById('f-month').value||'';
   const rows=grp.subs.map(s=>{
@@ -515,6 +533,11 @@ async function saveDone(){
 
 function toggle(gi){ document.getElementById('gp-'+gi)?.classList.toggle('collapsed'); }
 function toggleAll(open){ groups.forEach((g,gi)=>{ const el=document.getElementById('gp-'+gi); if(el) el.classList.toggle('collapsed', !open); }); }
+
+function setMode(v){ cumulative=(v==='cum'); reload(); }
+// Wording that follows the mode, so no figure is ever read as the wrong period.
+function periodOf(m){ return cumulative ? 'to end of '+m : 'in '+m; }
+function periodTag(m){ return cumulative ? m+' cumulative' : m; }
 
 function setView(v){
   view=v;
@@ -666,9 +689,9 @@ function summaryModel(){
 
 function renderSummary(m){
   const M=summaryModel();
-  document.getElementById('tb-info').textContent=m+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
+  document.getElementById('tb-info').textContent=periodTag(m)+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
   const head='<thead>'
-    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">This Month</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
+    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
     +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED @10.5</th></tr></thead>';
   const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
   let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
@@ -683,7 +706,7 @@ function renderSummary(m){
   }
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
   document.getElementById('summary').innerHTML=
-    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (per month) · AED @ ${AED_RATE}/hr</span>`
+    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (${cumulative?'cumulative to date':'per month'}) · AED @ ${AED_RATE}/hr</span>`
     +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
 }
@@ -693,6 +716,8 @@ function renderSummary(m){
    is auditable and re-editable, rather than being folded into the trade percentages. */
 function openAlloc(){
   if(!canEnter){ alert('You need OBS entry permission to assign hours.'); return; }
+  // Same reason as openDone — the pool shown is cumulative, but a save targets one month.
+  if(cumulative){ alert('Switch the period to “This month” to assign hours.\n\nThe cumulative pool spans several months; assignments are saved against a single month.'); return; }
   const m=document.getElementById('f-month').value||'';
   const heldBack=groups.reduce((s,g)=>s+(g.capped||0),0);
   const rows=groups.slice().sort((a,b)=>(b.capped||0)-(a.capped||0)).map(g=>{
@@ -780,7 +805,7 @@ function printSummary(){
   M.rows.forEach(x=> body+=r(x));
   body+=`<tr><td class="l">Total Indirect Works</td><td>${fmtN(M.indirect)}</td><td colspan="6"></td></tr>`;
   const w=window.open('','_blank');
-  w.document.write(`<html><head><title>OBS Summary ${m}</title><style>
+  w.document.write(`<html><head><title>OBS Summary ${m}${cumulative?' (cumulative)':''}</title><style>
     body{font-family:Arial,sans-serif;margin:24px;color:#111}
     h2{margin:0 0 2px} .sub{color:#666;font-size:12px;margin-bottom:14px}
     table{border-collapse:collapse;width:100%;font-size:12px}
@@ -788,7 +813,7 @@ function printSummary(){
     th{background:#f3dede} td.l,th.l{text-align:left}
     tr.tot td{background:#eef3e0;font-weight:bold} .neg{color:#c0392b} .pos{color:#1e8449}
   </style></head><body>
-    <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · Month ${m} · AED @ ${AED_RATE}/hr</div>
+    <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · ${cumulative?'Cumulative to end of '+m:'Month '+m} · AED @ ${AED_RATE}/hr</div>
     <table><thead><tr><th class="l">Direct Work</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
