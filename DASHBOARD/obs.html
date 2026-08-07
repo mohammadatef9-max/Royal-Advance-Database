@@ -84,7 +84,7 @@ tbody tr:last-child td{border-bottom:0}
 </style>
 </head>
 <body>
-<div class="topbar"><div class="tb-logo">M</div><div><div style="font-weight:600">OBS Productivity</div><div style="font-size:10px;color:var(--text-dim)">RA labour earned-value — all activity groups</div></div></div>
+<div class="topbar"><div class="tb-logo">M</div><div><div style="font-weight:600">OBS Productivity</div><div style="font-size:10px;color:var(--text-dim)">RA labour earned-value — by group, by month, by day</div></div></div>
 
 <div id="access-denied"><div style="font-size:46px">🔒</div><div style="font-size:20px;font-weight:700;color:var(--bad)">Access Denied</div><div style="color:var(--text-muted)">OBS data requires the <b>view_obs</b> permission.</div></div>
 
@@ -92,9 +92,15 @@ tbody tr:last-child td{border-bottom:0}
   <div class="toolbar">
     <button class="btn" id="view-groups" onclick="setView('groups')">By Group</button>
     <button class="btn" id="view-summary" onclick="setView('summary')">Summary</button>
+    <button class="btn" id="view-day" onclick="setView('day')">By Day</button>
     <span style="width:1px;height:22px;background:var(--border);margin:0 4px"></span>
-    <span class="tb-label">Month</span>
-    <input type="month" id="f-month" class="sel" onchange="reload()">
+    <span class="tb-label month-ctl">Month</span>
+    <input type="month" id="f-month" class="sel month-ctl" onchange="reload()">
+    <span class="tb-label day-ctl" style="display:none">Date</span>
+    <input type="date" id="f-day" class="sel day-ctl" style="display:none" onchange="reload()">
+    <button class="btn day-ctl" style="display:none" onclick="dayShift(-1)" title="Previous day">◀</button>
+    <button class="btn day-ctl" style="display:none" onclick="dayToday()">Today</button>
+    <button class="btn day-ctl" style="display:none" onclick="dayShift(1)" title="Next day">▶</button>
     <button class="btn" onclick="reload()">↻ Refresh</button>
     <button class="btn" id="btn-expand" onclick="toggleAll(true)">Expand all</button>
     <button class="btn" id="btn-collapse" onclick="toggleAll(false)">Collapse all</button>
@@ -108,6 +114,7 @@ tbody tr:last-child td{border-bottom:0}
     <div class="kpis" id="kpis"></div>
     <div id="groups"></div>
     <div id="summary" style="display:none"></div>
+    <div id="dayview" style="display:none"></div>
   </div>
 </div>
 
@@ -198,6 +205,7 @@ async function loadCatalogue(){
 async function reload(){
   const loading=document.getElementById('loading'); loading.style.display='flex';
   try{
+    if(view==='day'){ await renderDay(); return; }   // day view reads manpower only, not completion
     const m=document.getElementById('f-month').value||monthStr(new Date());
     await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m) ]);   // all per-month
     if(view==='summary') renderSummary(m); else render(m);
@@ -373,15 +381,127 @@ function toggle(gi){ document.getElementById('gp-'+gi)?.classList.toggle('collap
 function toggleAll(open){ groups.forEach((g,gi)=>{ const el=document.getElementById('gp-'+gi); if(el) el.classList.toggle('collapsed', !open); }); }
 
 function setView(v){
-  view=v; const grp=v==='groups';
+  view=v;
+  const grp=v==='groups', day=v==='day', sum=v==='summary';
   document.getElementById('view-groups').classList.toggle('btn-primary',grp);
-  document.getElementById('view-summary').classList.toggle('btn-primary',!grp);
+  document.getElementById('view-summary').classList.toggle('btn-primary',sum);
+  document.getElementById('view-day').classList.toggle('btn-primary',day);
   document.getElementById('kpis').style.display=grp?'':'none';
   document.getElementById('groups').style.display=grp?'':'none';
-  document.getElementById('summary').style.display=grp?'none':'';
+  document.getElementById('summary').style.display=sum?'':'none';
+  document.getElementById('dayview').style.display=day?'':'none';
   ['btn-expand','btn-collapse'].forEach(id=>document.getElementById(id).style.display=grp?'':'none');
-  document.getElementById('btn-print').style.display=grp?'none':'';
+  document.getElementById('btn-print').style.display=sum?'':'none';
+  // By Day is driven by a date, every other view by a month — swap the pickers.
+  document.querySelectorAll('.month-ctl').forEach(el=>el.style.display=day?'none':'');
+  document.querySelectorAll('.day-ctl').forEach(el=>el.style.display=day?'':'none');
+  if(day && !document.getElementById('f-day').value) document.getElementById('f-day').value=dubaiToday();
   reload();
+}
+
+/* ───── BY DAY — labour on a single date ─────
+   Manpower is captured per MONTH (man-days per trade), so one date is the month's
+   man-days ÷ days in that month: the daily average, not a timesheet reading. Said
+   plainly on the page so the number is never mistaken for an attendance figure.
+   Month totals stay exact — this only divides them. */
+let dayMonthCache={};   // 'YYYY-MM-01' -> manpower rows
+let dayDist=null;       // [{trade,activity_group,pct}]
+
+function dubaiToday(){ return new Date(Date.now()+4*3600*1000).toISOString().slice(0,10); }  // site runs on Dubai time
+function daysInMonth(iso){ const [y,m]=iso.split('-').map(Number); return new Date(y,m,0).getDate(); }
+function monthKeyOf(dateIso){ return dateIso.slice(0,7)+'-01'; }
+function dayToday(){ document.getElementById('f-day').value=dubaiToday(); reload(); }
+function dayShift(n){
+  const el=document.getElementById('f-day');
+  const d=new Date((el.value||dubaiToday())+'T12:00:00');
+  d.setDate(d.getDate()+n);
+  el.value=d.toISOString().slice(0,10);
+  reload();
+}
+
+async function renderDay(){
+  const host=document.getElementById('dayview');
+  const date=document.getElementById('f-day').value||dubaiToday();
+  document.getElementById('f-day').value=date;
+  const mk=monthKeyOf(date), nDays=daysInMonth(date);
+  const monthLabel=new Date(date+'T12:00:00').toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  const dayLabel=new Date(date+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  if(dayDist===null){ try{ dayDist=await fa('obs_trade_distribution?select=trade,activity_group,pct'); }catch(e){ dayDist=[]; } }
+  if(!dayMonthCache[mk]) dayMonthCache[mk]=await fa('obs_manpower?select=trade,man_days,shift_hours,is_indirect&period_month=eq.'+mk);
+  const rows=dayMonthCache[mk]||[];
+
+  if(!rows.length){
+    document.getElementById('tb-info').textContent=date+' · no manpower';
+    host.innerHTML=`<div class="panel"><div class="panel-h" style="cursor:default">${esc(dayLabel)}</div>`
+      +`<div class="panel-b muted" style="font-size:12px">No manpower saved for <b>${esc(monthLabel)}</b>. `
+      +`Import that month under <b>OBS Config → Manpower Import</b> — per-date figures are derived from the monthly totals.</div></div>`;
+    return;
+  }
+
+  // pro-rate the month to one day
+  let totDays=0, totHrs=0, indHrs=0;
+  const perTrade=rows.map(r=>{
+    const md=(Number(r.man_days)||0)/nDays, sh=Number(r.shift_hours)||0, hrs=md*sh;
+    totDays+=md; totHrs+=hrs; if(r.is_indirect) indHrs+=hrs;
+    return { trade:r.trade, manDays:md, shift:sh, hrs, indirect:!!r.is_indirect };
+  }).sort((a,b)=>b.hrs-a.hrs);
+
+  // spread the day's trade hours across activity groups
+  const hrsByTrade={}; perTrade.forEach(t=>{ hrsByTrade[t.trade]=t.hrs; });
+  const discOfGroup={}; groups.forEach(g=>{ discOfGroup[g.group]=g.discipline; });
+  const byGroup={};
+  (dayDist||[]).forEach(d=>{
+    const h=(hrsByTrade[d.trade]||0)*(Number(d.pct)||0)/100;
+    if(!h) return;
+    const e=byGroup[d.activity_group]||(byGroup[d.activity_group]={hrs:0,parts:[]});
+    e.hrs+=h; e.parts.push(d.trade+' '+fmt(d.pct,0)+'%');
+  });
+  const gList=Object.entries(byGroup).sort((a,b)=>b[1].hrs-a[1].hrs);
+  const gTot=gList.reduce((s,[,v])=>s+v.hrs,0);
+  const unmapped=totHrs-indHrs-gTot;   // direct hours no distribution rule places anywhere
+
+  document.getElementById('tb-info').textContent=date+' · '+fmt(totHrs,0)+' man-hrs/day';
+
+  const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
+  let h=`<div class="kpis">`
+    +kpi(fmt(totHrs,0),'Man-Hours / Day',monthLabel+' ÷ '+nDays+' days','accent')
+    +kpi(fmt(totDays,0),'Men on Site','daily average headcount')
+    +kpi(fmt(totHrs-indHrs,0),'Direct Hrs','productive work')
+    +kpi(fmt(indHrs,0),'Indirect Hrs','overhead labour',indHrs?'warn':'')
+    +`</div>`;
+
+  h+=`<div class="panel"><div class="panel-h" style="cursor:default">${esc(dayLabel)}`
+    +`<span class="mini" style="margin-left:auto">daily average for ${esc(monthLabel)}</span></div>`
+    +`<div class="panel-b muted" style="font-size:11px;line-height:1.55">`
+    +`Manpower is recorded per <b>month</b> (man-days per trade), so a single date is shown <b>pro-rated</b>: `
+    +`the month's man-days ÷ ${nDays} days. Month totals stay exact — read a day as the average for that month, not a timesheet.`
+    +`</div></div>`;
+
+  h+=`<div class="panel"><div class="panel-h" style="cursor:default">By Trade</div><div class="panel-b">`
+    +`<table><thead><tr><th class="l">Trade</th><th>Men / Day</th><th>Shift Hrs</th><th>Man-Hours / Day</th><th class="l">Type</th></tr></thead><tbody>`
+    +perTrade.map(t=>`<tr><td class="l" style="font-family:var(--font)">${esc(t.trade)}</td><td>${fmt(t.manDays,1)}</td>`
+      +`<td>${fmt(t.shift,1)}</td><td><b>${fmt(t.hrs,1)}</b></td>`
+      +`<td class="l muted" style="font-family:var(--font)">${t.indirect?'Indirect':'Direct'}</td></tr>`).join('')
+    +`<tr class="totrow"><td class="l">TOTAL</td><td>${fmt(totDays,1)}</td><td>—</td><td>${fmt(totHrs,1)}</td>`
+    +`<td class="l" style="font-family:var(--font);font-weight:600">${fmt(indHrs,1)} indirect</td></tr></tbody></table></div></div>`;
+
+  h+=`<div class="panel"><div class="panel-h" style="cursor:default">By Activity Group`
+    +`<span class="mini" style="font-weight:400">trade hours × distribution %</span></div><div class="panel-b">`;
+  if(gList.length){
+    h+=`<table><thead><tr><th class="l">Activity Group</th><th class="l">Discipline</th><th>Man-Hours / Day</th><th class="l">From</th></tr></thead><tbody>`
+      +gList.map(([g,v])=>`<tr><td class="l" style="font-family:var(--font)">${esc(g)}</td>`
+        +`<td class="l muted" style="font-family:var(--font);font-size:11px">${esc(discOfGroup[g]||'—')}</td>`
+        +`<td><b>${fmt(v.hrs,1)}</b></td>`
+        +`<td class="l muted" style="font-family:var(--font);font-size:11px">${esc(v.parts.join(' · '))}</td></tr>`).join('')
+      +`<tr class="totrow"><td class="l" colspan="2">TOTAL DISTRIBUTED</td><td>${fmt(gTot,1)}</td>`
+      +`<td class="l" style="font-family:var(--font);font-weight:600;font-size:11px">${ Math.abs(unmapped)>0.05
+          ? fmt(unmapped,1)+' hrs/day not covered by any distribution rule' : 'all direct hours distributed'}</td></tr></tbody></table>`;
+  }else{
+    h+=`<div class="muted" style="font-size:12px">No trade distribution configured — set it under <b>OBS Config → Trade Distribution</b>.</div>`;
+  }
+  h+=`</div></div>`;
+  host.innerHTML=h;
 }
 
 // ── Per-month OBS Summary (EVM roll-up by discipline) ──
