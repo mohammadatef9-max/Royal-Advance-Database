@@ -2702,23 +2702,49 @@ function renderCoverPage() {
 function printCover() {
   const doc = document.getElementById('cover-doc');
   if (!doc) return;
+  const M = 6;                                   // page margin, mm
+  const PAGE_W = 210, PAGE_H = 297;              // A4 portrait
+  const availW = PAGE_W - 2*M, availH = PAGE_H - 2*M;
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Payment Certificate — ${escH(selectedScope.subcontractor_name||'')} PC${escH(selectedPC.pc_number||'')}</title>
     <style>
-      @page{ size:A4 portrait; margin:7mm }
-      *{ box-sizing:border-box }
-      html,body{ margin:0; padding:0 }
-      body{ font-family:'Inter',Arial,sans-serif; color:#111; font-size:8pt; line-height:1.18 }
-      /* A4 printable width (210mm − 2×7mm) so the whole certificate fits one page */
-      #cover-doc{ width:196mm; border:1px solid #333 }
-      #cover-doc > div:first-child{ font-size:11.5pt; padding:4px }
+      @page{ size:A4 portrait; margin:${M}mm }
+      /* the box tints (section headers, totals) carry meaning — keep them on paper */
+      *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact }
+      html,body{ margin:0; padding:0; background:#fff }
+      body{ font-family:'Inter',Arial,sans-serif; color:#111; font-size:8pt; line-height:1.14 }
+      /* exactly the A4 printable width; the fit pass below shrinks if content runs over */
+      #cover-doc{ width:${availW}mm; border:1px solid #333; transform-origin:top left }
+      #cover-doc > div:first-child{ font-size:11pt; padding:3px }
       input{ border:none!important; background:transparent!important; font:inherit; color:#111; padding:0 }
       input[type=date]::-webkit-calendar-picker-indicator{ display:none }
+      /* auto layout on purpose: the label column must stay wide and the money columns
+         narrow — a fixed layout would divide them evenly and wreck the certificate */
       table{ border-collapse:collapse; width:100% }
-      td,th{ padding:1.2px 6px!important }
+      td,th{ padding:1px 5px!important }
+      tr{ break-inside:avoid; page-break-inside:avoid }
     </style></head><body>${doc.outerHTML}</body></html>`);
   w.document.close();
-  setTimeout(()=>{ w.focus(); w.print(); }, 350);
+
+  // Fit to a single sheet. The certificate grows with the number of financial lines and
+  // signature blocks, so a fixed font size can't guarantee it fits — measure what actually
+  // rendered and scale down only if it overflows. `zoom` reflows the layout (rather than
+  // transform, which would scale the box but leave the page geometry unchanged), so text
+  // stays crisp and the page break lands correctly.
+  const fit = () => {
+    try {
+      const el = w.document.getElementById('cover-doc');
+      if (el) {
+        const mm = v => v * 96 / 25.4;                       // CSS px per mm
+        const f = Math.min(1, mm(availW) / el.scrollWidth, mm(availH) / el.scrollHeight);
+        if (f < 0.999) el.style.zoom = Math.max(f, 0.45);    // floor keeps it legible
+      }
+    } catch (e) { /* fall through and print unscaled rather than not at all */ }
+    w.focus(); w.print();
+  };
+  // wait for webfont metrics before measuring, or the height is read too small
+  if (w.document.fonts && w.document.fonts.ready) w.document.fonts.ready.then(() => setTimeout(fit, 120));
+  else setTimeout(fit, 500);
 }
 
 // ══════════════════════════════════════════════
