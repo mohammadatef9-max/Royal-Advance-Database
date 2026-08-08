@@ -182,13 +182,14 @@ async function init(){
 
 // Load every activity grouped by discipline → group (once).
 async function loadCatalogue(){
-  const rows=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,completion_wir_code,completion_type,discipline,discipline_sort,activity_group&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
+  const rows=await fa('obs_activities?select=ccs_code,description,unit,std_prod_rate,qty_per_villa,budget_hours,completion_wir_code,completion_type,discipline,discipline_sort,activity_group&is_active=eq.true&order=discipline_sort.asc,activity_group.asc,ccs_code.asc');
   const map={}, order=[];
   rows.forEach(a=>{
     const g=a.activity_group||'(none)';
     if(!map[g]){ map[g]={ discipline:a.discipline||'Other', disc_sort:a.discipline_sort??99, group:g, subs:[] }; order.push(g); }
     const G=Number(a.std_prod_rate)||0, W=Number(a.qty_per_villa)||0;
-    map[g].subs.push({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC:W*G, wir:String(a.completion_wir_code||''), ctype:a.completion_type||'wir' });
+    map[g].subs.push({ ccs_code:a.ccs_code, description:a.description, unit:a.unit||'', G, W, AC:W*G,
+      budget:Number(a.budget_hours)||0, wir:String(a.completion_wir_code||''), ctype:a.completion_type||'wir' });
   });
   groups=order.map(g=>map[g]);
   groups.forEach(grp=>{
@@ -371,10 +372,11 @@ function subStats(s){
   const manual=(man!=null);
   const done   = manual ? man : c.done.size;
   const inprog = manual ? 0   : c.inprog.size;   // a hand-entered count is final, not partial
-  // Budget needs a villa population. A manually-entered code has no derived applicable
-  // set, so fall back to what was entered — otherwise BAC is 0 and CPI/EAC blow up.
+  // Villas the activity is known to touch — context only. The budget no longer comes from
+  // this: it is obs_activities.budget_hours, so it reflects the contract scope rather than
+  // however much of it the WIR data happens to cover so far.
   const Z=Math.max(c.applicable.size, manual?done:0);
-  return { done, inprog, Z, manual, EV:(done+inprog*IN_PROGRESS_CREDIT)*s.AC, BAC:Z*s.AC };
+  return { done, inprog, Z, manual, EV:(done+inprog*IN_PROGRESS_CREDIT)*s.AC };
 }
 // Man-days of labour distributed to a group this period (how many workers' days are assigned to it).
 function groupDays(grp){ return (distByGroup[grp.group]||[]).reduce((s,d)=>s+(tradeDays[d.trade]||0)*d.pct/100,0); }
@@ -388,7 +390,7 @@ function computeGroups(){
     let EV=0, BAC=0;
     grp.subs.forEach(s=>{ const st=subStats(s);
       s.done=st.done; s.inprog=st.inprog; s.Z=st.Z; s.manual=st.manual; s.EV=st.EV;
-      EV+=st.EV; BAC+=st.BAC; });
+      EV+=st.EV; BAC+=(Number(s.budget)||0); });   // budget = contract scope, not WIR coverage
     grp.EV=EV; grp.BAC=BAC;
     grp.ACraw=groupSpentRaw(grp);
     grp.AC=groupSpent(grp);                       // reads grp.EV — set just above
@@ -413,9 +415,12 @@ function render(m){
   const cpi=totAC?totEV/totAC:0; const variance=totEV-totAC;
   document.getElementById('tb-info').textContent=periodTag(m)+' · '+groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
+  const totBAC=groups.reduce((s,g)=>s+(g.BAC||0),0);
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   document.getElementById('kpis').innerHTML=
-    kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'),'accent')
+    kpi(fmtK(totBAC),'Total Budget Hrs','whole project scope · AED '+fmtK(totBAC*AED_RATE),'accent')
+   +kpi((totBAC>0?((totEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget')
+   +kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'))
    +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
    +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour '+periodOf(m))
    +kpi((variance>=0?'+':'')+fmtK(variance),variance>=0?'Hrs Saved':'Hrs Over','earned − spent',variance>=0?'ok':'bad')
@@ -446,6 +451,8 @@ function render(m){
         +`<span class="gname" title="${esc(grp.group)}">${esc(grp.group)}</span>`
         +tag
         +`<span class="mini" title="man-days of labour assigned to this group ${cumulative?'up to and including this month':'this month'}">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
+        +`<span class="mini" title="labour budget for this group's whole scope">Budget <b>${fmtK(grp.BAC)}</b></span>`
+        +`<span class="mini" title="earned ÷ budget">${grp.BAC>0?'<b>'+((grp.EV/grp.BAC)*100).toFixed(1)+'%</b> done':'<span class="muted">no budget</span>'}</span>`
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
         +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
@@ -458,15 +465,16 @@ function render(m){
 }
 
 function subTable(grp){
-  let h='<table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>WIR</th><th>Std Hr/Unit</th><th>Qty/Villa</th><th>Budget Hr/Villa</th><th>Villas Done</th><th>Earned (EV)</th></tr></thead><tbody>';
-  let budgetPerVilla=0;
-  grp.subs.forEach(s=>{ budgetPerVilla+=s.AC;
+  let h='<table><thead><tr><th class="l">Code</th><th class="l">Sub-Activity</th><th>WIR</th><th>Std Hr/Unit</th><th>Qty/Villa</th><th>Budget Hr/Villa</th><th>Budget Hrs</th><th>Villas Done</th><th>Earned (EV)</th></tr></thead><tbody>';
+  let budgetPerVilla=0, budgetTot=0;
+  grp.subs.forEach(s=>{ budgetPerVilla+=s.AC; budgetTot+=(Number(s.budget)||0);
     h+=`<tr><td class="l code">${esc(s.ccs_code)}</td><td class="l" style="font-family:var(--font)">${esc(s.description)}</td>`
       +`<td><span class="code">${s.wir||'—'}</span></td><td>${fmt(s.G,2)}</td><td>${fmt(s.W,2)}</td><td>${fmt(s.AC,2)}</td>`
+      +`<td>${s.budget?fmt(s.budget,0):'<span class="muted">—</span>'}</td>`
       +`<td>${s.done||0}${s.inprog?'<span class="muted"> +'+s.inprog+'ip</span>':''}`
       +`${s.manual?'<span class="tag off" style="margin-left:6px" title="Entered by hand — overrides the derived count">manual</span>':''}</td>`
       +`<td>${fmt(s.EV||0,0)}</td></tr>`; });
-  h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
+  h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>${fmt(budgetTot,0)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
   return h+'</tbody></table>';
 }
 
@@ -712,18 +720,27 @@ function summaryModel(){
 function renderSummary(m){
   const M=summaryModel();
   document.getElementById('tb-info').textContent=periodTag(m)+' · '+(M.proj.cpi?M.proj.cpi.toFixed(2):'—')+' CPI';
+  // Column order mirrors the source workbook's OBS Summary: Labour Budget (A) first, so the
+  // figures that follow visibly derive from something instead of appearing out of nowhere.
   const head='<thead>'
-    +'<tr><th class="l" rowspan="2">Direct Work</th><th colspan="3" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th><th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
-    +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED @10.5</th></tr></thead>';
-  const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
+    +'<tr><th class="l" rowspan="2">Direct Work</th><th rowspan="2">Labour Budget (A)</th>'
+    +'<th colspan="4" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th>'
+    +'<th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
+    +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>% Complete</th>'
+    +'<th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A−B)</th><th>Var. AED @10.5</th></tr></thead>';
+  const pctCell=r=>{ const p=r.BAC>0?(r.EV/r.BAC)*100:0;
+    return `<td style="font-family:var(--mono);text-align:right">${r.BAC>0?p.toFixed(1)+'%':'—'}</td>`; };
+  const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.BAC)}`
+    +`${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${pctCell(r)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
   let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
   M.rows.forEach(r=> b+=row(r));
   // indirect overhead (manpower only, no earned-value)
-  b+=`<tr><td class="l">Total Indirect Works</td>${nCell(M.indirect)}<td colspan="6" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
+  b+=`<tr><td class="l">Total Indirect Works</td><td class="muted" style="text-align:right">—</td>${nCell(M.indirect)}`
+    +`<td colspan="7" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
   // Held-back hours are real labour; showing them keeps the total reconcilable with payroll
   if(unassignedPool>0.5){
-    b+=`<tr><td class="l" style="color:var(--warn,#f5c451)">Unassigned overrun</td>${nCell(unassignedPool)}`
-      +`<td colspan="6" class="muted" style="font-size:11px">hours above what each category earned — `
+    b+=`<tr><td class="l" style="color:var(--warn,#f5c451)">Unassigned overrun</td><td class="muted" style="text-align:right">—</td>${nCell(unassignedPool)}`
+      +`<td colspan="7" class="muted" style="font-size:11px">hours above what each category earned — `
       +`<a href="#" onclick="openAlloc();return false" style="color:var(--accent-text,#93b6ff)">assign to categories</a></td></tr>`;
   }
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
@@ -889,10 +906,11 @@ async function saveAlloc(){
 function printSummary(){
   const M=summaryModel(); const m=document.getElementById('f-month').value||'';
   const fmtN=n=>{const v=Math.round(n);return v<0?'('+Math.abs(v).toLocaleString()+')':v.toLocaleString();};
-  const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
-  let body=`<tr class="tot"><td class="l">PROJECT TOTAL</td><td>${fmtN(M.proj.AC)}</td><td>${fmtN(M.proj.EV)}</td><td class="${M.proj.cv<0?'neg':'pos'}">${fmtN(M.proj.cv)}</td><td>${fmtN(M.proj.etc)}</td><td>${fmtN(M.proj.eac)}</td><td class="${M.proj.bv<0?'neg':'pos'}">${fmtN(M.proj.bv)}</td><td class="${M.proj.bv<0?'neg':'pos'}">${fmtN(M.proj.aed)}</td></tr>`;
+  const pctN=x=> x.BAC>0 ? ((x.EV/x.BAC)*100).toFixed(1)+'%' : '—';
+  const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.BAC)}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td>${pctN(x)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
+  let body=r({...M.proj,label:'PROJECT TOTAL'}).replace('<tr>','<tr class="tot">');
   M.rows.forEach(x=> body+=r(x));
-  body+=`<tr><td class="l">Total Indirect Works</td><td>${fmtN(M.indirect)}</td><td colspan="6"></td></tr>`;
+  body+=`<tr><td class="l">Total Indirect Works</td><td>—</td><td>${fmtN(M.indirect)}</td><td colspan="7"></td></tr>`;
   const w=window.open('','_blank');
   w.document.write(`<html><head><title>OBS Summary ${m}${cumulative?' (cumulative)':''}</title><style>
     body{font-family:Arial,sans-serif;margin:24px;color:#111}
@@ -903,7 +921,7 @@ function printSummary(){
     tr.tot td{background:#eef3e0;font-weight:bold} .neg{color:#c0392b} .pos{color:#1e8449}
   </style></head><body>
     <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · ${cumulative?'Cumulative to end of '+m:'Month '+m} · AED @ ${AED_RATE}/hr</div>
-    <table><thead><tr><th class="l">Direct Work</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>ETC</th><th>EAC</th><th>Var. in Budget</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
+    <table><thead><tr><th class="l">Direct Work</th><th>Labour Budget (A)</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A&minus;B)</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
 }
