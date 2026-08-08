@@ -242,6 +242,8 @@ async function reload(){
     if(view==='day'){ await renderDay(); return; }   // day view reads manpower only, not completion
     const m=document.getElementById('f-month').value||monthStr(new Date());
     const cum=cumulative;
+    // To-date pass first — the period load below overwrites the globals, which is intended.
+    await loadToDate(m);   // both views show % complete, which must mean the same thing on each
     await Promise.all([ loadCompletion(m,cum), loadLabour(m,cum), loadAlloc(m,cum), loadManual(m,cum) ]);
     if(view==='summary') renderSummary(m); else render(m);
   }catch(e){ document.getElementById('tb-info').textContent='Error: '+e.message; console.error(e); }
@@ -441,10 +443,14 @@ function render(m){
   document.getElementById('tb-info').textContent=periodTag(m)+' · '+groups.length+' groups · '+groups.filter(g=>g.configured).length+' configured';
 
   const totBAC=groups.reduce((s,g)=>s+(g.BAC||0),0);
+  // % complete is always to-date — the budget is a whole-project figure, so measuring one
+  // month against it would report the share of the project done in that month.
+  const tdEVof=g=> (toDate && toDate.byGroup[g.group]) ? toDate.byGroup[g.group].EV : g.EV;
+  const tdTotEV=groups.reduce((s,g)=>s+tdEVof(g),0);
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   document.getElementById('kpis').innerHTML=
     kpi(fmtK(totBAC),'Total Budget Hrs',(budgetScaled?'RA scope':'whole project scope')+' · AED '+fmtK(totBAC*AED_RATE),'accent')
-   +kpi((totBAC>0?((totEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget')
+   +kpi((totBAC>0?((tdTotEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget, to date')
    +kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'))
    +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
    +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour '+periodOf(m))
@@ -477,7 +483,7 @@ function render(m){
         +tag
         +`<span class="mini" title="man-days of labour assigned to this group ${cumulative?'up to and including this month':'this month'}">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
         +`<span class="mini" title="labour budget for this group's whole scope">Budget <b>${fmtK(grp.BAC)}</b></span>`
-        +`<span class="mini" title="earned ÷ budget">${grp.BAC>0?'<b>'+((grp.EV/grp.BAC)*100).toFixed(1)+'%</b> done':'<span class="muted">no budget</span>'}</span>`
+        +`<span class="mini" title="earned ÷ budget, cumulative to date">${grp.BAC>0?'<b>'+((tdEVof(grp)/grp.BAC)*100).toFixed(1)+'%</b> done':'<span class="muted">no budget</span>'}</span>`
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
         +`<span class="mini cpi">CPI <b class="${cpiG>=1?'ok':cpiG>0?'bad':''}">${cpiG?cpiG.toFixed(2):'—'}</b></span>`
@@ -718,9 +724,37 @@ async function renderDay(){
   host.innerHTML=h;
 }
 
-// ── Per-month OBS Summary (EVM roll-up by discipline) ──
-function evm(x){ const cpi=x.AC?x.EV/x.AC:0; const eac=cpi?x.BAC/cpi:x.BAC; const etc=Math.max(0,eac-x.AC);
-  return { AC:x.AC, EV:x.EV, BAC:x.BAC, cv:x.EV-x.AC, cpi, eac, etc, bv:x.BAC-eac, aed:(x.BAC-eac)*AED_RATE }; }
+/* ── OBS Summary (EVM roll-up by discipline) ──
+   The budget is a TO-DATE quantity: it covers the whole project and does not move when you
+   change month. Measuring one month's earned value against it would make "% Complete" read
+   as "share of the project finished this month", and would forecast EAC from a single
+   month's productivity — which swings wildly and is meaningless on a quiet month.
+
+   So the budget-relative figures (% complete, ETC, EAC, variance in budget, AED) are always
+   computed from cumulative-to-date data, while Actual / Allowable / Current Variance follow
+   the period selector. That is exactly how the source workbook is laid out: an "Actual
+   Accumulative Status" block beside a "Forecast to Complete" block. */
+let toDate=null;   // {byDisc:{disc:{EV,AC}}, indirect, pool} — null when already cumulative
+async function loadToDate(m){
+  toDate=null;
+  if(cumulative) return;                       // the main pass is already to-date
+  await Promise.all([ loadCompletion(m,true), loadLabour(m,true), loadAlloc(m,true), loadManual(m,true) ]);
+  computeGroups();
+  toDate={ byDisc:{}, byGroup:{}, indirect:indirectHrs, pool:unassignedPool };
+  groups.forEach(g=>{ const d=g.discipline||'Other';
+    const e=toDate.byDisc[d]||(toDate.byDisc[d]={EV:0,AC:0}); e.EV+=g.EV; e.AC+=g.AC;
+    toDate.byGroup[g.group]={EV:g.EV, AC:g.AC}; });
+  // no restore needed — the caller reloads the selected period straight after this
+}
+
+// p = the selected period (drives AC/EV/variance); td = to-date (drives the forecast).
+function evm(p, td, BAC){
+  const cpi = td.AC ? td.EV/td.AC : 0;
+  const eac = cpi ? BAC/cpi : BAC;
+  const etc = Math.max(0, eac - td.AC);
+  return { AC:p.AC, EV:p.EV, BAC, cv:p.EV-p.AC, pct: BAC>0 ? td.EV/BAC : 0,
+           tdEV:td.EV, tdAC:td.AC, cpi, eac, etc, bv:BAC-eac, aed:(BAC-eac)*AED_RATE };
+}
 function vCell(n){ const v=Math.round(n); const neg=v<0; return `<td style="font-family:var(--mono);text-align:right;color:${neg?'var(--bad)':'var(--good)'}">${neg?'('+fmt(Math.abs(v))+')':fmt(v)}</td>`; }
 function nCell(n){ return `<td style="font-family:var(--mono);text-align:right">${fmt(Math.round(n))}</td>`; }
 
@@ -734,11 +768,17 @@ function summaryModel(){
   });
   const order=['DRAINAGE ACTIVITIES','WATER SUPPLY ACTIVITIES','HVAC ACTIVITIES','ELECTRICAL ACTIVITIES','Functional Test','Snagging and de-snagging','Internal Rectification','PRECAST','Subcontractor Works Done by RA Labor'];
   Object.keys(byDisc).forEach(d=>{ if(!order.includes(d)) order.push(d); });
-  const rows=order.filter(d=>byDisc[d]).map(d=>({label:DISC_LABEL[d]||d, ...evm(byDisc[d])}));
+  // In cumulative mode the period figures ARE the to-date figures.
+  const tdFor=d=> (toDate && toDate.byDisc[d]) || {EV:byDisc[d].EV, AC:byDisc[d].AC};
+  const used=order.filter(d=>byDisc[d]);
+  const rows=used.map(d=>({label:DISC_LABEL[d]||d, ...evm(byDisc[d], tdFor(d), byDisc[d].BAC)}));
   const direct=rows.reduce((a,r)=>({AC:a.AC+r.AC,EV:a.EV+r.EV,BAC:a.BAC+r.BAC}),{AC:0,EV:0,BAC:0});
+  const tdDirect=used.reduce((a,d)=>{ const t=tdFor(d); return {EV:a.EV+t.EV, AC:a.AC+t.AC}; },{EV:0,AC:0});
+  const tdInd=toDate?toDate.indirect:indirectHrs, tdPool=toDate?toDate.pool:unassignedPool;
   // Unassigned overrun is still labour that was paid for — leaving it out of the project
   // total would understate spend and flatter CPI.
-  const proj=evm({AC:direct.AC+indirectHrs+unassignedPool, EV:direct.EV, BAC:direct.BAC});
+  const proj=evm({AC:direct.AC+indirectHrs+unassignedPool, EV:direct.EV},
+                 {AC:tdDirect.AC+tdInd+tdPool, EV:tdDirect.EV}, direct.BAC);
   return { rows, proj, indirect:indirectHrs };
 }
 
@@ -749,12 +789,11 @@ function renderSummary(m){
   // figures that follow visibly derive from something instead of appearing out of nowhere.
   const head='<thead>'
     +'<tr><th class="l" rowspan="2">Direct Work</th><th rowspan="2">Labour Budget (A)</th>'
-    +'<th colspan="4" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th>'
-    +'<th colspan="4" style="text-align:center">Forecast to Complete</th></tr>'
-    +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th><th>% Complete</th>'
-    +'<th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A−B)</th><th>Var. AED @10.5</th></tr></thead>';
-  const pctCell=r=>{ const p=r.BAC>0?(r.EV/r.BAC)*100:0;
-    return `<td style="font-family:var(--mono);text-align:right">${r.BAC>0?p.toFixed(1)+'%':'—'}</td>`; };
+    +'<th colspan="3" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th>'
+    +'<th colspan="5" style="text-align:center">'+(cumulative?'Forecast to Complete':'To Date &amp; Forecast')+'</th></tr>'
+    +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th>'
+    +'<th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A−B)</th><th>Var. AED @10.5</th></tr></thead>';
+  const pctCell=r=>`<td style="font-family:var(--mono);text-align:right">${r.BAC>0?(r.pct*100).toFixed(1)+'%':'—'}</td>`;
   const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.BAC)}`
     +`${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${pctCell(r)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
   let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
@@ -774,6 +813,12 @@ function renderSummary(m){
     +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="autoAssignAll()" title="Book every month's held-back hours against the group they came from, so nothing is left unassigned">⚖ Auto-assign all months</button>`
                 +`<button class="btn" style="margin-left:8px" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div>`
+    +(!cumulative?`<div class="muted" style="font-size:11px;padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
+        <b>Actual / Allowable / Current Variance</b> are for <b>${esc(m)}</b> alone.
+        <b>% Complete, ETC, EAC and the budget variances</b> are cumulative to the end of ${esc(m)} —
+        the budget covers the whole project, so measuring one month against it would read as
+        "share of the project finished this month" and would forecast from a single month's productivity.
+      </div>`:'')
     +(budgetScaled?`<div class="muted" style="font-size:11px;padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
         <b>Labour Budget</b> is the issued project budget — <b>${fmt(projBudget,0)} hrs</b> (AED ${fmt(projBudget*AED_RATE,0)}).
         Activity budgets total <b>${fmt(fullScopeHrs,0)} hrs</b> across the full project scope, including villas built by
@@ -938,7 +983,7 @@ async function saveAlloc(){
 function printSummary(){
   const M=summaryModel(); const m=document.getElementById('f-month').value||'';
   const fmtN=n=>{const v=Math.round(n);return v<0?'('+Math.abs(v).toLocaleString()+')':v.toLocaleString();};
-  const pctN=x=> x.BAC>0 ? ((x.EV/x.BAC)*100).toFixed(1)+'%' : '—';
+  const pctN=x=> x.BAC>0 ? ((x.pct||0)*100).toFixed(1)+'%' : '—';
   const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.BAC)}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td>${pctN(x)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
   let body=r({...M.proj,label:'PROJECT TOTAL'}).replace('<tr>','<tr class="tot">');
   M.rows.forEach(x=> body+=r(x));
