@@ -446,10 +446,14 @@ function render(m){
   // % complete is always to-date — the budget is a whole-project figure, so measuring one
   // month against it would report the share of the project done in that month.
   const tdEVof=g=> (toDate && toDate.byGroup[g.group]) ? toDate.byGroup[g.group].EV : g.EV;
+  const tdACof=g=> (toDate && toDate.byGroup[g.group]) ? toDate.byGroup[g.group].AC : g.AC;
   const tdTotEV=groups.reduce((s,g)=>s+tdEVof(g),0);
+  const tdTotAC=groups.reduce((s,g)=>s+tdACof(g),0);
+  const budgetLeft=totBAC-tdTotAC;   // the line that actually moves month to month
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   document.getElementById('kpis').innerHTML=
     kpi(fmtK(totBAC),'Total Budget Hrs',(budgetScaled?'RA scope':'whole project scope')+' · AED '+fmtK(totBAC*AED_RATE),'accent')
+   +kpi(fmtK(budgetLeft),'Budget Left','after '+fmtK(tdTotAC)+' hrs spent to date',budgetLeft>=0?'ok':'bad')
    +kpi((totBAC>0?((tdTotEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget, to date')
    +kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'))
    +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
@@ -753,6 +757,9 @@ function evm(p, td, BAC){
   const eac = cpi ? BAC/cpi : BAC;
   const etc = Math.max(0, eac - td.AC);
   return { AC:p.AC, EV:p.EV, BAC, cv:p.EV-p.AC, pct: BAC>0 ? td.EV/BAC : 0,
+           // What is left of the budget after everything spent so far. The baseline (A) is
+           // fixed by design; this is the line that falls month on month as it is consumed.
+           left: BAC - td.AC,
            tdEV:td.EV, tdAC:td.AC, cpi, eac, etc, bv:BAC-eac, aed:(BAC-eac)*AED_RATE };
 }
 function vCell(n){ const v=Math.round(n); const neg=v<0; return `<td style="font-family:var(--mono);text-align:right;color:${neg?'var(--bad)':'var(--good)'}">${neg?'('+fmt(Math.abs(v))+')':fmt(v)}</td>`; }
@@ -790,21 +797,21 @@ function renderSummary(m){
   const head='<thead>'
     +'<tr><th class="l" rowspan="2">Direct Work</th><th rowspan="2">Labour Budget (A)</th>'
     +'<th colspan="3" style="text-align:center">'+(cumulative?'To Date':'This Month')+'</th>'
-    +'<th colspan="5" style="text-align:center">'+(cumulative?'Forecast to Complete':'To Date &amp; Forecast')+'</th></tr>'
+    +'<th colspan="6" style="text-align:center">'+(cumulative?'Forecast to Complete':'To Date &amp; Forecast')+'</th></tr>'
     +'<tr><th>Actual Hrs (AC)</th><th>Allowable Budget (EV)</th><th>Current Variance</th>'
-    +'<th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A−B)</th><th>Var. AED @10.5</th></tr></thead>';
+    +'<th>Budget Left</th><th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A−B)</th><th>Var. AED @10.5</th></tr></thead>';
   const pctCell=r=>`<td style="font-family:var(--mono);text-align:right">${r.BAC>0?(r.pct*100).toFixed(1)+'%':'—'}</td>`;
   const row=(r,cls)=>`<tr class="${cls||''}"><td class="l">${esc(r.label)}</td>${nCell(r.BAC)}`
-    +`${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${pctCell(r)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
+    +`${nCell(r.AC)}${nCell(r.EV)}${vCell(r.cv)}${vCell(r.left)}${pctCell(r)}${nCell(r.etc)}${nCell(r.eac)}${vCell(r.bv)}${vCell(r.aed)}</tr>`;
   let b='<tbody>'+row({label:'PROJECT TOTAL',...M.proj},'totrow');
   M.rows.forEach(r=> b+=row(r));
   // indirect overhead (manpower only, no earned-value)
   b+=`<tr><td class="l">Total Indirect Works</td><td class="muted" style="text-align:right">—</td>${nCell(M.indirect)}`
-    +`<td colspan="7" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
+    +`<td colspan="8" class="muted" style="font-size:11px">overhead labour — not earned-rated</td></tr>`;
   // Held-back hours are real labour; showing them keeps the total reconcilable with payroll
   if(unassignedPool>0.5){
     b+=`<tr><td class="l" style="color:var(--warn,#f5c451)">Unassigned overrun</td><td class="muted" style="text-align:right">—</td>${nCell(unassignedPool)}`
-      +`<td colspan="7" class="muted" style="font-size:11px">hours above what each category earned — `
+      +`<td colspan="8" class="muted" style="font-size:11px">hours above what each category earned — `
       +`<a href="#" onclick="openAlloc();return false" style="color:var(--accent-text,#93b6ff)">assign to categories</a></td></tr>`;
   }
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
@@ -984,10 +991,10 @@ function printSummary(){
   const M=summaryModel(); const m=document.getElementById('f-month').value||'';
   const fmtN=n=>{const v=Math.round(n);return v<0?'('+Math.abs(v).toLocaleString()+')':v.toLocaleString();};
   const pctN=x=> x.BAC>0 ? ((x.pct||0)*100).toFixed(1)+'%' : '—';
-  const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.BAC)}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td>${pctN(x)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
+  const r=x=>`<tr><td class="l">${x.label}</td><td>${fmtN(x.BAC)}</td><td>${fmtN(x.AC)}</td><td>${fmtN(x.EV)}</td><td class="${x.cv<0?'neg':'pos'}">${fmtN(x.cv)}</td><td class="${x.left<0?'neg':'pos'}">${fmtN(x.left)}</td><td>${pctN(x)}</td><td>${fmtN(x.etc)}</td><td>${fmtN(x.eac)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.bv)}</td><td class="${x.bv<0?'neg':'pos'}">${fmtN(x.aed)}</td></tr>`;
   let body=r({...M.proj,label:'PROJECT TOTAL'}).replace('<tr>','<tr class="tot">');
   M.rows.forEach(x=> body+=r(x));
-  body+=`<tr><td class="l">Total Indirect Works</td><td>—</td><td>${fmtN(M.indirect)}</td><td colspan="7"></td></tr>`;
+  body+=`<tr><td class="l">Total Indirect Works</td><td>&mdash;</td><td>${fmtN(M.indirect)}</td><td colspan="8"></td></tr>`;
   const w=window.open('','_blank');
   w.document.write(`<html><head><title>OBS Summary ${m}${cumulative?' (cumulative)':''}</title><style>
     body{font-family:Arial,sans-serif;margin:24px;color:#111}
@@ -998,7 +1005,7 @@ function printSummary(){
     tr.tot td{background:#eef3e0;font-weight:bold} .neg{color:#c0392b} .pos{color:#1e8449}
   </style></head><body>
     <h2>Royal Advance — OBS Summary</h2><div class="sub">Balghaiylam Villa Project · ${cumulative?'Cumulative to end of '+m:'Month '+m} · AED @ ${AED_RATE}/hr</div>
-    <table><thead><tr><th class="l">Direct Work</th><th>Labour Budget (A)</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A&minus;B)</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
+    <table><thead><tr><th class="l">Direct Work</th><th>Labour Budget (A)</th><th>Actual Hrs</th><th>Allowable Budget</th><th>Current Variance</th><th>Budget Left</th><th>% Complete</th><th>ETC</th><th>EAC (B)</th><th>Var. in Budget (A&minus;B)</th><th>Var. AED</th></tr></thead><tbody>${body}</tbody></table>
   </body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),300);
 }
