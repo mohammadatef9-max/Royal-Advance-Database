@@ -105,7 +105,7 @@ tbody tr:last-child td{border-bottom:0}
     <button class="btn day-ctl" style="display:none" onclick="dayShift(-1)" title="Previous day">◀</button>
     <button class="btn day-ctl" style="display:none" onclick="dayToday()">Today</button>
     <button class="btn day-ctl" style="display:none" onclick="dayShift(1)" title="Next day">▶</button>
-    <button class="btn" onclick="reload()">↻ Refresh</button>
+    <button class="btn" onclick="hardRefresh()">↻ Refresh</button>
     <button class="btn" id="btn-expand" onclick="toggleAll(true)">Expand all</button>
     <button class="btn" id="btn-collapse" onclick="toggleAll(false)">Collapse all</button>
     <button class="btn" id="btn-print" onclick="printSummary()" style="display:none">🖨 Print</button>
@@ -222,6 +222,28 @@ async function reload(){
   finally{ loading.style.display='none'; }
 }
 
+/* The three completion queries carry no date filter — the period is applied below, in JS.
+   So the same rows come back for every month. Cache them once: switching months stops
+   refetching tens of thousands of rows, and the 13-month backfill pass becomes one fetch
+   instead of thirteen. Cleared by ↻ Refresh and after an allocation write. */
+let compRaw=null;
+function clearCompCache(){ compRaw=null; }
+async function fetchCompletionRaw(){
+  if(compRaw) return compRaw;
+  const ids=Object.keys(codeToActId).map(c=>codeToActId[c]).filter(Boolean);
+  const clrIds=Object.keys(clrCodeToId).map(c=>clrCodeToId[c]).filter(Boolean);
+  const [wir,prog,clr]=await Promise.all([
+    ids.length ? faAll('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date,raw_subcontractor'
+      +'&activity_id=in.('+ids.join(',')+')&raw_subcontractor=ilike.'+RA_PREFIX+'*&normalised_status=in.(approved,under_review)') : [],
+    ids.length ? faAll('progress_updates?select=villa_id,activity_id,status,finish_date,subcontractor'
+      +'&activity_id=in.('+ids.join(',')+')&is_current=eq.true&is_deleted=eq.false&subcontractor=ilike.'+RA_PREFIX+'*') : [],
+    clrIds.length ? faAll('clearance_import_log?select=villa_id,clearance_activity_id,normalised_status,clearance_received_date,clearance_released_date'
+      +'&clearance_activity_id=in.('+clrIds.join(',')+')') : []
+  ]);
+  compRaw={ids,clrIds,wir,prog,clr};
+  return compRaw;
+}
+
 // Physical completion for ALL configured codes, RA-scope, within the month. (Same model as before.)
 async function loadCompletion(m,cum){
   const end=monthEnd(m), start=m+'-01';
@@ -237,18 +259,17 @@ async function loadCompletion(m,cum){
   const clrIds=clrCodeArr.map(c=>clrCodeToId[c]).filter(Boolean);
   compByCode={}; [...wirCodeArr,...clrCodeArr].forEach(c=>compByCode[c]={applicable:new Set(),done:new Set(),inprog:new Set()});
   if(!ids.length && !clrIds.length) return;
+  const RAW=await fetchCompletionRaw();
 
   // ── WIR-based completion (RA-scope via progress_updates + dc_import_log) ──
   if(ids.length){
-  const wirRA=await faAll('dc_import_log?select=villa_id,activity_id,normalised_status,submitted_date,response_date,raw_subcontractor'
-    +'&activity_id=in.('+ids.join(',')+')&raw_subcontractor=ilike.'+RA_PREFIX+'*&normalised_status=in.(approved,under_review)');
+  const wirRA=RAW.wir;
   const raWir={};
   wirRA.forEach(w=>{ const k=w.villa_id+'_'+w.activity_id; const e=raWir[k]||(raWir[k]={appr:null,ur:null});
     if(w.normalised_status==='approved'){ const d=w.response_date||w.submitted_date; if(d&&(!e.appr||d>e.appr))e.appr=d; }
     else if(w.normalised_status==='under_review'){ const d=w.submitted_date||w.response_date; if(d&&(!e.ur||d>e.ur))e.ur=d; } });
 
-  const rows=await faAll('progress_updates?select=villa_id,activity_id,status,finish_date,subcontractor'
-    +'&activity_id=in.('+ids.join(',')+')&is_current=eq.true&is_deleted=eq.false&subcontractor=ilike.'+RA_PREFIX+'*');
+  const rows=RAW.prog;
 
   // Completion date = progress finish_date, else the RA WIR's approved/UR date (raWir, already fetched & bounded).
   rows.forEach(r=>{ const code=actIdToCode[r.activity_id]; if(!code)return; const vid=r.villa_id;
@@ -266,8 +287,7 @@ async function loadCompletion(m,cum){
 
   // ── Clearance-based completion (clearance_import_log has no subcontractor, so it is NOT RA-filtered) ──
   if(clrIds.length){
-    const cl=await faAll('clearance_import_log?select=villa_id,clearance_activity_id,normalised_status,clearance_received_date,clearance_released_date'
-      +'&clearance_activity_id=in.('+clrIds.join(',')+')');
+    const cl=RAW.clr;
     cl.forEach(r=>{ const code=clrIdToCode[r.clearance_activity_id]; if(!code)return; const vid=r.villa_id;
       compByCode[code].applicable.add(vid);
       const d=r.clearance_released_date||r.clearance_received_date||null;
@@ -534,6 +554,8 @@ async function saveDone(){
 function toggle(gi){ document.getElementById('gp-'+gi)?.classList.toggle('collapsed'); }
 function toggleAll(open){ groups.forEach((g,gi)=>{ const el=document.getElementById('gp-'+gi); if(el) el.classList.toggle('collapsed', !open); }); }
 
+// Refresh must go back to the database, not re-read the cached completion rows.
+function hardRefresh(){ clearCompCache(); dayMonthCache={}; dayDist=null; reload(); }
 function setMode(v){ cumulative=(v==='cum'); reload(); }
 // Wording that follows the mode, so no figure is ever read as the wrong period.
 function periodOf(m){ return cumulative ? 'to end of '+m : 'in '+m; }
@@ -707,7 +729,8 @@ function renderSummary(m){
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
   document.getElementById('summary').innerHTML=
     `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (${cumulative?'cumulative to date':'per month'}) · AED @ ${AED_RATE}/hr</span>`
-    +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
+    +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="autoAssignAll()" title="Book every month's held-back hours against the group they came from, so nothing is left unassigned">⚖ Auto-assign all months</button>`
+                +`<button class="btn" style="margin-left:8px" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
 }
 
@@ -763,6 +786,72 @@ function openAlloc(){
   document.body.insertAdjacentHTML('beforeend',html);
   allocTotal();
 }
+/* ───── BACKFILL: give every month's held-back hours an explicit home ─────
+   The cap holds back whatever the trade distribution pushed into a group beyond what that
+   group earned. Until those hours are written down they sit in the project total as
+   "Unassigned overrun" and can't be moved. This walks every month that has manpower and
+   books each group's held-back hours against that same group — the neutral starting point,
+   since that is where the distribution said the labour went — so every hour is attributed
+   and editable afterwards via ⚖ Assign hours.
+
+   Months that already carry manual assignments are left completely alone; overwriting
+   someone's hand-placed split would be the one genuinely destructive thing here. */
+async function autoAssignAll(){
+  if(!canEnter){ alert('You need OBS entry permission to assign hours.'); return; }
+  try{
+    const [mpRows,allocRows]=await Promise.all([
+      fa('obs_manpower?select=period_month'),
+      fa('obs_hour_allocation?select=period_month,hours')
+    ]);
+    const months=[...new Set((mpRows||[]).map(r=>String(r.period_month).slice(0,7)))].sort();
+    const taken={};
+    (allocRows||[]).forEach(r=>{ const k=String(r.period_month).slice(0,7); taken[k]=(taken[k]||0)+(Number(r.hours)||0); });
+    const todo=months.filter(m=>!(taken[m]>0));
+    const skipped=months.filter(m=>taken[m]>0);
+    if(!todo.length){ alert('Every month with manpower already has assigned hours.\n\nNothing to do.'); return; }
+    if(!confirm('Assign held-back hours in '+todo.length+' month'+(todo.length>1?'s':'')+
+      ' ('+todo[0]+' to '+todo[todo.length-1]+').\n\n'+
+      'Each activity group gets its own held-back hours booked against it, so nothing is left '+
+      'unassigned. You can then move them by hand with ⚖ Assign hours.'+
+      (skipped.length?'\n\nSkipping '+skipped.length+' month'+(skipped.length>1?'s':'')+
+        ' that already has assignments: '+skipped.join(', '):'')+'\n\nProceed?')) return;
+
+    const loading=document.getElementById('loading'); loading.style.display='flex';
+    const info=document.getElementById('tb-info');
+    const by=(window.__MEP_USER__&&(window.__MEP_USER__.full_name||window.__MEP_USER__.email))||null;
+    const wasCum=cumulative, wasMonth=document.getElementById('f-month').value;
+    cumulative=false;                       // allocations are per-month by definition
+    let written=0, hours=0, done=0;
+    const failed=[];
+    for(const m of todo){
+      info.textContent='Assigning '+m+'  ('+(++done)+'/'+todo.length+')';
+      try{
+        await Promise.all([ loadCompletion(m,false), loadLabour(m,false), loadAlloc(m,false), loadManual(m,false) ]);
+        computeGroups();
+        const rows=groups.filter(g=>(g.capped||0)>0.5).map(g=>({
+          period_month:m+'-01', activity_group:g.group, hours:Math.round(g.capped),
+          updated_at:new Date().toISOString(), updated_by:by }));
+        if(rows.length){
+          await fwrite('POST','obs_hour_allocation',rows);
+          written+=rows.length; hours+=rows.reduce((s,r)=>s+r.hours,0);
+        }
+      }catch(e){ failed.push(m+': '+e.message); }
+    }
+    cumulative=wasCum;
+    document.getElementById('f-month').value=wasMonth;
+    clearCompCache();
+    loading.style.display='none';
+    await reload();
+    alert('Assigned '+fmt(hours,0)+' hrs across '+written+' group rows in '+(todo.length-failed.length)+' month(s).'+
+      (skipped.length?'\n\nLeft untouched (already assigned): '+skipped.join(', '):'')+
+      (failed.length?'\n\nFailed:\n'+failed.join('\n'):''));
+  }catch(e){
+    document.getElementById('loading').style.display='none';
+    alert(/\[40[13]\]/.test(e.message) ? 'Assigning hours needs the manage_activities permission.'
+                                       : 'Could not run the assignment: '+e.message);
+  }
+}
+
 function closeAlloc(){ document.getElementById('alloc-ovl')?.remove(); }
 function allocTotal(){
   const ins=[...document.querySelectorAll('.alloc-in')];
