@@ -209,6 +209,31 @@ async function loadCatalogue(){
     const c=await fa('clearance_activities?select=id,clearance_code&clearance_code=in.('+[...clrSet].map(x=>'"'+String(x).replace(/"/g,'')+'"').join(',')+')');
     c.forEach(r=>{ clrCodeToId[r.clearance_code]=r.id; clrIdToCode[r.id]=r.clearance_code; });
   }
+  await loadProjectBudget();
+}
+
+/* ───── ISSUED PROJECT BUDGET ─────
+   obs_activities.budget_hours is FULL project scope — every villa, whether RA or a
+   subcontractor does the work. OBS reports RA's own labour only, so the budget it should
+   show is RA's share of that. The per-activity split (the workbook's "villas done by
+   subcontractors" / "by RA" columns) isn't in the system yet, so activity budgets are
+   scaled by one uniform share derived from the issued total.
+
+   That means the PROJECT total is exact and each activity's budget is an approximation —
+   said plainly on the page rather than left to be discovered. Importing the current
+   workbook replaces the uniform share with real per-activity counts. */
+let projBudget=0, budgetScale=1, budgetScaled=false, fullScopeHrs=0;
+async function loadProjectBudget(){
+  projBudget=0; budgetScale=1; budgetScaled=false;
+  fullScopeHrs=groups.reduce((s,g)=>s+g.subs.reduce((t,x)=>t+(Number(x.budget)||0),0),0);
+  try{
+    const r=await fa('obs_project_budget?select=budget_hours&id=eq.1');
+    projBudget=Number(r&&r[0]&&r[0].budget_hours)||0;
+  }catch(e){ projBudget=0; }
+  if(projBudget>0 && fullScopeHrs>0){
+    budgetScale=projBudget/fullScopeHrs;
+    budgetScaled=Math.abs(budgetScale-1)>0.0005;
+  }
 }
 
 async function reload(){
@@ -390,7 +415,7 @@ function computeGroups(){
     let EV=0, BAC=0;
     grp.subs.forEach(s=>{ const st=subStats(s);
       s.done=st.done; s.inprog=st.inprog; s.Z=st.Z; s.manual=st.manual; s.EV=st.EV;
-      EV+=st.EV; BAC+=(Number(s.budget)||0); });   // budget = contract scope, not WIR coverage
+      EV+=st.EV; BAC+=(Number(s.budget)||0)*budgetScale; });   // RA's share of contract scope
     grp.EV=EV; grp.BAC=BAC;
     grp.ACraw=groupSpentRaw(grp);
     grp.AC=groupSpent(grp);                       // reads grp.EV — set just above
@@ -418,7 +443,7 @@ function render(m){
   const totBAC=groups.reduce((s,g)=>s+(g.BAC||0),0);
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   document.getElementById('kpis').innerHTML=
-    kpi(fmtK(totBAC),'Total Budget Hrs','whole project scope · AED '+fmtK(totBAC*AED_RATE),'accent')
+    kpi(fmtK(totBAC),'Total Budget Hrs',(budgetScaled?'RA scope':'whole project scope')+' · AED '+fmtK(totBAC*AED_RATE),'accent')
    +kpi((totBAC>0?((totEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget')
    +kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'))
    +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
@@ -470,11 +495,11 @@ function subTable(grp){
   grp.subs.forEach(s=>{ budgetPerVilla+=s.AC; budgetTot+=(Number(s.budget)||0);
     h+=`<tr><td class="l code">${esc(s.ccs_code)}</td><td class="l" style="font-family:var(--font)">${esc(s.description)}</td>`
       +`<td><span class="code">${s.wir||'—'}</span></td><td>${fmt(s.G,2)}</td><td>${fmt(s.W,2)}</td><td>${fmt(s.AC,2)}</td>`
-      +`<td>${s.budget?fmt(s.budget,0):'<span class="muted">—</span>'}</td>`
+      +`<td>${s.budget?fmt(s.budget*budgetScale,0):'<span class="muted">—</span>'}</td>`
       +`<td>${s.done||0}${s.inprog?'<span class="muted"> +'+s.inprog+'ip</span>':''}`
       +`${s.manual?'<span class="tag off" style="margin-left:6px" title="Entered by hand — overrides the derived count">manual</span>':''}</td>`
       +`<td>${fmt(s.EV||0,0)}</td></tr>`; });
-  h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>${fmt(budgetTot,0)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
+  h+=`<tr class="totrow"><td class="l" colspan="5">TOTAL</td><td>${fmt(budgetPerVilla,1)}</td><td>${fmt(budgetTot*budgetScale,0)}</td><td>—</td><td>${fmt(grp.EV||0,0)}</td></tr>`;
   return h+'</tbody></table>';
 }
 
@@ -748,7 +773,14 @@ function renderSummary(m){
     `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (${cumulative?'cumulative to date':'per month'}) · AED @ ${AED_RATE}/hr</span>`
     +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="autoAssignAll()" title="Book every month's held-back hours against the group they came from, so nothing is left unassigned">⚖ Auto-assign all months</button>`
                 +`<button class="btn" style="margin-left:8px" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
-    +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div></div>`;
+    +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div>`
+    +(budgetScaled?`<div class="muted" style="font-size:11px;padding:10px 14px;border-top:1px solid var(--border);line-height:1.55">
+        <b>Labour Budget</b> is the issued project budget — <b>${fmt(projBudget,0)} hrs</b> (AED ${fmt(projBudget*AED_RATE,0)}).
+        Activity budgets total <b>${fmt(fullScopeHrs,0)} hrs</b> across the full project scope, including villas built by
+        subcontractors, so each is shown at RA's share of <b>${(budgetScale*100).toFixed(1)}%</b>. The project total is exact;
+        the split between activities is uniform until the current OBS workbook's per-activity RA/subcontractor villa counts are imported.
+      </div>`:'')
+    +`</div>`;
 }
 
 /* ───── MANUAL ASSIGNMENT OF CAPPED-OFF HOURS ─────
