@@ -45,6 +45,9 @@ body.in-shell .topbar{display:none!important}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
 .kpi{background:var(--bg-elev);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
 .kpi .v{font-size:22px;font-weight:800;font-family:var(--mono);letter-spacing:-.5px}
+/* The page works in man-hours but quotes AED alongside; without an explicit unit on the
+   big number, "7.97M hrs" next to "AED 83.65M" reads as two different amounts. */
+.kpi .u{font-size:11px;font-weight:600;font-family:var(--font);color:var(--text-dim);margin-left:3px;letter-spacing:0}
 .kpi .l{font-size:10.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin-top:3px;font-weight:600}
 .kpi .s{font-size:10px;color:var(--text-faint);margin-top:2px}
 .kpi.ok .v{color:var(--good)} .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)} .kpi.accent .v{color:var(--accent-text)}
@@ -451,14 +454,18 @@ function render(m){
   const tdTotAC=groups.reduce((s,g)=>s+tdACof(g),0);
   const budgetLeft=totBAC-tdTotAC;   // the line that actually moves month to month
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
+  // Every hour-denominated card carries its unit and its AED equivalent, so a figure in
+  // hours can't be read against one in dirhams.
+  const H='<span class="u">hrs</span>';
+  const leftPct=totBAC>0?((budgetLeft/totBAC)*100).toFixed(1)+'% of budget':'—';
   document.getElementById('kpis').innerHTML=
-    kpi(fmtK(totBAC),'Total Budget Hrs',(budgetScaled?'RA scope':'whole project scope')+' · AED '+fmtK(totBAC*AED_RATE),'accent')
-   +kpi(fmtK(budgetLeft),'Budget Left','after '+fmtK(tdTotAC)+' hrs spent to date',budgetLeft>=0?'ok':'bad')
+    kpi(fmtK(totBAC)+H,'Total Budget',(budgetScaled?'RA scope':'whole project scope')+' · AED '+fmtK(totBAC*AED_RATE),'accent')
+   +kpi(fmtK(budgetLeft)+H,'Budget Left','AED '+fmtK(budgetLeft*AED_RATE)+' · '+leftPct,budgetLeft>=0?'ok':'bad')
    +kpi((totBAC>0?((tdTotEV/totBAC)*100).toFixed(1)+'%':'—'),'% Complete','earned ÷ budget, to date')
    +kpi(fmt(totVillas.size),'Villas Active','across all groups '+(cumulative?'to date':'this month'))
-   +kpi(fmtK(totEV),'Earned Hrs (EV)','output delivered '+periodOf(m))
-   +kpi(fmtK(totAC),'Spent Hrs (AC)','RA labour '+periodOf(m))
-   +kpi((variance>=0?'+':'')+fmtK(variance),variance>=0?'Hrs Saved':'Hrs Over','earned − spent',variance>=0?'ok':'bad')
+   +kpi(fmtK(totEV)+H,'Earned (EV)','output delivered '+periodOf(m)+' · AED '+fmtK(totEV*AED_RATE))
+   +kpi(fmtK(totAC)+H,'Spent (AC)','RA labour '+periodOf(m)+' · AED '+fmtK(totAC*AED_RATE))
+   +kpi((variance>=0?'+':'')+fmtK(variance)+H,variance>=0?'Hrs Saved':'Hrs Over','earned − spent',variance>=0?'ok':'bad')
    +kpi((cpi?cpi.toFixed(2):'—'),'CPI','earned ÷ spent',(cpi>=1?'ok':cpi>0?'warn':''))
    +kpi('AED '+fmtK(variance*AED_RATE),'Cost Variance','@ '+AED_RATE+' AED/hr',variance>=0?'ok':'bad');
 
@@ -486,7 +493,7 @@ function render(m){
         +`<span class="gname" title="${esc(grp.group)}">${esc(grp.group)}</span>`
         +tag
         +`<span class="mini" title="man-days of labour assigned to this group ${cumulative?'up to and including this month':'this month'}">Labour <b>${fmt(groupDays(grp),0)}</b>md</span>`
-        +`<span class="mini" title="labour budget for this group's whole scope">Budget <b>${fmtK(grp.BAC)}</b></span>`
+        +`<span class="mini" title="labour budget for this group — man-hours (AED ${fmtK(grp.BAC*AED_RATE)})">Budget <b>${fmtK(grp.BAC)}</b>hrs</span>`
         +`<span class="mini" title="earned ÷ budget, cumulative to date">${grp.BAC>0?'<b>'+((tdEVof(grp)/grp.BAC)*100).toFixed(1)+'%</b> done':'<span class="muted">no budget</span>'}</span>`
         +`<span class="mini">EV <b>${fmtK(grp.EV)}</b></span>`
         +`<span class="mini" title="from manpower × distribution${spentNote}">AC <b>${fmtK(grp.AC)}</b></span>`
@@ -816,7 +823,7 @@ function renderSummary(m){
   }
   b+=row({label:'PROJECT TOTAL',...M.proj},'totrow')+'</tbody>';
   document.getElementById('summary').innerHTML=
-    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (${cumulative?'cumulative to date':'per month'}) · AED @ ${AED_RATE}/hr</span>`
+    `<div class="panel"><div class="panel-h" style="cursor:default">OBS Summary <span class="sub" style="font-weight:400;color:var(--text-muted)">— ${m} (${cumulative?'cumulative to date':'per month'}) · <b>all figures in man-hours</b> except the final AED column · ${AED_RATE} AED/hr</span>`
     +`${canEnter?`<button class="btn" style="margin-left:auto" onclick="autoAssignAll()" title="Book every month's held-back hours against the group they came from, so nothing is left unassigned">⚖ Auto-assign all months</button>`
                 +`<button class="btn" style="margin-left:8px" onclick="openAlloc()">⚖ Assign hours</button>`:''}</div>`
     +`<div style="overflow-x:auto"><table class="sumtbl">${head}${b}</table></div>`
