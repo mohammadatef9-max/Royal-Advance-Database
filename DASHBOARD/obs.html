@@ -451,7 +451,10 @@ function render(m){
   const tdEVof=g=> (toDate && toDate.byGroup[g.group]) ? toDate.byGroup[g.group].EV : g.EV;
   const tdACof=g=> (toDate && toDate.byGroup[g.group]) ? toDate.byGroup[g.group].AC : g.AC;
   const tdTotEV=groups.reduce((s,g)=>s+tdEVof(g),0);
-  const tdTotAC=groups.reduce((s,g)=>s+tdACof(g),0);
+  // Must match the Summary's basis exactly — that includes indirect labour and any
+  // still-unassigned overrun, both of which were paid for. Same label, same number.
+  const tdTotAC=groups.reduce((s,g)=>s+tdACof(g),0)
+              + (toDate?toDate.indirect:indirectHrs) + (toDate?toDate.pool:unassignedPool);
   const budgetLeft=totBAC-tdTotAC;   // the line that actually moves month to month
   const kpi=(v,l,s,cls)=>`<div class="kpi ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div><div class="s">${s||''}</div></div>`;
   // Every hour-denominated card carries its unit and its AED equivalent, so a figure in
